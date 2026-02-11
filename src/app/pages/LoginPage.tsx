@@ -12,6 +12,12 @@ import {
   Building2,
 } from 'lucide-react';
 
+const DEMO_ROLE_CARDS: { role: UserRole; label: string; icon: React.ReactNode; color: string; bgColor: string }[] = [
+  { role: 'employee', label: 'موظف', icon: <User className="w-6 h-6" />, color: 'text-blue-600', bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200' },
+  { role: 'manager', label: 'مدير قسم', icon: <Users className="w-6 h-6" />, color: 'text-emerald-600', bgColor: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200' },
+  { role: 'admin', label: 'المدير العام', icon: <Shield className="w-6 h-6" />, color: 'text-purple-600', bgColor: 'bg-purple-50 hover:bg-purple-100 border-purple-200' },
+];
+
 export function LoginPage() {
   const { login, loginAs } = useAuth();
   const navigate = useNavigate();
@@ -36,15 +42,9 @@ export function LoginPage() {
   };
 
   const handleQuickLogin = (role: UserRole) => {
-    loginAs(role);
+    loginAs?.(role);
     navigate('/');
   };
-
-  const roleCards: { role: UserRole; label: string; icon: React.ReactNode; color: string; bgColor: string }[] = [
-    { role: 'employee', label: 'موظف', icon: <User className="w-6 h-6" />, color: 'text-blue-600', bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200' },
-    { role: 'manager', label: 'مدير قسم', icon: <Users className="w-6 h-6" />, color: 'text-emerald-600', bgColor: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200' },
-    { role: 'admin', label: 'المدير العام', icon: <Shield className="w-6 h-6" />, color: 'text-purple-600', bgColor: 'bg-purple-50 hover:bg-purple-100 border-purple-200' },
-  ];
 
   return (
     <div
@@ -133,23 +133,25 @@ export function LoginPage() {
           </form>
         </div>
 
-        {/* Quick Login (Demo) */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-5 border border-white/20">
-          <p className="text-center text-blue-200 mb-4">دخول سريع (للعرض التجريبي)</p>
-          <div className="grid grid-cols-3 gap-3">
-            {roleCards.map((item) => (
-              <button
-                key={item.role}
-                type="button"
-                onClick={() => handleQuickLogin(item.role)}
-                className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${item.bgColor}`}
-              >
-                <span className={item.color}>{item.icon}</span>
-                <span className={`text-sm font-medium ${item.color}`}>{item.label}</span>
-              </button>
-            ))}
+        {/* Quick Login -- dev only, stripped from production builds */}
+        {loginAs && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-5 border border-white/20">
+            <p className="text-center text-blue-200 mb-4">دخول سريع (للعرض التجريبي)</p>
+            <div className="grid grid-cols-3 gap-3">
+              {DEMO_ROLE_CARDS.map((item) => (
+                <button
+                  key={item.role}
+                  type="button"
+                  onClick={() => handleQuickLogin(item.role)}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${item.bgColor}`}
+                >
+                  <span className={item.color}>{item.icon}</span>
+                  <span className={`text-sm font-medium ${item.color}`}>{item.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Footer */}
         <p className="text-center text-blue-300/60 mt-6 text-sm">

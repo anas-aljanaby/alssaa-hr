@@ -1,26 +1,26 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { User, UserRole } from '../data/mockData';
-import { users as mockUsers } from '../data/mockData';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/lib/database.types';
+
+interface AuthResult {
+  ok: boolean;
+  error?: string;
+  /** Non-error informational message (e.g. "please confirm your email") */
+  message?: string;
+}
 
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
   authReady: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ ok: boolean; error?: string }>;
-  loginAs: (role: UserRole) => void;
+  login: (email: string, password: string) => Promise<AuthResult>;
+  signUp: (email: string, password: string, name: string) => Promise<AuthResult>;
+  loginAs: ((role: UserRole) => void) | null;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const DEMO_USERS: Record<UserRole, User> = {
-  admin: mockUsers.find(u => u.role === 'admin')!,
-  manager: mockUsers.find(u => u.role === 'manager')!,
-  employee: mockUsers.find(u => u.role === 'employee')!,
-};
 
 function profileToUser(profile: Tables<'profiles'>, email: string): User {
   return {
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setUserFromSession]);
 
   const login = useCallback(
-    async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
+    async (email: string, password: string): Promise<AuthResult> => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         const message =
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string,
       name: string
-    ): Promise<{ ok: boolean; error?: string }> => {
+    ): Promise<AuthResult> => {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -116,7 +116,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (error) return { ok: false, error: error.message };
       if (data.user && !data.session) {
-        return { ok: true, error: 'تم إنشاء الحساب. يرجى تأكيد بريدك الإلكتروني من الرابط المرسل إليك.' };
+        return {
+          ok: true,
+          message: 'تم إنشاء الحساب. يرجى تأكيد بريدك الإلكتروني من الرابط المرسل إليك.',
+        };
       }
       const user = await fetchUserFromSession();
       setCurrentUser(user ?? null);
@@ -125,9 +128,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const loginAs = useCallback((role: UserRole) => {
-    setCurrentUser(DEMO_USERS[role]);
+  const loginAsFn = useCallback((role: UserRole) => {
+    if (!import.meta.env.DEV) return;
+    import('../data/mockData').then(({ users: mockUsers }) => {
+      const demoUser = mockUsers.find(u => u.role === role);
+      if (demoUser) setCurrentUser(demoUser);
+    });
   }, []);
+  const loginAs: ((role: UserRole) => void) | null = import.meta.env.DEV ? loginAsFn : null;
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();

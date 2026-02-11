@@ -11,14 +11,18 @@ export function SignUpPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setSuccessMessage('');
     const result = await signUp(email, password, name);
-    if (result.ok) {
+    if (result.ok && result.message) {
+      setSuccessMessage(result.message);
+    } else if (result.ok) {
       navigate('/');
     } else {
       setError(result.error || 'فشل إنشاء الحساب');
@@ -98,14 +102,22 @@ export function SignUpPage() {
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <UserPlus className="w-5 h-5 shrink-0" />
-              {isLoading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
-            </button>
+            {successMessage && (
+              <div className="bg-green-50 text-green-700 p-3 rounded-xl text-center text-sm">
+                {successMessage}
+              </div>
+            )}
+
+            {!successMessage && (
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <UserPlus className="w-5 h-5 shrink-0" />
+                {isLoading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
+              </button>
+            )}
           </form>
 
           <p className="text-center text-gray-600 mt-4">
