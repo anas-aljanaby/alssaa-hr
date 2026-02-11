@@ -26,11 +26,11 @@ export function LoginPage() {
     setIsLoading(true);
     setError('');
 
-    const success = await login(email, password);
-    if (success) {
+    const result = await login(email, password);
+    if (result.ok) {
       navigate('/');
     } else {
-      setError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+      setError(result.error ?? 'البريد الإلكتروني أو كلمة المرور غير صحيحة');
     }
     setIsLoading(false);
   };
