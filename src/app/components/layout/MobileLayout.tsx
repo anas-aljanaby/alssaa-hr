@@ -18,11 +18,18 @@ import {
 } from 'lucide-react';
 
 export function MobileLayout() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, authReady, logout } = useAuth();
   const { getUnreadCount } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
 
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">جاري التحميل...</div>
+      </div>
+    );
+  }
   if (!currentUser) return <Navigate to="/login" replace />;
 
   const unreadCount = getUnreadCount(currentUser.uid);

@@ -6,7 +6,15 @@ import { ManagerDashboard } from './manager/ManagerDashboard';
 import { AdminDashboard } from './admin/AdminDashboard';
 
 export function DashboardRouter() {
-  const { currentUser, isAuthenticated } = useAuth();
+  const { currentUser, isAuthenticated, authReady } = useAuth();
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">جاري التحميل...</div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated || !currentUser) {
     return <Navigate to="/login" replace />;

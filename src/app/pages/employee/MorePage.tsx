@@ -28,8 +28,8 @@ export function MorePage() {
 
   const department = getDepartmentById(currentUser.departmentId);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../data/mockData';
 import {
@@ -123,6 +123,13 @@ export function LoginPage() {
                 <span>الدخول بالبصمة</span>
               </button>
             </div>
+
+            <p className="text-center text-gray-600 pt-2">
+              لا تملك حساباً؟{' '}
+              <Link to="/signup" className="text-blue-600 font-medium hover:underline">
+                إنشاء حساب جديد
+              </Link>
+            </p>
           </form>
         </div>
 

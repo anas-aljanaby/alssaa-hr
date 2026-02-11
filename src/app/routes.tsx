@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router';
 import { RootLayout } from './components/layout/RootLayout';
 import { MobileLayout } from './components/layout/MobileLayout';
 import { LoginPage } from './pages/LoginPage';
+import { SignUpPage } from './pages/SignUpPage';
 import { AttendancePage } from './pages/employee/AttendancePage';
 import { RequestsPage } from './pages/employee/RequestsPage';
 import { NotificationsPage } from './pages/employee/NotificationsPage';
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
       {
         path: 'login',
         Component: LoginPage,
+      },
+      {
+        path: 'signup',
+        Component: SignUpPage,
       },
       {
         // Pathless layout route for MobileLayout
