@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "838052677983",
+    "project_id": "alssaa-attendance",
+    "storage_bucket": "alssaa-attendance.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:838052677983:android:d8713070ab1dfdf2dc4eea",
+        "android_client_info": {
+          "package_name": "com.alssaa.attendance"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2vCxVWR_KuI04sj6jn3y5rlvgemjUI2s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
