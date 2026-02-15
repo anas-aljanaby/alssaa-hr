@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { users, departments, getDepartmentById, type User, type UserRole } from '../../data/mockData';
+import { toast } from 'sonner';
+import * as profilesService from '@/lib/services/profiles.service';
+import * as departmentsService from '@/lib/services/departments.service';
+import type { Profile } from '@/lib/services/profiles.service';
+import type { Department } from '@/lib/services/departments.service';
 import {
   Plus,
   Search,
@@ -10,24 +14,53 @@ import {
   Shield,
   Users as UsersIcon,
   User as UserIcon,
-  Filter,
   Building2,
-  BadgeCheck,
 } from 'lucide-react';
 
+type UserRole = Profile['role'];
+
 export function UsersPage() {
+  const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [showForm, setShowForm] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
   const navigate = useNavigate();
 
-  const filteredUsers = users
-    .filter(u => {
-      const matchesSearch = u.nameAr.includes(searchQuery) || u.email.includes(searchQuery) || u.employeeId.includes(searchQuery);
-      const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-      return matchesSearch && matchesRole;
-    });
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      const [profs, depts] = await Promise.all([
+        profilesService.listUsers(),
+        departmentsService.listDepartments(),
+      ]);
+      setProfiles(profs);
+      setDepartments(depts);
+    } catch {
+      toast.error('فشل تحميل البيانات');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const deptsMap = useMemo(
+    () => new Map(departments.map((d) => [d.id, d])),
+    [departments]
+  );
+
+  const filteredUsers = profiles.filter((u) => {
+    const matchesSearch =
+      u.name_ar.includes(searchQuery) ||
+      (u.phone ?? '').includes(searchQuery) ||
+      u.employee_id.includes(searchQuery);
+    const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
 
   const roleLabel = (role: string) => {
     switch (role) {
@@ -55,9 +88,25 @@ export function UsersPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="p-4 max-w-lg mx-auto space-y-4">
+        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
+        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
+        <div className="grid grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-gray-100 rounded-xl h-16 animate-pulse" />
+          ))}
+        </div>
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-gray-100 rounded-xl h-28 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-gray-800">إدارة المستخدمين</h1>
         <button
@@ -69,21 +118,19 @@ export function UsersPage() {
         </button>
       </div>
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
         <input
           type="text"
           value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          placeholder="بحث بالاسم أو البريد أو الرقم الوظيفي..."
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="بحث بالاسم أو الهاتف أو الرقم الوظيفي..."
           className="w-full pr-10 pl-4 py-3 border border-gray-200 rounded-xl bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
         />
       </div>
 
-      {/* Role Filters */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {(['all', 'employee', 'manager', 'admin'] as const).map(role => (
+        {(['all', 'employee', 'manager', 'admin'] as const).map((role) => (
           <button
             key={role}
             onClick={() => setRoleFilter(role)}
@@ -98,81 +145,103 @@ export function UsersPage() {
         ))}
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-blue-50 rounded-xl p-3 text-center border border-blue-100">
-          <p className="text-xl text-blue-700">{users.filter(u => u.role === 'employee').length}</p>
+          <p className="text-xl text-blue-700">
+            {profiles.filter((u) => u.role === 'employee').length}
+          </p>
           <p className="text-xs text-gray-500">موظفون</p>
         </div>
         <div className="bg-emerald-50 rounded-xl p-3 text-center border border-emerald-100">
-          <p className="text-xl text-emerald-700">{users.filter(u => u.role === 'manager').length}</p>
+          <p className="text-xl text-emerald-700">
+            {profiles.filter((u) => u.role === 'manager').length}
+          </p>
           <p className="text-xs text-gray-500">مديرون</p>
         </div>
         <div className="bg-purple-50 rounded-xl p-3 text-center border border-purple-100">
-          <p className="text-xl text-purple-700">{users.filter(u => u.role === 'admin').length}</p>
+          <p className="text-xl text-purple-700">
+            {profiles.filter((u) => u.role === 'admin').length}
+          </p>
           <p className="text-xs text-gray-500">إداريون</p>
         </div>
       </div>
 
-      {/* Users List */}
       <div className="space-y-2">
-        {filteredUsers.map(user => {
-          const dept = getDepartmentById(user.departmentId);
+        {filteredUsers.map((user) => {
+          const dept = deptsMap.get(user.department_id ?? '');
           return (
-            <div key={user.uid} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-              {/* Clickable area for user card */}
+            <div key={user.id} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
               <div
-                onClick={() => navigate(`/user-details/${user.uid}`)}
+                onClick={() => navigate(`/user-details/${user.id}`)}
                 className="cursor-pointer"
                 role="button"
                 tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/user-details/${user.uid}`); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') navigate(`/user-details/${user.id}`);
+                }}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-11 h-11 rounded-full flex items-center justify-center ${
-                      user.role === 'admin' ? 'bg-purple-100' : user.role === 'manager' ? 'bg-emerald-100' : 'bg-blue-100'
-                    }`}>
-                      <span className={`text-sm ${
-                        user.role === 'admin' ? 'text-purple-600' : user.role === 'manager' ? 'text-emerald-600' : 'text-blue-600'
-                      }`}>{user.nameAr.charAt(0)}</span>
+                    <div
+                      className={`w-11 h-11 rounded-full flex items-center justify-center ${
+                        user.role === 'admin'
+                          ? 'bg-purple-100'
+                          : user.role === 'manager'
+                            ? 'bg-emerald-100'
+                            : 'bg-blue-100'
+                      }`}
+                    >
+                      <span
+                        className={`text-sm ${
+                          user.role === 'admin'
+                            ? 'text-purple-600'
+                            : user.role === 'manager'
+                              ? 'text-emerald-600'
+                              : 'text-blue-600'
+                        }`}
+                      >
+                        {user.name_ar.charAt(0)}
+                      </span>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-800">{user.nameAr}</p>
-                      <p className="text-xs text-gray-500 mt-0.5" dir="ltr">{user.email}</p>
+                      <p className="text-sm text-gray-800">{user.name_ar}</p>
+                      <p className="text-xs text-gray-500 mt-0.5" dir="ltr">
+                        {user.phone}
+                      </p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 ${roleColor(user.role)}`}>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 ${roleColor(user.role)}`}
+                        >
                           {roleIcon(user.role)}
                           {roleLabel(user.role)}
                         </span>
                         {dept && (
                           <span className="flex items-center gap-1 text-xs text-gray-400">
                             <Building2 className="w-3 h-3" />
-                            {dept.nameAr}
+                            {dept.name_ar}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                    <div
-                      onClick={() => setEditingUser(user)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                      role="button"
-                      tabIndex={0}
-                    >
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    <div className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
                       <Edit2 className="w-4 h-4 text-gray-400" />
                     </div>
-                    <div className="p-2 hover:bg-red-50 rounded-lg transition-colors cursor-pointer" role="button" tabIndex={0}>
+                    <div className="p-2 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
                       <Trash2 className="w-4 h-4 text-red-400" />
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-                  <span className="text-xs text-gray-400">{user.employeeId}</span>
+                  <span className="text-xs text-gray-400">{user.employee_id}</span>
                   <div className="flex items-center gap-1">
-                    <div className={`w-2 h-2 rounded-full ${user.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                    <span className="text-xs text-gray-400">{user.status === 'active' ? 'نشط' : 'غير نشط'}</span>
+                    <div
+                      className={`w-2 h-2 rounded-full ${user.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                    />
+                    <span className="text-xs text-gray-400">
+                      {user.status === 'active' ? 'نشط' : 'غير نشط'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -181,22 +250,33 @@ export function UsersPage() {
         })}
       </div>
 
-      {/* Add User Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={() => setShowForm(false)}>
+        <div
+          className="fixed inset-0 bg-black/50 flex items-end z-50"
+          onClick={() => setShowForm(false)}
+        >
           <div
             className="bg-white rounded-t-3xl w-full max-w-lg mx-auto p-6 max-h-[85vh] overflow-auto"
             dir="rtl"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-gray-800">إضافة مستخدم جديد</h2>
-              <button onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button
+                onClick={() => setShowForm(false)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <form className="space-y-4" onSubmit={e => { e.preventDefault(); setShowForm(false); }}>
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setShowForm(false);
+              }}
+            >
               <div>
                 <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
                 <input
@@ -234,8 +314,10 @@ export function UsersPage() {
                 <div>
                   <label className="block mb-1.5 text-gray-700">القسم</label>
                   <select className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
-                    {departments.map(d => (
-                      <option key={d.id} value={d.id}>{d.nameAr}</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name_ar}
+                      </option>
                     ))}
                   </select>
                 </div>

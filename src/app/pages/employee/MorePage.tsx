@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { getDepartmentById } from '../../data/mockData';
+import * as departmentsService from '@/lib/services/departments.service';
+import type { Department } from '@/lib/services/departments.service';
 import {
   User,
   Settings,
@@ -23,10 +24,17 @@ import {
 export function MorePage() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const [department, setDepartment] = useState<Department | null>(null);
+
+  useEffect(() => {
+    if (!currentUser?.departmentId) return;
+    departmentsService
+      .getDepartmentById(currentUser.departmentId)
+      .then(setDepartment)
+      .catch(() => {});
+  }, [currentUser?.departmentId]);
 
   if (!currentUser) return null;
-
-  const department = getDepartmentById(currentUser.departmentId);
 
   const handleLogout = async () => {
     await logout();
@@ -74,7 +82,11 @@ export function MorePage() {
             <div className="flex items-center gap-1.5 mt-1">
               <BadgeCheck className="w-4 h-4 text-blue-500" />
               <span className="text-xs text-blue-600">
-                {currentUser.role === 'admin' ? 'المدير العام' : currentUser.role === 'manager' ? 'مدير قسم' : 'موظف'}
+                {currentUser.role === 'admin'
+                  ? 'المدير العام'
+                  : currentUser.role === 'manager'
+                    ? 'مدير قسم'
+                    : 'موظف'}
               </span>
             </div>
           </div>
@@ -83,7 +95,7 @@ export function MorePage() {
         <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Building2 className="w-4 h-4 text-gray-400" />
-            <span>{department?.nameAr}</span>
+            <span>{department?.name_ar ?? '—'}</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Calendar className="w-4 h-4 text-gray-400" />
@@ -95,14 +107,19 @@ export function MorePage() {
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Mail className="w-4 h-4 text-gray-400" />
-            <span className="truncate" dir="ltr">{currentUser.email}</span>
+            <span className="truncate" dir="ltr">
+              {currentUser.email}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Menu Sections */}
-      {menuSections.map(section => (
-        <div key={section.title} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {menuSections.map((section) => (
+        <div
+          key={section.title}
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+        >
           <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
             <span className="text-xs text-gray-500">{section.title}</span>
           </div>
@@ -112,12 +129,16 @@ export function MorePage() {
               className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
             >
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.bgColor}`}>
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.bgColor}`}
+                >
                   <item.icon className={`w-4.5 h-4.5 ${item.color}`} />
                 </div>
                 <div className="text-right">
                   <span className="text-sm text-gray-800">{item.label}</span>
-                  {item.subtitle && <p className="text-xs text-gray-400">{item.subtitle}</p>}
+                  {'subtitle' in item && item.subtitle && (
+                    <p className="text-xs text-gray-400">{item.subtitle}</p>
+                  )}
                 </div>
               </div>
               <ChevronLeft className="w-4 h-4 text-gray-300" />
@@ -126,7 +147,6 @@ export function MorePage() {
         </div>
       ))}
 
-      {/* Logout */}
       <button
         onClick={handleLogout}
         className="w-full flex items-center justify-center gap-2 py-3.5 bg-red-50 text-red-600 rounded-2xl hover:bg-red-100 transition-colors border border-red-100"

@@ -1,27 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import { toast } from 'sonner';
+import * as notificationsService from '@/lib/services/notifications.service';
+import type { Notification } from '@/lib/services/notifications.service';
 import {
   Bell,
   Clock,
   FileText,
   Settings,
   CheckCircle2,
-  AlertTriangle,
   Info,
 } from 'lucide-react';
 
 export function NotificationsPage() {
   const { currentUser } = useAuth();
-  const { notifications, markNotificationRead } = useApp();
+  const { markNotificationRead, markAllNotificationsRead } = useApp();
+  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    loadNotifications();
+  }, [currentUser?.uid]);
+
+  async function loadNotifications() {
+    if (!currentUser) return;
+    try {
+      setLoading(true);
+      const data = await notificationsService.getUserNotifications(currentUser.uid);
+      setNotifications(data);
+    } catch {
+      toast.error('فشل تحميل الإشعارات');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!currentUser) return null;
 
-  const userNotifications = notifications
-    .filter(n => n.userId === currentUser.uid)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const unreadCount = notifications.filter((n) => !n.read_status).length;
 
-  const unreadCount = userNotifications.filter(n => !n.readStatus).length;
+  const handleMarkRead = async (notifId: string) => {
+    await markNotificationRead(notifId);
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notifId ? { ...n, read_status: true } : n))
+    );
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsRead(currentUser.uid);
+    setNotifications((prev) => prev.map((n) => ({ ...n, read_status: true })));
+  };
 
   const typeIcon = (type: string) => {
     switch (type) {
@@ -56,7 +86,6 @@ export function NotificationsPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-gray-800">الإشعارات</h1>
@@ -66,41 +95,60 @@ export function NotificationsPage() {
             </span>
           )}
         </div>
+        {unreadCount > 0 && (
+          <button
+            onClick={handleMarkAllRead}
+            className="text-xs text-blue-600 hover:text-blue-700"
+          >
+            تعليم الكل كمقروء
+          </button>
+        )}
       </div>
 
-      {/* Notifications List */}
-      {userNotifications.length === 0 ? (
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-gray-100 rounded-xl h-20 animate-pulse" />
+          ))}
+        </div>
+      ) : notifications.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <Bell className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>لا توجد إشعارات</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {userNotifications.map(notif => (
+          {notifications.map((notif) => (
             <button
               key={notif.id}
-              onClick={() => markNotificationRead(notif.id)}
+              onClick={() => handleMarkRead(notif.id)}
               className={`w-full text-right rounded-xl p-4 border transition-all ${
-                notif.readStatus
+                notif.read_status
                   ? 'bg-white border-gray-100'
                   : 'bg-blue-50/50 border-blue-100'
               }`}
             >
               <div className="flex gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${typeBg(notif.type)}`}>
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${typeBg(notif.type)}`}
+                >
                   {typeIcon(notif.type)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className={`text-sm truncate ${!notif.readStatus ? 'text-gray-900' : 'text-gray-700'}`}>
-                      {notif.titleAr}
+                    <h4
+                      className={`text-sm truncate ${!notif.read_status ? 'text-gray-900' : 'text-gray-700'}`}
+                    >
+                      {notif.title_ar}
                     </h4>
-                    {!notif.readStatus && (
+                    {!notif.read_status && (
                       <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0" />
                     )}
                   </div>
-                  <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{notif.messageAr}</p>
-                  <p className="text-xs text-gray-400 mt-1">{getTimeAgo(notif.createdAt)}</p>
+                  <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
+                    {notif.message_ar}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">{getTimeAgo(notif.created_at)}</p>
                 </div>
               </div>
             </button>

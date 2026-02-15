@@ -1,19 +1,18 @@
-import React, { useMemo } from 'react';
-import { useApp } from '../../contexts/AppContext';
-import {
-  users,
-  departments,
-  getDepartmentById,
-  getDepartmentEmployees,
-  getAttendanceStatusAr,
-} from '../../data/mockData';
+import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
+import * as profilesService from '@/lib/services/profiles.service';
+import * as departmentsService from '@/lib/services/departments.service';
+import * as attendanceService from '@/lib/services/attendance.service';
+import * as requestsService from '@/lib/services/requests.service';
+import type { Profile } from '@/lib/services/profiles.service';
+import type { Department } from '@/lib/services/departments.service';
+import type { AttendanceLog } from '@/lib/services/attendance.service';
 import {
   Users,
   Building2,
   CheckCircle2,
   Timer,
   XCircle,
-  Coffee,
   TrendingUp,
   FileText,
   BarChart3,
@@ -21,71 +20,139 @@ import {
   Shield,
   AlertTriangle,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
+
+function dateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export function AdminDashboard() {
-  const { attendanceLogs, requests } = useApp();
+  const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [todayLogs, setTodayLogs] = useState<AttendanceLog[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
 
-  const todayStr = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  useEffect(() => {
+    loadData();
   }, []);
 
+  async function loadData() {
+    try {
+      setLoading(true);
+      const today = dateStr(new Date());
+      const [profs, depts, logs, pending] = await Promise.all([
+        profilesService.listUsers(),
+        departmentsService.listDepartments(),
+        attendanceService.getAllLogsForDate(today),
+        requestsService.countPendingRequests(),
+      ]);
+      setProfiles(profs);
+      setDepartments(depts);
+      setTodayLogs(logs);
+      setPendingCount(pending);
+
+      const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+      const weekData: { day: string; logs: AttendanceLog[] }[] = [];
+      for (let i = 4; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const ds = dateStr(d);
+        const dayLogs = await attendanceService.getAllLogsForDate(ds);
+        weekData.push({
+          day: days[d.getDay()] || d.toLocaleDateString('ar-IQ', { weekday: 'short' }),
+          logs: dayLogs,
+        });
+      }
+      setWeekLogs(weekData);
+    } catch {
+      toast.error('فشل تحميل البيانات');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const allNonAdmin = useMemo(
+    () => profiles.filter((p) => p.role !== 'admin'),
+    [profiles]
+  );
+
   const overallStats = useMemo(() => {
-    const todayLogs = attendanceLogs.filter(l => l.date === todayStr);
-    const allNonAdmin = users.filter(u => u.role !== 'admin');
+    const present = todayLogs.filter((l) => l.status === 'present').length;
+    const late = todayLogs.filter((l) => l.status === 'late').length;
+    const onLeave = todayLogs.filter((l) => l.status === 'on_leave').length;
+    const checkedIn = todayLogs.filter((l) => l.check_in_time).length;
     return {
       totalEmployees: allNonAdmin.length,
       totalDepartments: departments.length,
-      present: todayLogs.filter(l => l.status === 'present').length,
-      late: todayLogs.filter(l => l.status === 'late').length,
-      absent: allNonAdmin.length - todayLogs.filter(l => l.checkInTime).length,
-      onLeave: todayLogs.filter(l => l.status === 'on_leave').length,
-      pendingRequests: requests.filter(r => r.status === 'pending').length,
+      present,
+      late,
+      absent: allNonAdmin.length - checkedIn,
+      onLeave,
+      pendingRequests: pendingCount,
     };
-  }, [attendanceLogs, requests, todayStr]);
+  }, [todayLogs, allNonAdmin, departments, pendingCount]);
 
   const deptChartData = useMemo(() => {
-    return departments.map(dept => {
-      const empIds = getDepartmentEmployees(dept.id).map(e => e.uid);
-      const todayLogs = attendanceLogs.filter(l => empIds.includes(l.userId) && l.date === todayStr);
+    return departments.map((dept) => {
+      const empIds = allNonAdmin.filter((p) => p.department_id === dept.id).map((p) => p.id);
+      const deptLogs = todayLogs.filter((l) => empIds.includes(l.user_id));
       return {
-        name: dept.nameAr,
-        حاضر: todayLogs.filter(l => l.status === 'present').length,
-        متأخر: todayLogs.filter(l => l.status === 'late').length,
-        غائب: empIds.length - todayLogs.filter(l => l.checkInTime).length,
+        name: dept.name_ar,
+        حاضر: deptLogs.filter((l) => l.status === 'present').length,
+        متأخر: deptLogs.filter((l) => l.status === 'late').length,
+        غائب: empIds.length - deptLogs.filter((l) => l.check_in_time).length,
       };
     });
-  }, [attendanceLogs, todayStr]);
+  }, [departments, allNonAdmin, todayLogs]);
 
-  const pieData = useMemo(() => {
-    return [
-      { name: 'حاضر', value: overallStats.present, color: '#059669' },
-      { name: 'متأخر', value: overallStats.late, color: '#d97706' },
-      { name: 'غائب', value: overallStats.absent, color: '#dc2626' },
-      { name: 'إجازة', value: overallStats.onLeave, color: '#2563eb' },
-    ].filter(d => d.value > 0);
-  }, [overallStats]);
+  const pieData = useMemo(
+    () =>
+      [
+        { name: 'حاضر', value: overallStats.present, color: '#059669' },
+        { name: 'متأخر', value: overallStats.late, color: '#d97706' },
+        { name: 'غائب', value: overallStats.absent, color: '#dc2626' },
+        { name: 'إجازة', value: overallStats.onLeave, color: '#2563eb' },
+      ].filter((d) => d.value > 0),
+    [overallStats]
+  );
 
-  const weeklyTrend = useMemo(() => {
-    const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-    const now = new Date();
-    const result = [];
+  const weeklyTrend = useMemo(
+    () =>
+      weekLogs.map((w) => ({
+        day: w.day,
+        حضور: w.logs.filter((l) => l.status === 'present').length,
+        تأخر: w.logs.filter((l) => l.status === 'late').length,
+      })),
+    [weekLogs]
+  );
 
-    for (let i = 4; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const dayLogs = attendanceLogs.filter(l => l.date === dayStr);
-      result.push({
-        day: days[d.getDay()] || d.toLocaleDateString('ar-IQ', { weekday: 'short' }),
-        حضور: dayLogs.filter(l => l.status === 'present').length,
-        تأخر: dayLogs.filter(l => l.status === 'late').length,
-      });
-    }
-
-    return result;
-  }, [attendanceLogs]);
+  if (loading) {
+    return (
+      <div className="p-4 max-w-lg mx-auto space-y-4">
+        <div className="bg-gray-200 rounded-2xl h-28 animate-pulse" />
+        <div className="grid grid-cols-3 gap-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
+          ))}
+        </div>
+        <div className="bg-gray-100 rounded-2xl h-52 animate-pulse" />
+      </div>
+    );
+  }
 
   const statCards = [
     { icon: Users, label: 'إجمالي الموظفين', value: overallStats.totalEmployees, color: 'bg-blue-50 text-blue-600', iconBg: 'bg-blue-100' },
@@ -98,7 +165,6 @@ export function AdminDashboard() {
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
-      {/* Header */}
       <div className="bg-gradient-to-l from-purple-700 to-indigo-800 rounded-2xl p-5 text-white">
         <div className="flex items-center justify-between mb-1">
           <div>
@@ -112,7 +178,6 @@ export function AdminDashboard() {
         <p className="text-purple-200 text-sm">شبكة السعاع الإعلامية</p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-3 gap-3">
         {statCards.map((card, idx) => (
           <div key={idx} className={`rounded-2xl p-3 border border-gray-100 ${card.color}`}>
@@ -125,7 +190,6 @@ export function AdminDashboard() {
         ))}
       </div>
 
-      {/* Attendance Distribution */}
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="w-5 h-5 text-blue-500" />
@@ -148,15 +212,12 @@ export function AdminDashboard() {
                 ))}
               </Pie>
               <Tooltip />
-              <Legend
-                formatter={(value) => <span style={{ fontSize: '12px' }}>{value}</span>}
-              />
+              <Legend formatter={(value) => <span style={{ fontSize: '12px' }}>{value}</span>} />
             </PieChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Weekly Trend */}
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="w-5 h-5 text-emerald-500" />
@@ -176,7 +237,6 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {/* Department Performance */}
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 className="w-5 h-5 text-indigo-500" />
@@ -197,7 +257,6 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {/* Warnings */}
       {overallStats.pendingRequests > 0 && (
         <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
           <div className="flex items-center gap-2 mb-2">

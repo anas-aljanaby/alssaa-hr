@@ -1,14 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useApp } from '../../contexts/AppContext';
-import {
-  getUserLeaveBalance,
-  getDepartmentById,
-  getAttendanceStatusAr,
-  getRequestTypeAr,
-  getStatusAr,
-  type AttendanceLog,
-} from '../../data/mockData';
+import { toast } from 'sonner';
+import * as attendanceService from '@/lib/services/attendance.service';
+import * as leaveBalanceService from '@/lib/services/leave-balance.service';
+import * as requestsService from '@/lib/services/requests.service';
+import * as departmentsService from '@/lib/services/departments.service';
+import { getAttendanceStatusAr, getRequestTypeAr, getStatusAr } from '../../data/mockData';
+import type { AttendanceLog, MonthlyStats } from '@/lib/services/attendance.service';
+import type { LeaveBalance } from '@/lib/services/leave-balance.service';
+import type { LeaveRequest } from '@/lib/services/requests.service';
+import type { Department } from '@/lib/services/departments.service';
 import {
   Clock,
   CalendarDays,
@@ -16,45 +17,72 @@ import {
   CheckCircle2,
   XCircle,
   Timer,
-  TrendingUp,
   Coffee,
-  MapPin,
 } from 'lucide-react';
 
 export function EmployeeDashboard() {
   const { currentUser } = useAuth();
-  const { attendanceLogs, requests, getTodayLog } = useApp();
+  const [loading, setLoading] = useState(true);
+  const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
+  const [stats, setStats] = useState<MonthlyStats | null>(null);
+  const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
+  const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
+  const [department, setDepartment] = useState<Department | null>(null);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    loadData();
+  }, [currentUser?.uid]);
+
+  async function loadData() {
+    if (!currentUser) return;
+    try {
+      setLoading(true);
+      const now = new Date();
+      const [log, monthStats, balance, reqs, dept] = await Promise.all([
+        attendanceService.getTodayLog(currentUser.uid),
+        attendanceService.getMonthlyStats(currentUser.uid, now.getFullYear(), now.getMonth()),
+        leaveBalanceService.getUserBalance(currentUser.uid),
+        requestsService.getUserRequests(currentUser.uid),
+        currentUser.departmentId
+          ? departmentsService.getDepartmentById(currentUser.departmentId)
+          : Promise.resolve(null),
+      ]);
+      setTodayLog(log);
+      setStats(monthStats);
+      setLeaveBalance(balance);
+      setUserRequests(reqs);
+      setDepartment(dept);
+    } catch {
+      toast.error('فشل تحميل البيانات');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!currentUser) return null;
 
-  const todayLog = getTodayLog(currentUser.uid);
-  const department = getDepartmentById(currentUser.departmentId);
-  const leaveBalance = getUserLeaveBalance(currentUser.uid);
+  if (loading) {
+    return (
+      <div className="p-4 max-w-lg mx-auto space-y-4">
+        <div className="bg-gray-200 rounded-2xl h-40 animate-pulse" />
+        <div className="grid grid-cols-2 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
+          ))}
+        </div>
+        <div className="bg-gray-100 rounded-2xl h-32 animate-pulse" />
+      </div>
+    );
+  }
 
-  const monthlyStats = useMemo(() => {
-    const now = new Date();
-    const monthLogs = attendanceLogs.filter(log => {
-      const d = new Date(log.date);
-      return log.userId === currentUser.uid && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
-
-    return {
-      present: monthLogs.filter(l => l.status === 'present').length,
-      late: monthLogs.filter(l => l.status === 'late').length,
-      absent: monthLogs.filter(l => l.status === 'absent').length,
-      onLeave: monthLogs.filter(l => l.status === 'on_leave').length,
-      total: monthLogs.length,
-    };
-  }, [attendanceLogs, currentUser.uid]);
-
-  const userRequests = requests.filter(r => r.userId === currentUser.uid);
-  const pendingRequests = userRequests.filter(r => r.status === 'pending');
+  const pendingRequests = userRequests.filter((r) => r.status === 'pending');
   const upcomingLeaves = userRequests.filter(
-    r => r.status === 'approved' && new Date(r.fromDateTime) > new Date()
+    (r) => r.status === 'approved' && new Date(r.from_date_time) > new Date()
   );
 
   const now = new Date();
-  const greeting = now.getHours() < 12 ? 'صباح الخير' : now.getHours() < 18 ? 'مساء الخير' : 'مساء الخير';
+  const greeting = now.getHours() < 12 ? 'صباح الخير' : 'مساء الخير';
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -74,14 +102,13 @@ export function EmployeeDashboard() {
           <div>
             <p className="text-blue-200 text-sm">{greeting}</p>
             <h2 className="text-white">{currentUser.nameAr}</h2>
-            <p className="text-blue-200 text-sm">{department?.nameAr}</p>
+            <p className="text-blue-200 text-sm">{department?.name_ar}</p>
           </div>
           <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
             <span className="text-xl">{currentUser.nameAr.charAt(0)}</span>
           </div>
         </div>
 
-        {/* Today Status */}
         <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -93,49 +120,53 @@ export function EmployeeDashboard() {
                 {getAttendanceStatusAr(todayLog.status)}
               </span>
             ) : (
-              <span className="px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600">لم يتم التسجيل</span>
+              <span className="px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600">
+                لم يتم التسجيل
+              </span>
             )}
           </div>
-          {todayLog?.checkInTime && (
+          {todayLog?.check_in_time && (
             <div className="flex items-center gap-4 mt-2 text-sm text-blue-100">
-              <span>الحضور: {todayLog.checkInTime}</span>
-              {todayLog.checkOutTime && <span>الانصراف: {todayLog.checkOutTime}</span>}
+              <span>الحضور: {todayLog.check_in_time}</span>
+              {todayLog.check_out_time && <span>الانصراف: {todayLog.check_out_time}</span>}
             </div>
           )}
         </div>
       </div>
 
       {/* Monthly Statistics */}
-      <div>
-        <h3 className="mb-3 text-gray-800">إحصائيات الشهر</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard
-            icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-            label="أيام الحضور"
-            value={monthlyStats.present}
-            color="bg-emerald-50 border-emerald-100"
-          />
-          <StatCard
-            icon={<Timer className="w-5 h-5 text-amber-500" />}
-            label="أيام التأخر"
-            value={monthlyStats.late}
-            color="bg-amber-50 border-amber-100"
-            warning={monthlyStats.late >= 3}
-          />
-          <StatCard
-            icon={<XCircle className="w-5 h-5 text-red-500" />}
-            label="أيام الغياب"
-            value={monthlyStats.absent}
-            color="bg-red-50 border-red-100"
-          />
-          <StatCard
-            icon={<Coffee className="w-5 h-5 text-blue-500" />}
-            label="أيام الإجازة"
-            value={monthlyStats.onLeave}
-            color="bg-blue-50 border-blue-100"
-          />
+      {stats && (
+        <div>
+          <h3 className="mb-3 text-gray-800">إحصائيات الشهر</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard
+              icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+              label="أيام الحضور"
+              value={stats.presentDays}
+              color="bg-emerald-50 border-emerald-100"
+            />
+            <StatCard
+              icon={<Timer className="w-5 h-5 text-amber-500" />}
+              label="أيام التأخر"
+              value={stats.lateDays}
+              color="bg-amber-50 border-amber-100"
+              warning={stats.lateDays >= 3}
+            />
+            <StatCard
+              icon={<XCircle className="w-5 h-5 text-red-500" />}
+              label="أيام الغياب"
+              value={stats.absentDays}
+              color="bg-red-50 border-red-100"
+            />
+            <StatCard
+              icon={<Coffee className="w-5 h-5 text-blue-500" />}
+              label="أيام الإجازة"
+              value={stats.leaveDays}
+              color="bg-blue-50 border-blue-100"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Leave Balance */}
       {leaveBalance && (
@@ -144,14 +175,14 @@ export function EmployeeDashboard() {
           <div className="space-y-3">
             <BalanceBar
               label="الإجازة السنوية"
-              used={leaveBalance.usedAnnual}
-              total={leaveBalance.totalAnnual}
+              used={leaveBalance.used_annual}
+              total={leaveBalance.total_annual}
               color="bg-blue-500"
             />
             <BalanceBar
               label="الإجازة المرضية"
-              used={leaveBalance.usedSick}
-              total={leaveBalance.totalSick}
+              used={leaveBalance.used_sick}
+              total={leaveBalance.total_sick}
               color="bg-emerald-500"
             />
           </div>
@@ -166,7 +197,7 @@ export function EmployeeDashboard() {
             <h3 className="text-gray-800">طلبات قيد الانتظار</h3>
           </div>
           <div className="space-y-2">
-            {pendingRequests.map(req => (
+            {pendingRequests.map((req) => (
               <div key={req.id} className="bg-amber-50 rounded-xl p-3 border border-amber-100">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-800">{getRequestTypeAr(req.type)}</span>
@@ -189,12 +220,12 @@ export function EmployeeDashboard() {
             <h3 className="text-gray-800">إجازات قادمة</h3>
           </div>
           <div className="space-y-2">
-            {upcomingLeaves.map(leave => (
+            {upcomingLeaves.map((leave) => (
               <div key={leave.id} className="bg-blue-50 rounded-xl p-3 border border-blue-100">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-800">{getRequestTypeAr(leave.type)}</span>
                   <span className="text-xs text-blue-600">
-                    {new Date(leave.fromDateTime).toLocaleDateString('ar-IQ')}
+                    {new Date(leave.from_date_time).toLocaleDateString('ar-IQ')}
                   </span>
                 </div>
               </div>
@@ -206,7 +237,13 @@ export function EmployeeDashboard() {
   );
 }
 
-function StatCard({ icon, label, value, color, warning }: {
+function StatCard({
+  icon,
+  label,
+  value,
+  color,
+  warning,
+}: {
   icon: React.ReactNode;
   label: string;
   value: number;
@@ -229,13 +266,18 @@ function StatCard({ icon, label, value, color, warning }: {
   );
 }
 
-function BalanceBar({ label, used, total, color }: {
+function BalanceBar({
+  label,
+  used,
+  total,
+  color,
+}: {
   label: string;
   used: number;
   total: number;
   color: string;
 }) {
-  const percentage = (used / total) * 100;
+  const percentage = total > 0 ? (used / total) * 100 : 0;
   const remaining = total - used;
 
   return (
@@ -245,7 +287,10 @@ function BalanceBar({ label, used, total, color }: {
         <span className="text-sm text-gray-500">المتبقي: {remaining} يوم</span>
       </div>
       <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${percentage}%` }} />
+        <div
+          className={`h-full ${color} rounded-full transition-all`}
+          style={{ width: `${percentage}%` }}
+        />
       </div>
       <div className="flex items-center justify-between mt-1">
         <span className="text-xs text-gray-400">مستخدم: {used}</span>

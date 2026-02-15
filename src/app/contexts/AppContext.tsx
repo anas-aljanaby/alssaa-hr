@@ -1,129 +1,101 @@
-import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import {
-  type AttendanceLog,
-  type LeaveRequest,
-  type Notification,
-  type RequestStatus,
-  attendanceLogs as initialAttendanceLogs,
-  leaveRequests as initialRequests,
-  notifications as initialNotifications,
-} from '../data/mockData';
+import React, { createContext, useContext, type ReactNode } from 'react';
+import { toast } from 'sonner';
+import * as attendanceService from '@/lib/services/attendance.service';
+import * as requestsService from '@/lib/services/requests.service';
+import * as notificationsService from '@/lib/services/notifications.service';
+
+type AttendanceLog = attendanceService.AttendanceLog;
+type LeaveRequest = requestsService.LeaveRequest;
+type LeaveRequestInsert = requestsService.LeaveRequestInsert;
 
 interface AppContextType {
-  attendanceLogs: AttendanceLog[];
-  requests: LeaveRequest[];
-  notifications: Notification[];
-  checkIn: (userId: string) => void;
-  checkOut: (userId: string) => void;
-  getTodayLog: (userId: string) => AttendanceLog | undefined;
-  submitRequest: (request: Omit<LeaveRequest, 'id' | 'status' | 'createdAt'>) => void;
-  updateRequestStatus: (requestId: string, status: RequestStatus, approverId: string, note: string) => void;
-  markNotificationRead: (notifId: string) => void;
-  getUnreadCount: (userId: string) => number;
+  checkIn: (userId: string, coords?: { lat: number; lng: number }) => Promise<AttendanceLog>;
+  checkOut: (userId: string, coords?: { lat: number; lng: number }) => Promise<AttendanceLog>;
+  submitRequest: (request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>) => Promise<LeaveRequest>;
+  updateRequestStatus: (requestId: string, status: 'approved' | 'rejected', approverId: string, note: string) => Promise<LeaveRequest>;
+  markNotificationRead: (notifId: string) => Promise<void>;
+  markAllNotificationsRead: (userId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>(initialAttendanceLogs);
-  const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
-  const [notifs, setNotifs] = useState<Notification[]>(initialNotifications);
-
-  const getTodayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const checkIn = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
+    try {
+      const result = await attendanceService.checkIn(userId, coords);
+      toast.success('تم تسجيل الحضور بنجاح');
+      return result;
+    } catch (err: any) {
+      toast.error(err.message || 'فشل تسجيل الحضور');
+      throw err;
+    }
   };
 
-  const getTodayLog = useCallback((userId: string): AttendanceLog | undefined => {
-    const today = getTodayStr();
-    return attendanceLogs.find(log => log.userId === userId && log.date === today);
-  }, [attendanceLogs]);
+  const checkOut = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
+    try {
+      const result = await attendanceService.checkOut(userId, coords);
+      toast.success('تم تسجيل الانصراف بنجاح');
+      return result;
+    } catch (err: any) {
+      toast.error(err.message || 'فشل تسجيل الانصراف');
+      throw err;
+    }
+  };
 
-  const checkIn = useCallback((userId: string) => {
-    const today = getTodayStr();
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const submitRequest = async (
+    request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>
+  ): Promise<LeaveRequest> => {
+    try {
+      const result = await requestsService.submitRequest(request);
+      toast.success('تم إرسال الطلب بنجاح');
+      return result;
+    } catch (err: any) {
+      toast.error(err.message || 'فشل إرسال الطلب');
+      throw err;
+    }
+  };
 
-    const existing = attendanceLogs.find(log => log.userId === userId && log.date === today);
-    if (existing && existing.checkInTime) return; // Already checked in
+  const updateRequestStatus = async (
+    requestId: string,
+    status: 'approved' | 'rejected',
+    approverId: string,
+    note: string
+  ): Promise<LeaveRequest> => {
+    try {
+      const result = await requestsService.updateRequestStatus(requestId, status, approverId, note);
+      toast.success(status === 'approved' ? 'تمت الموافقة على الطلب' : 'تم رفض الطلب');
+      return result;
+    } catch (err: any) {
+      toast.error(err.message || 'فشل تحديث الطلب');
+      throw err;
+    }
+  };
 
-    const isLate = now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() > 10);
+  const markNotificationRead = async (notifId: string): Promise<void> => {
+    try {
+      await notificationsService.markAsRead(notifId);
+    } catch {
+      toast.error('فشل تحديث الإشعار');
+    }
+  };
 
-    const newLog: AttendanceLog = {
-      id: `att-${userId}-${today}`,
-      userId,
-      date: today,
-      checkInTime: timeStr,
-      checkOutTime: null,
-      status: isLate ? 'late' : 'present',
-      checkInLocation: { lat: 33.3152, lng: 44.3661 },
-    };
-
-    setAttendanceLogs(prev => {
-      const filtered = prev.filter(log => !(log.userId === userId && log.date === today));
-      return [...filtered, newLog];
-    });
-  }, [attendanceLogs]);
-
-  const checkOut = useCallback((userId: string) => {
-    const today = getTodayStr();
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    setAttendanceLogs(prev =>
-      prev.map(log => {
-        if (log.userId === userId && log.date === today && log.checkInTime && !log.checkOutTime) {
-          return { ...log, checkOutTime: timeStr, checkOutLocation: { lat: 33.3152, lng: 44.3661 } };
-        }
-        return log;
-      })
-    );
-  }, []);
-
-  const submitRequest = useCallback((request: Omit<LeaveRequest, 'id' | 'status' | 'createdAt'>) => {
-    const newReq: LeaveRequest = {
-      ...request,
-      id: `req-${Date.now()}`,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    };
-    setRequests(prev => [newReq, ...prev]);
-  }, []);
-
-  const updateRequestStatus = useCallback((requestId: string, status: RequestStatus, approverId: string, note: string) => {
-    setRequests(prev =>
-      prev.map(req => {
-        if (req.id === requestId) {
-          return { ...req, status, approverId, decisionNote: note };
-        }
-        return req;
-      })
-    );
-  }, []);
-
-  const markNotificationRead = useCallback((notifId: string) => {
-    setNotifs(prev =>
-      prev.map(n => (n.id === notifId ? { ...n, readStatus: true } : n))
-    );
-  }, []);
-
-  const getUnreadCount = useCallback((userId: string) => {
-    return notifs.filter(n => n.userId === userId && !n.readStatus).length;
-  }, [notifs]);
+  const markAllNotificationsRead = async (userId: string): Promise<void> => {
+    try {
+      await notificationsService.markAllAsRead(userId);
+    } catch {
+      toast.error('فشل تحديث الإشعارات');
+    }
+  };
 
   return (
     <AppContext.Provider
       value={{
-        attendanceLogs,
-        requests,
-        notifications: notifs,
         checkIn,
         checkOut,
-        getTodayLog,
         submitRequest,
         updateRequestStatus,
         markNotificationRead,
-        getUnreadCount,
+        markAllNotificationsRead,
       }}
     >
       {children}
