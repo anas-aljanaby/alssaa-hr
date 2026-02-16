@@ -8,6 +8,7 @@ import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
+import { AdminDashboardSkeleton } from '../../components/skeletons';
 import {
   Users,
   Building2,
@@ -179,17 +180,7 @@ export function AdminDashboard() {
   );
 
   if (loading) {
-    return (
-      <div className="p-4 max-w-lg mx-auto space-y-4">
-        <div className="bg-gray-200 rounded-2xl h-28 animate-pulse" />
-        <div className="grid grid-cols-3 gap-3">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
-          ))}
-        </div>
-        <div className="bg-gray-100 rounded-2xl h-52 animate-pulse" />
-      </div>
-    );
+    return <AdminDashboardSkeleton />;
   }
 
   const statCards = [

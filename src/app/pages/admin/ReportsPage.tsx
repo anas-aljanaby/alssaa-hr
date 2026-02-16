@@ -10,6 +10,8 @@ import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
 import type { AuditLog } from '@/lib/services/audit.service';
 import type { AttendancePolicy } from '@/lib/services/policy.service';
+import { Pagination, usePagination } from '../../components/Pagination';
+import { ReportsSkeleton } from '../../components/skeletons';
 import {
   BarChart3,
   Download,
@@ -30,6 +32,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+
+const AUDIT_PAGE_SIZE = 15;
+const REPORT_PAGE_SIZE = 20;
 
 export function ReportsPage() {
   const [loading, setLoading] = useState(true);
@@ -123,6 +128,9 @@ export function ReportsPage() {
     });
   }, [departments, allNonAdmin, monthLogs]);
 
+  const auditPagination = usePagination(auditLogs, AUDIT_PAGE_SIZE);
+  const reportPagination = usePagination(monthlyReport, REPORT_PAGE_SIZE);
+
   const tabs = [
     { key: 'reports' as const, label: 'التقارير', icon: BarChart3 },
     { key: 'audit' as const, label: 'سجل المراجعة', icon: Shield },
@@ -140,14 +148,7 @@ export function ReportsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="p-4 max-w-lg mx-auto space-y-4">
-        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
-        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
-        <div className="bg-gray-100 rounded-2xl h-52 animate-pulse" />
-        <div className="bg-gray-100 rounded-2xl h-64 animate-pulse" />
-      </div>
-    );
+    return <ReportsSkeleton />;
   }
 
   return (
@@ -219,7 +220,7 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {monthlyReport.map((row, idx) => (
+                  {reportPagination.paginatedItems.map((row, idx) => (
                     <tr key={idx} className="border-b border-gray-50">
                       <td className="py-2.5 text-gray-800">{row.name}</td>
                       <td className="text-center">
@@ -241,6 +242,12 @@ export function ReportsPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              currentPage={reportPagination.currentPage}
+              totalItems={reportPagination.totalItems}
+              pageSize={reportPagination.pageSize}
+              onPageChange={reportPagination.setCurrentPage}
+            />
           </div>
         </>
       )}
@@ -254,7 +261,7 @@ export function ReportsPage() {
             </p>
           </div>
 
-          {auditLogs.map((log) => {
+          {auditPagination.paginatedItems.map((log) => {
             const actor = profilesMap.get(log.actor_id);
             return (
               <div key={log.id} className="bg-white rounded-xl p-3 border border-gray-100">
@@ -287,6 +294,13 @@ export function ReportsPage() {
               </div>
             );
           })}
+
+          <Pagination
+            currentPage={auditPagination.currentPage}
+            totalItems={auditPagination.totalItems}
+            pageSize={auditPagination.pageSize}
+            onPageChange={auditPagination.setCurrentPage}
+          />
         </div>
       )}
 

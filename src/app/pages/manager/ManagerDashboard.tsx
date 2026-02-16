@@ -11,6 +11,7 @@ import type { Profile } from '@/lib/services/profiles.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { Department } from '@/lib/services/departments.service';
+import { DashboardSkeleton } from '../../components/skeletons';
 import {
   Users,
   CheckCircle2,
@@ -167,17 +168,7 @@ export function ManagerDashboard() {
   if (!currentUser) return null;
 
   if (loading) {
-    return (
-      <div className="p-4 max-w-lg mx-auto space-y-4">
-        <div className="bg-gray-200 rounded-2xl h-36 animate-pulse" />
-        <div className="grid grid-cols-2 gap-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
-          ))}
-        </div>
-        <div className="bg-gray-100 rounded-2xl h-40 animate-pulse" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const statusColor = (status: string) => {

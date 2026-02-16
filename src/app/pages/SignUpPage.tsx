@@ -1,33 +1,38 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { signUpSchema, type SignUpFormData } from '@/lib/validations';
 import { useAuth } from '../contexts/AuthContext';
 import { Eye, EyeOff, Building2, UserPlus } from 'lucide-react';
 
 export function SignUpPage() {
   const { signUp } = useAuth();
   const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [serverError, setServerError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SignUpFormData>({
+    resolver: zodResolver(signUpSchema),
+    defaultValues: { name: '', email: '', password: '' },
+  });
+
+  const onSubmit = async (data: SignUpFormData) => {
+    setServerError('');
     setSuccessMessage('');
-    const result = await signUp(email, password, name);
+    const result = await signUp(data.email, data.password, data.name);
     if (result.ok && result.message) {
       setSuccessMessage(result.message);
     } else if (result.ok) {
       navigate('/');
     } else {
-      setError(result.error || 'فشل إنشاء الحساب');
+      setServerError(result.error || 'فشل إنشاء الحساب');
     }
-    setIsLoading(false);
   };
 
   return (
@@ -47,29 +52,35 @@ export function SignUpPage() {
         <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
           <h2 className="text-center mb-6 text-gray-800">إنشاء حساب جديد</h2>
 
-          <form onSubmit={handleSignUp} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block mb-1.5 text-gray-700">الاسم</label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                {...register('name')}
                 placeholder="أدخل اسمك"
-                required
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                  errors.name ? 'border-red-400' : 'border-gray-200'
+                }`}
               />
+              {errors.name && (
+                <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
+              )}
             </div>
 
             <div>
               <label className="block mb-1.5 text-gray-700">البريد الإلكتروني</label>
               <input
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                {...register('email')}
                 placeholder="example@alssaa.tv"
-                required
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                  errors.email ? 'border-red-400' : 'border-gray-200'
+                }`}
               />
+              {errors.email && (
+                <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+              )}
             </div>
 
             <div>
@@ -77,12 +88,11 @@ export function SignUpPage() {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  {...register('password')}
                   placeholder="••••••••"
-                  required
-                  minLength={6}
-                  className="w-full px-4 py-3 pe-12 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  className={`w-full px-4 py-3 pe-12 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                    errors.password ? 'border-red-400' : 'border-gray-200'
+                  }`}
                 />
                 <button
                   type="button"
@@ -93,12 +103,16 @@ export function SignUpPage() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              <p className="text-gray-500 text-sm mt-1">6 أحرف على الأقل</p>
+              {errors.password ? (
+                <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+              ) : (
+                <p className="text-gray-500 text-sm mt-1">6 أحرف على الأقل</p>
+              )}
             </div>
 
-            {error && (
+            {serverError && (
               <div className="bg-red-50 text-red-600 p-3 rounded-xl text-center text-sm">
-                {error}
+                {serverError}
               </div>
             )}
 
@@ -111,11 +125,11 @@ export function SignUpPage() {
             {!successMessage && (
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isSubmitting}
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <UserPlus className="w-5 h-5 shrink-0" />
-                {isLoading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
+                {isSubmitting ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
               </button>
             )}
           </form>

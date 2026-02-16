@@ -1,20 +1,33 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { RootLayout } from './components/layout/RootLayout';
 import { MobileLayout } from './components/layout/MobileLayout';
-import { LoginPage } from './pages/LoginPage';
-import { SignUpPage } from './pages/SignUpPage';
-import { AuthCallbackPage } from './pages/AuthCallbackPage';
-import { AttendancePage } from './pages/employee/AttendancePage';
-import { RequestsPage } from './pages/employee/RequestsPage';
-import { NotificationsPage } from './pages/employee/NotificationsPage';
-import { MorePage } from './pages/employee/MorePage';
-import { ApprovalsPage } from './pages/manager/ApprovalsPage';
-import { UsersPage } from './pages/admin/UsersPage';
-import { DepartmentsPage } from './pages/admin/DepartmentsPage';
-import { ReportsPage } from './pages/admin/ReportsPage';
-import { UserDetailsPage } from './pages/admin/UserDetailsPage';
-import { DashboardRouter } from './pages/DashboardRouter';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { FullPageSpinner } from './components/skeletons';
+
+const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const SignUpPage = React.lazy(() => import('./pages/SignUpPage').then(m => ({ default: m.SignUpPage })));
+const AuthCallbackPage = React.lazy(() => import('./pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
+const DashboardRouter = React.lazy(() => import('./pages/DashboardRouter').then(m => ({ default: m.DashboardRouter })));
+const AttendancePage = React.lazy(() => import('./pages/employee/AttendancePage').then(m => ({ default: m.AttendancePage })));
+const RequestsPage = React.lazy(() => import('./pages/employee/RequestsPage').then(m => ({ default: m.RequestsPage })));
+const NotificationsPage = React.lazy(() => import('./pages/employee/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
+const MorePage = React.lazy(() => import('./pages/employee/MorePage').then(m => ({ default: m.MorePage })));
+const ApprovalsPage = React.lazy(() => import('./pages/manager/ApprovalsPage').then(m => ({ default: m.ApprovalsPage })));
+const UsersPage = React.lazy(() => import('./pages/admin/UsersPage').then(m => ({ default: m.UsersPage })));
+const DepartmentsPage = React.lazy(() => import('./pages/admin/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
+const ReportsPage = React.lazy(() => import('./pages/admin/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const UserDetailsPage = React.lazy(() => import('./pages/admin/UserDetailsPage').then(m => ({ default: m.UserDetailsPage })));
+
+function Lazy({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<FullPageSpinner />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
 
 function NotFoundRedirect() {
   return <Navigate to="/" replace />;
@@ -27,30 +40,29 @@ export const router = createBrowserRouter([
     children: [
       {
         path: 'login',
-        Component: LoginPage,
+        element: <Lazy><LoginPage /></Lazy>,
       },
       {
         path: 'signup',
-        Component: SignUpPage,
+        element: <Lazy><SignUpPage /></Lazy>,
       },
       {
         path: 'auth/callback',
-        Component: AuthCallbackPage,
+        element: <Lazy><AuthCallbackPage /></Lazy>,
       },
       {
-        // Pathless layout route for MobileLayout
         Component: MobileLayout,
         children: [
-          { index: true, Component: DashboardRouter },
-          { path: 'attendance', Component: AttendancePage },
-          { path: 'requests', Component: RequestsPage },
-          { path: 'notifications', Component: NotificationsPage },
-          { path: 'more', Component: MorePage },
-          { path: 'approvals', Component: ApprovalsPage },
-          { path: 'users', Component: UsersPage },
-          { path: 'departments', Component: DepartmentsPage },
-          { path: 'reports', Component: ReportsPage },
-          { path: 'user-details/:userId', Component: UserDetailsPage },
+          { index: true, element: <Lazy><DashboardRouter /></Lazy> },
+          { path: 'attendance', element: <Lazy><AttendancePage /></Lazy> },
+          { path: 'requests', element: <Lazy><RequestsPage /></Lazy> },
+          { path: 'notifications', element: <Lazy><NotificationsPage /></Lazy> },
+          { path: 'more', element: <Lazy><MorePage /></Lazy> },
+          { path: 'approvals', element: <Lazy><ApprovalsPage /></Lazy> },
+          { path: 'users', element: <Lazy><UsersPage /></Lazy> },
+          { path: 'departments', element: <Lazy><DepartmentsPage /></Lazy> },
+          { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
+          { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
         ],
       },
       { path: '*', Component: NotFoundRedirect },

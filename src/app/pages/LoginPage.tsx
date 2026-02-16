@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { loginSchema, type LoginFormData } from '@/lib/validations';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../data/mockData';
 import {
@@ -21,24 +24,26 @@ const DEMO_ROLE_CARDS: { role: UserRole; label: string; icon: React.ReactNode; c
 export function LoginPage() {
   const { login, loginAs } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [serverError, setServerError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '' },
+  });
 
-    const result = await login(email, password);
+  const onSubmit = async (data: LoginFormData) => {
+    setServerError('');
+    const result = await login(data.email, data.password);
     if (result.ok) {
       navigate('/');
     } else {
-      setError(result.error ?? 'البريد الإلكتروني أو كلمة المرور غير صحيحة');
+      setServerError(result.error ?? 'البريد الإلكتروني أو كلمة المرور غير صحيحة');
     }
-    setIsLoading(false);
   };
 
   const handleQuickLogin = (role: UserRole) => {
@@ -52,7 +57,6 @@ export function LoginPage() {
       className="min-h-screen w-full bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center p-4"
     >
       <div className="w-full max-w-md mx-auto shrink-0">
-        {/* Logo & Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl mb-4 border border-white/20">
             <Building2 className="w-10 h-10 text-white" />
@@ -61,20 +65,23 @@ export function LoginPage() {
           <p className="text-blue-200">نظام إدارة الحضور والإجازات</p>
         </div>
 
-        {/* Login Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6">
           <h2 className="text-center mb-6 text-gray-800">تسجيل الدخول</h2>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block mb-1.5 text-gray-700">البريد الإلكتروني</label>
               <input
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                {...register('email')}
                 placeholder="example@alssaa.tv"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                  errors.email ? 'border-red-400' : 'border-gray-200'
+                }`}
               />
+              {errors.email && (
+                <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+              )}
             </div>
 
             <div>
@@ -82,10 +89,11 @@ export function LoginPage() {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  {...register('password')}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 pe-12 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  className={`w-full px-4 py-3 pe-12 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                    errors.password ? 'border-red-400' : 'border-gray-200'
+                  }`}
                 />
                 <button
                   type="button"
@@ -96,24 +104,25 @@ export function LoginPage() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+              )}
             </div>
 
-            {error && (
+            {serverError && (
               <div className="bg-red-50 text-red-600 p-3 rounded-xl text-center">
-                {error}
+                {serverError}
               </div>
             )}
 
-            {/* Primary login button - full width */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
+              {isSubmitting ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
             </button>
 
-            {/* Secondary: fingerprint login - full width, clearly separated */}
             <div className="pt-1">
               <button
                 type="button"
@@ -133,7 +142,6 @@ export function LoginPage() {
           </form>
         </div>
 
-        {/* Quick Login -- dev only, stripped from production builds */}
         {loginAs && (
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-5 border border-white/20">
             <p className="text-center text-blue-200 mb-4">دخول سريع (للعرض التجريبي)</p>
@@ -153,7 +161,6 @@ export function LoginPage() {
           </div>
         )}
 
-        {/* Footer */}
         <p className="text-center text-blue-300/60 mt-6 text-sm">
           &copy; 2026 شبكة الساعة الإعلامية - جميع الحقوق محفوظة
         </p>

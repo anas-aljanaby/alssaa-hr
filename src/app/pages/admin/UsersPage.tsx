@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { addUserSchema, type AddUserFormData } from '@/lib/validations';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
+import { Pagination, usePagination } from '../../components/Pagination';
+import { UsersPageSkeleton } from '../../components/skeletons';
 import {
   Plus,
   Search,
@@ -18,6 +23,7 @@ import {
 } from 'lucide-react';
 
 type UserRole = Profile['role'];
+const PAGE_SIZE = 15;
 
 export function UsersPage() {
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,11 @@ export function UsersPage() {
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [showForm, setShowForm] = useState(false);
   const navigate = useNavigate();
+
+  const addUserForm = useForm<AddUserFormData>({
+    resolver: zodResolver(addUserSchema),
+    defaultValues: { name: '', email: '', phone: '', role: 'employee', department_id: '' },
+  });
 
   useEffect(() => {
     loadData();
@@ -62,6 +73,9 @@ export function UsersPage() {
     return matchesSearch && matchesRole;
   });
 
+  const { paginatedItems, currentPage, totalItems, pageSize, setCurrentPage } =
+    usePagination(filteredUsers, PAGE_SIZE);
+
   const roleLabel = (role: string) => {
     switch (role) {
       case 'admin': return 'مدير عام';
@@ -89,21 +103,14 @@ export function UsersPage() {
   };
 
   if (loading) {
-    return (
-      <div className="p-4 max-w-lg mx-auto space-y-4">
-        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
-        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
-        <div className="grid grid-cols-3 gap-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-gray-100 rounded-xl h-16 animate-pulse" />
-          ))}
-        </div>
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-gray-100 rounded-xl h-28 animate-pulse" />
-        ))}
-      </div>
-    );
+    return <UsersPageSkeleton />;
   }
+
+  const onAddUser = async (data: AddUserFormData) => {
+    toast.info('سيتم إضافة المستخدم قريباً');
+    setShowForm(false);
+    addUserForm.reset();
+  };
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
@@ -123,7 +130,7 @@ export function UsersPage() {
         <input
           type="text"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
           placeholder="بحث بالاسم أو الهاتف أو الرقم الوظيفي..."
           className="w-full pr-10 pl-4 py-3 border border-gray-200 rounded-xl bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
         />
@@ -133,7 +140,7 @@ export function UsersPage() {
         {(['all', 'employee', 'manager', 'admin'] as const).map((role) => (
           <button
             key={role}
-            onClick={() => setRoleFilter(role)}
+            onClick={() => { setRoleFilter(role); setCurrentPage(1); }}
             className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
               roleFilter === role
                 ? 'bg-blue-600 text-white'
@@ -167,7 +174,7 @@ export function UsersPage() {
       </div>
 
       <div className="space-y-2">
-        {filteredUsers.map((user) => {
+        {paginatedItems.map((user) => {
           const dept = deptsMap.get(user.department_id ?? '');
           return (
             <div key={user.id} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
@@ -250,10 +257,17 @@ export function UsersPage() {
         })}
       </div>
 
+      <Pagination
+        currentPage={currentPage}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+      />
+
       {showForm && (
         <div
           className="fixed inset-0 bg-black/50 flex items-end z-50"
-          onClick={() => setShowForm(false)}
+          onClick={() => { setShowForm(false); addUserForm.reset(); }}
         >
           <div
             className="bg-white rounded-t-3xl w-full max-w-lg mx-auto p-6 max-h-[85vh] overflow-auto"
@@ -263,40 +277,47 @@ export function UsersPage() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-gray-800">إضافة مستخدم جديد</h2>
               <button
-                onClick={() => setShowForm(false)}
+                onClick={() => { setShowForm(false); addUserForm.reset(); }}
                 className="p-2 hover:bg-gray-100 rounded-full"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setShowForm(false);
-              }}
-            >
+            <form className="space-y-4" onSubmit={addUserForm.handleSubmit(onAddUser)}>
               <div>
                 <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
                 <input
                   type="text"
+                  {...addUserForm.register('name')}
                   placeholder="أدخل الاسم الكامل"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    addUserForm.formState.errors.name ? 'border-red-400' : 'border-gray-200'
+                  }`}
                 />
+                {addUserForm.formState.errors.name && (
+                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.name.message}</p>
+                )}
               </div>
               <div>
                 <label className="block mb-1.5 text-gray-700">البريد الإلكتروني</label>
                 <input
                   type="email"
+                  {...addUserForm.register('email')}
                   placeholder="example@alssaa.tv"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    addUserForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
+                  }`}
                 />
+                {addUserForm.formState.errors.email && (
+                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.email.message}</p>
+                )}
               </div>
               <div>
                 <label className="block mb-1.5 text-gray-700">رقم الهاتف</label>
                 <input
                   type="tel"
+                  {...addUserForm.register('phone')}
                   placeholder="+964 770 000 0000"
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   dir="ltr"
@@ -305,7 +326,10 @@ export function UsersPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1.5 text-gray-700">الدور</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                  <select
+                    {...addUserForm.register('role')}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  >
                     <option value="employee">موظف</option>
                     <option value="manager">مدير قسم</option>
                     <option value="admin">مدير عام</option>
@@ -313,13 +337,22 @@ export function UsersPage() {
                 </div>
                 <div>
                   <label className="block mb-1.5 text-gray-700">القسم</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                  <select
+                    {...addUserForm.register('department_id')}
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      addUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  >
+                    <option value="">اختر القسم</option>
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.name_ar}
                       </option>
                     ))}
                   </select>
+                  {addUserForm.formState.errors.department_id && (
+                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.department_id.message}</p>
+                  )}
                 </div>
               </div>
               <button
