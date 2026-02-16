@@ -16,7 +16,10 @@ import {
   MessageSquare,
   X,
   FileText,
+  Download,
+  Paperclip,
 } from 'lucide-react';
+import * as storageService from '@/lib/services/storage.service';
 
 export function ApprovalsPage() {
   const { currentUser } = useAuth();
@@ -202,6 +205,24 @@ export function ApprovalsPage() {
                     <p className="text-sm text-gray-600 mt-2 pt-2 border-t border-gray-200">
                       {req.note}
                     </p>
+                  )}
+                  {req.attachment_url && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const url = await storageService.getAttachmentUrl(req.attachment_url!);
+                          window.open(url, '_blank');
+                        } catch {
+                          toast.error('فشل فتح المرفق');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 mt-2 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <Paperclip className="w-3 h-3" />
+                      عرض المرفق
+                    </button>
                   )}
                 </div>
 

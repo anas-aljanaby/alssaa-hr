@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { toast } from 'sonner';
 import * as requestsService from '@/lib/services/requests.service';
+import * as storageService from '@/lib/services/storage.service';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import type { LeaveRequest, RequestType } from '@/lib/services/requests.service';
@@ -15,6 +16,9 @@ import {
   CheckCircle2,
   XCircle,
   Timer,
+  Download,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 
 export function RequestsPage() {
@@ -33,6 +37,9 @@ export function RequestsPage() {
     toTime: '16:00',
     note: '',
   });
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -78,12 +85,28 @@ export function RequestsPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
+      let attachmentUrl: string | undefined;
+
+      if (attachmentFile) {
+        setUploading(true);
+        try {
+          attachmentUrl = await storageService.uploadAttachment(currentUser.uid, attachmentFile);
+        } catch {
+          toast.error('فشل رفع المرفق');
+          setSubmitting(false);
+          setUploading(false);
+          return;
+        }
+        setUploading(false);
+      }
+
       await submitRequest({
         user_id: currentUser.uid,
         type: formData.type,
         from_date_time: `${formData.fromDate}T${formData.fromTime}:00`,
         to_date_time: `${formData.toDate}T${formData.toTime}:00`,
         note: formData.note,
+        attachment_url: attachmentUrl,
       });
       setShowForm(false);
       setFormData({
@@ -94,6 +117,7 @@ export function RequestsPage() {
         toTime: '16:00',
         note: '',
       });
+      setAttachmentFile(null);
       await loadRequests();
     } catch {
       /* toast handled by context */
@@ -212,6 +236,24 @@ export function RequestsPage() {
 
               {req.note && (
                 <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-2 mb-2">{req.note}</p>
+              )}
+
+              {req.attachment_url && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const url = await storageService.getAttachmentUrl(req.attachment_url!);
+                      window.open(url, '_blank');
+                    } catch {
+                      toast.error('فشل فتح المرفق');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 mb-2 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  عرض المرفق
+                </button>
               )}
 
               {req.decision_note && (
@@ -344,21 +386,55 @@ export function RequestsPage() {
               </div>
 
               <div>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 w-full justify-center"
-                >
-                  <Paperclip className="w-4 h-4" />
-                  إرفاق ملف (اختياري)
-                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (file && file.size > 5 * 1024 * 1024) {
+                      toast.error('حجم الملف يجب أن لا يتجاوز 5 ميجابايت');
+                      e.target.value = '';
+                      return;
+                    }
+                    setAttachmentFile(file);
+                  }}
+                />
+                {attachmentFile ? (
+                  <div className="flex items-center gap-2 px-4 py-2.5 border border-blue-200 bg-blue-50 rounded-xl text-sm">
+                    <Paperclip className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span className="text-blue-700 truncate flex-1">{attachmentFile.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttachmentFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="p-1 hover:bg-blue-100 rounded-full"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 w-full justify-center"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    إرفاق ملف (اختياري)
+                  </button>
+                )}
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors flex items-center justify-center gap-2"
               >
-                {submitting ? 'جاري الإرسال...' : 'إرسال الطلب'}
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {uploading ? 'جاري رفع المرفق...' : submitting ? 'جاري الإرسال...' : 'إرسال الطلب'}
               </button>
             </form>
           </div>
