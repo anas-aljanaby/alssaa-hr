@@ -56,6 +56,12 @@ export async function markAllAsRead(userId: string): Promise<void> {
   if (error) throw error;
 }
 
+export type NotificationChangeEvent = {
+  eventType: 'INSERT' | 'UPDATE';
+  new: Notification;
+  old: Partial<Notification>;
+};
+
 export function subscribeToNotifications(
   userId: string,
   onNew: (notification: Notification) => void
@@ -73,6 +79,45 @@ export function subscribeToNotifications(
       (payload) => {
         onNew(payload.new as Notification);
       }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToUserNotifications(
+  userId: string,
+  onEvent: (event: NotificationChangeEvent) => void
+): () => void {
+  const channel = supabase
+    .channel(`notifications:full:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) =>
+        onEvent({ eventType: 'INSERT', new: payload.new as Notification, old: {} })
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) =>
+        onEvent({
+          eventType: 'UPDATE',
+          new: payload.new as Notification,
+          old: payload.old as Partial<Notification>,
+        })
     )
     .subscribe();
 

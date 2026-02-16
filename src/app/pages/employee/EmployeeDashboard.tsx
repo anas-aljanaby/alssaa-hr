@@ -5,6 +5,7 @@ import * as attendanceService from '@/lib/services/attendance.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as departmentsService from '@/lib/services/departments.service';
+import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { getAttendanceStatusAr, getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import type { AttendanceLog, MonthlyStats } from '@/lib/services/attendance.service';
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
@@ -33,6 +34,32 @@ export function EmployeeDashboard() {
     if (!currentUser) return;
     loadData();
   }, [currentUser?.uid]);
+
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser) return undefined;
+      return attendanceService.subscribeToUserAttendance(currentUser.uid, (event) => {
+        setTodayLog(event.new);
+      });
+    },
+    [currentUser?.uid]
+  );
+
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser) return undefined;
+      return requestsService.subscribeToUserRequests(currentUser.uid, (event) => {
+        if (event.eventType === 'INSERT') {
+          setUserRequests((prev) => [event.new, ...prev]);
+        } else if (event.eventType === 'UPDATE') {
+          setUserRequests((prev) =>
+            prev.map((r) => (r.id === event.new.id ? event.new : r))
+          );
+        }
+      });
+    },
+    [currentUser?.uid]
+  );
 
   async function loadData() {
     if (!currentUser) return;

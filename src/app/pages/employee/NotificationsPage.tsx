@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { toast } from 'sonner';
 import * as notificationsService from '@/lib/services/notifications.service';
+import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import type { Notification } from '@/lib/services/notifications.service';
 import {
   Bell,
@@ -23,6 +24,22 @@ export function NotificationsPage() {
     if (!currentUser) return;
     loadNotifications();
   }, [currentUser?.uid]);
+
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser) return undefined;
+      return notificationsService.subscribeToUserNotifications(currentUser.uid, (event) => {
+        if (event.eventType === 'INSERT') {
+          setNotifications((prev) => [event.new, ...prev]);
+        } else if (event.eventType === 'UPDATE') {
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === event.new.id ? event.new : n))
+          );
+        }
+      });
+    },
+    [currentUser?.uid]
+  );
 
   async function loadNotifications() {
     if (!currentUser) return;

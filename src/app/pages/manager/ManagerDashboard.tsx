@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as requestsService from '@/lib/services/requests.service';
+import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { getAttendanceStatusAr } from '../../data/mockData';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
@@ -35,10 +36,57 @@ export function ManagerDashboard() {
   const [pendingRequests, setPendingRequests] = useState<LeaveRequest[]>([]);
   const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
 
+  const employeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
+
   useEffect(() => {
     if (!currentUser) return;
     loadData();
   }, [currentUser?.uid]);
+
+  const handleAttendanceEvent = useCallback(
+    (event: attendanceService.AttendanceChangeEvent) => {
+      if (!employeeIds.has(event.new.user_id)) return;
+      const today = todayStr();
+      if (event.new.date !== today) return;
+      setTodayLogs((prev) => {
+        const idx = prev.findIndex((l) => l.id === event.new.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = event.new;
+          return updated;
+        }
+        return [...prev, event.new];
+      });
+    },
+    [employeeIds]
+  );
+
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser || employees.length === 0) return undefined;
+      return attendanceService.subscribeToAttendanceLogs(handleAttendanceEvent);
+    },
+    [currentUser?.uid, employees.length, handleAttendanceEvent]
+  );
+
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser || employees.length === 0) return undefined;
+      return requestsService.subscribeToAllRequests((event) => {
+        if (!employeeIds.has(event.new.user_id)) return;
+        if (event.eventType === 'INSERT' && event.new.status === 'pending') {
+          setPendingRequests((prev) => [event.new, ...prev]);
+        } else if (event.eventType === 'UPDATE') {
+          setPendingRequests((prev) =>
+            event.new.status === 'pending'
+              ? prev.map((r) => (r.id === event.new.id ? event.new : r))
+              : prev.filter((r) => r.id !== event.new.id)
+          );
+        }
+      });
+    },
+    [currentUser?.uid, employees.length, employeeIds]
+  );
 
   async function loadData() {
     if (!currentUser?.departmentId) return;

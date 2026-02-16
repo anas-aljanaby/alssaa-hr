@@ -4,6 +4,7 @@ import { useApp } from '../../contexts/AppContext';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as requestsService from '@/lib/services/requests.service';
+import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
@@ -31,10 +32,29 @@ export function ApprovalsPage() {
   const [comment, setComment] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
+  const employeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
+
   useEffect(() => {
     if (!currentUser) return;
     loadData();
   }, [currentUser?.uid]);
+
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser || employees.length === 0) return undefined;
+      return requestsService.subscribeToAllRequests((event) => {
+        if (!employeeIds.has(event.new.user_id)) return;
+        if (event.eventType === 'INSERT') {
+          setRequests((prev) => [event.new, ...prev]);
+        } else if (event.eventType === 'UPDATE') {
+          setRequests((prev) =>
+            prev.map((r) => (r.id === event.new.id ? event.new : r))
+          );
+        }
+      });
+    },
+    [currentUser?.uid, employees.length, employeeIds]
+  );
 
   async function loadData() {
     if (!currentUser?.departmentId) return;

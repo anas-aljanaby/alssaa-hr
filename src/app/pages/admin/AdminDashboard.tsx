@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as requestsService from '@/lib/services/requests.service';
+import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
@@ -49,6 +50,43 @@ export function AdminDashboard() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleAttendanceEvent = useCallback(
+    (event: attendanceService.AttendanceChangeEvent) => {
+      const today = dateStr(new Date());
+      if (event.new.date !== today) return;
+      setTodayLogs((prev) => {
+        const idx = prev.findIndex((l) => l.id === event.new.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = event.new;
+          return updated;
+        }
+        return [...prev, event.new];
+      });
+    },
+    []
+  );
+
+  useRealtimeSubscription(
+    () => attendanceService.subscribeToAttendanceLogs(handleAttendanceEvent),
+    [handleAttendanceEvent]
+  );
+
+  useRealtimeSubscription(
+    () =>
+      requestsService.subscribeToAllRequests((event) => {
+        if (event.eventType === 'INSERT' && event.new.status === 'pending') {
+          setPendingCount((prev) => prev + 1);
+        } else if (event.eventType === 'UPDATE') {
+          const wasPending = event.old.status === 'pending';
+          const isPending = event.new.status === 'pending';
+          if (wasPending && !isPending) setPendingCount((prev) => Math.max(0, prev - 1));
+          else if (!wasPending && isPending) setPendingCount((prev) => prev + 1);
+        }
+      }),
+    []
+  );
 
   async function loadData() {
     try {

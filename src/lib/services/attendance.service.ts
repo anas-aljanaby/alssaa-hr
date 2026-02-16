@@ -207,3 +207,74 @@ export async function getAllLogsForDate(date: string): Promise<AttendanceLog[]> 
   if (error) throw error;
   return data ?? [];
 }
+
+export type AttendanceChangeEvent = {
+  eventType: 'INSERT' | 'UPDATE';
+  new: AttendanceLog;
+  old: Partial<AttendanceLog>;
+};
+
+export function subscribeToAttendanceLogs(
+  onEvent: (event: AttendanceChangeEvent) => void
+): () => void {
+  const channel = supabase
+    .channel('attendance_logs:all')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'attendance_logs' },
+      (payload) => onEvent({ eventType: 'INSERT', new: payload.new as AttendanceLog, old: {} })
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'attendance_logs' },
+      (payload) =>
+        onEvent({
+          eventType: 'UPDATE',
+          new: payload.new as AttendanceLog,
+          old: payload.old as Partial<AttendanceLog>,
+        })
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToUserAttendance(
+  userId: string,
+  onEvent: (event: AttendanceChangeEvent) => void
+): () => void {
+  const channel = supabase
+    .channel(`attendance_logs:user:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'attendance_logs',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) => onEvent({ eventType: 'INSERT', new: payload.new as AttendanceLog, old: {} })
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'attendance_logs',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) =>
+        onEvent({
+          eventType: 'UPDATE',
+          new: payload.new as AttendanceLog,
+          old: payload.old as Partial<AttendanceLog>,
+        })
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}

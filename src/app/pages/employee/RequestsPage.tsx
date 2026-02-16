@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { toast } from 'sonner';
 import * as requestsService from '@/lib/services/requests.service';
+import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import type { LeaveRequest, RequestType } from '@/lib/services/requests.service';
 import {
@@ -37,6 +38,22 @@ export function RequestsPage() {
     if (!currentUser) return;
     loadRequests();
   }, [currentUser?.uid]);
+
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser) return undefined;
+      return requestsService.subscribeToUserRequests(currentUser.uid, (event) => {
+        if (event.eventType === 'INSERT') {
+          setRequests((prev) => [event.new, ...prev]);
+        } else if (event.eventType === 'UPDATE') {
+          setRequests((prev) =>
+            prev.map((r) => (r.id === event.new.id ? event.new : r))
+          );
+        }
+      });
+    },
+    [currentUser?.uid]
+  );
 
   async function loadRequests() {
     if (!currentUser) return;

@@ -135,6 +135,77 @@ export async function getAllPendingRequests(): Promise<LeaveRequest[]> {
   return data ?? [];
 }
 
+export type RequestChangeEvent = {
+  eventType: 'INSERT' | 'UPDATE';
+  new: LeaveRequest;
+  old: Partial<LeaveRequest>;
+};
+
+export function subscribeToUserRequests(
+  userId: string,
+  onEvent: (event: RequestChangeEvent) => void
+): () => void {
+  const channel = supabase
+    .channel(`leave_requests:user:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'leave_requests',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) => onEvent({ eventType: 'INSERT', new: payload.new as LeaveRequest, old: {} })
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'leave_requests',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) =>
+        onEvent({
+          eventType: 'UPDATE',
+          new: payload.new as LeaveRequest,
+          old: payload.old as Partial<LeaveRequest>,
+        })
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToAllRequests(
+  onEvent: (event: RequestChangeEvent) => void
+): () => void {
+  const channel = supabase
+    .channel('leave_requests:all')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'leave_requests' },
+      (payload) => onEvent({ eventType: 'INSERT', new: payload.new as LeaveRequest, old: {} })
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'leave_requests' },
+      (payload) =>
+        onEvent({
+          eventType: 'UPDATE',
+          new: payload.new as LeaveRequest,
+          old: payload.old as Partial<LeaveRequest>,
+        })
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export async function countPendingRequests(departmentId?: string): Promise<number> {
   if (departmentId) {
     const { data: employees, error: empErr } = await supabase
