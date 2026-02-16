@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, typ
 import type { User, UserRole } from '../data/mockData';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/lib/database.types';
+import type { Session } from '@supabase/supabase-js';
 
 interface AuthResult {
   ok: boolean;
@@ -38,10 +39,7 @@ function profileToUser(profile: Tables<'profiles'>, email: string): User {
   };
 }
 
-async function fetchUserFromSession(): Promise<User | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return null;
-
+async function fetchProfileForSession(session: Session): Promise<User | null> {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
@@ -56,20 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  const setUserFromSession = useCallback(async () => {
-    const user = await fetchUserFromSession();
-    setCurrentUser(user);
-    setAuthReady(true);
-  }, []);
-
   useEffect(() => {
-    setUserFromSession();
-
+    // Use onAuthStateChange exclusively to avoid Navigator lock contention.
+    // It fires INITIAL_SESSION immediately, replacing a separate getSession() call.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const user = await fetchUserFromSession();
+      if (session) {
+        const user = await fetchProfileForSession(session);
         setCurrentUser(user);
       } else {
         setCurrentUser(null);
@@ -78,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [setUserFromSession]);
+  }, []);
 
   const login = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
@@ -93,9 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, error: message };
       }
       if (!data.session) return { ok: false, error: 'فشل تسجيل الدخول' };
-
-      const user = await fetchUserFromSession();
-      setCurrentUser(user);
+      // onAuthStateChange will pick up the new session automatically
       return { ok: true };
     },
     []
@@ -112,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         options: {
           data: { name, name_ar: name, role: 'employee' },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) return { ok: false, error: error.message };
@@ -121,8 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           message: 'تم إنشاء الحساب. يرجى تأكيد بريدك الإلكتروني من الرابط المرسل إليك.',
         };
       }
-      const user = await fetchUserFromSession();
-      setCurrentUser(user ?? null);
+      // onAuthStateChange will pick up the new session automatically
       return { ok: true };
     },
     []

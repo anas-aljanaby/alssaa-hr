@@ -4,6 +4,7 @@ import { RootLayout } from './components/layout/RootLayout';
 import { MobileLayout } from './components/layout/MobileLayout';
 import { LoginPage } from './pages/LoginPage';
 import { SignUpPage } from './pages/SignUpPage';
+import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { AttendancePage } from './pages/employee/AttendancePage';
 import { RequestsPage } from './pages/employee/RequestsPage';
 import { NotificationsPage } from './pages/employee/NotificationsPage';
@@ -31,6 +32,10 @@ export const router = createBrowserRouter([
       {
         path: 'signup',
         Component: SignUpPage,
+      },
+      {
+        path: 'auth/callback',
+        Component: AuthCallbackPage,
       },
       {
         // Pathless layout route for MobileLayout

@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import type { Tables } from '../database.types';
 import type { User, UserRole } from '@/app/data/mockData';
+import type { Session } from '@supabase/supabase-js';
 
 export interface AuthResult {
   ok: boolean;
@@ -24,12 +25,7 @@ export function profileToUser(profile: Tables<'profiles'>, email: string): User 
   };
 }
 
-export async function fetchUserFromSession(): Promise<User | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) return null;
-
+export async function fetchProfileForSession(session: Session): Promise<User | null> {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
@@ -67,6 +63,7 @@ export async function signUp(
     password,
     options: {
       data: { name, name_ar: name, role: 'employee' },
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
     },
   });
 
@@ -92,8 +89,8 @@ export function onAuthStateChange(
   const {
     data: { subscription },
   } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    if (session?.user) {
-      const user = await fetchUserFromSession();
+    if (session) {
+      const user = await fetchProfileForSession(session);
       callback(user);
     } else {
       callback(null);
