@@ -50,31 +50,85 @@ async function fetchProfileForSession(session: Session): Promise<User | null> {
   return profileToUser(profile, session.user.email ?? '');
 }
 
+function isRefreshTokenError(e: unknown): boolean {
+  const msg =
+    e instanceof Error
+      ? e.message
+      : typeof (e as { message?: string })?.message === 'string'
+        ? (e as { message: string }).message
+        : String(e ?? '');
+  return (
+    msg.includes('Refresh Token') ||
+    msg.includes('refresh') ||
+    msg.toLowerCase().includes('refresh token not found')
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
+  // Catch invalid refresh token errors thrown from Supabase client internals
+  // (e.g. auto-refresh on load) so they don’t surface as uncaught exceptions.
   useEffect(() => {
-    // Use onAuthStateChange exclusively to avoid Navigator lock contention.
-    // Do NOT call supabase (e.g. fetchProfileForSession) inside this callback:
-    // the auth client holds a Navigator LockManager lock while the callback runs,
-    // and any supabase call would try to acquire the same lock → timeout/deadlock.
-    // Defer profile fetch so the callback returns and the lock is released first.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const onRejection = (event: PromiseRejectionEvent) => {
+      if (!isRefreshTokenError(event.reason)) return;
+      event.preventDefault();
+      supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+      setCurrentUser(null);
       setAuthReady(true);
-      if (!session) {
-        setCurrentUser(null);
-        return;
-      }
-      const s = session;
-      setTimeout(() => {
-        fetchProfileForSession(s).then(setCurrentUser);
-      }, 0);
-    });
+    };
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => window.removeEventListener('unhandledrejection', onRejection);
+  }, []);
 
-    return () => subscription.unsubscribe();
+  useEffect(() => {
+    let cancelled = false;
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    (async () => {
+      // Run getSession() first and handle invalid/expired refresh token before
+      // subscribing to auth changes (avoids race and uncaught AuthApiError).
+      try {
+        const { data: _session, error } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (error && isRefreshTokenError(error)) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          setCurrentUser(null);
+        }
+      } catch (e: unknown) {
+        if (!cancelled && isRefreshTokenError(e)) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          setCurrentUser(null);
+        }
+      }
+
+      if (cancelled) return;
+
+      // Use onAuthStateChange for session updates.
+      // Do NOT call supabase (e.g. fetchProfileForSession) inside this callback:
+      // the auth client holds a Navigator LockManager lock while the callback runs.
+      const {
+        data: { subscription: sub },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        setAuthReady(true);
+        if (!session) {
+          setCurrentUser(null);
+          return;
+        }
+        const s = session;
+        setTimeout(() => {
+          fetchProfileForSession(s).then(setCurrentUser);
+        }, 0);
+      });
+      subscription = sub;
+      setAuthReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(
