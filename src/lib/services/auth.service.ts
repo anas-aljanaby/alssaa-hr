@@ -86,15 +86,18 @@ export async function logout(): Promise<void> {
 export function onAuthStateChange(
   callback: (user: User | null) => void
 ): () => void {
+  // Defer profile fetch to avoid Navigator LockManager contention (auth lock held during callback).
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    if (session) {
-      const user = await fetchProfileForSession(session);
-      callback(user);
-    } else {
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (!session) {
       callback(null);
+      return;
     }
+    const s = session;
+    setTimeout(() => {
+      fetchProfileForSession(s).then(callback);
+    }, 0);
   });
 
   return () => subscription.unsubscribe();

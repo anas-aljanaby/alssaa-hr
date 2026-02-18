@@ -56,17 +56,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Use onAuthStateChange exclusively to avoid Navigator lock contention.
-    // It fires INITIAL_SESSION immediately, replacing a separate getSession() call.
+    // Do NOT call supabase (e.g. fetchProfileForSession) inside this callback:
+    // the auth client holds a Navigator LockManager lock while the callback runs,
+    // and any supabase call would try to acquire the same lock → timeout/deadlock.
+    // Defer profile fetch so the callback returns and the lock is released first.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        const user = await fetchProfileForSession(session);
-        setCurrentUser(user);
-      } else {
-        setCurrentUser(null);
-      }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthReady(true);
+      if (!session) {
+        setCurrentUser(null);
+        return;
+      }
+      const s = session;
+      setTimeout(() => {
+        fetchProfileForSession(s).then(setCurrentUser);
+      }, 0);
     });
 
     return () => subscription.unsubscribe();
