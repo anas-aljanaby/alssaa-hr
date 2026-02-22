@@ -478,7 +478,63 @@ For the **confirmation email template**, see [docs/SUPABASE_EMAIL.md](./SUPABASE
 
 ---
 
-## 7. Troubleshooting
+## 7. Multi-Tenant Architecture (Organizations)
+
+The system uses org-based tenancy. Every HR table has an `org_id` column and RLS policies enforce same-org isolation.
+
+### 7.1 Fixed Organization IDs
+
+| Org | UUID | Purpose |
+|-----|------|---------|
+| Real (Alssaa Media Network) | `11111111-1111-1111-1111-111111111111` | Production data |
+| Demo Organization | `22222222-2222-2222-2222-222222222222` | Demo/testing data |
+
+### 7.2 Demo Credentials
+
+Demo account emails and password are listed in **`docs/DEMO_CREDENTIALS.md`**. That file is gitignored and not committed; create or copy it locally for your team (see the table in that file for Account / Role / Dept).
+
+### 7.3 Seeding Demo Data
+
+Deploy and invoke the `seed-demo` Edge Function:
+
+```bash
+# Deploy edge functions
+supabase functions deploy seed-demo
+supabase functions deploy reset-demo
+
+# Set the shared secret for authorization
+supabase secrets set DEMO_RESET_SECRET=your-secret-here
+
+# Seed demo data (first time)
+curl -X POST \
+  https://<project-ref>.supabase.co/functions/v1/seed-demo \
+  -H "Authorization: Bearer your-secret-here" \
+  -H "Content-Type: application/json"
+```
+
+### 7.4 Resetting Demo Data
+
+The `reset-demo` function deletes all demo org data and auth users, then re-seeds:
+
+```bash
+curl -X POST \
+  https://<project-ref>.supabase.co/functions/v1/reset-demo \
+  -H "Authorization: Bearer your-secret-here" \
+  -H "Content-Type: application/json"
+```
+
+This completes in under 1 minute and restores the baseline demo dataset.
+
+### 7.5 How Org Isolation Works
+
+- **RLS policies**: Every SELECT/INSERT/UPDATE policy includes `org_id = current_user_org_id()`.
+- **Enforcement triggers**: On INSERT, the `enforce_org_id_from_user` trigger auto-populates `org_id` from the user's profile and rejects mismatches.
+- **Profile protection**: The `protect_profile_fields` trigger prevents anyone from changing `org_id` and prevents non-admins from changing `role`.
+- **New users**: The `handle_new_user` trigger reads `org_id` from user metadata (defaults to real org).
+
+---
+
+## 8. Troubleshooting
 
 ### "Profile not created after adding user"
 

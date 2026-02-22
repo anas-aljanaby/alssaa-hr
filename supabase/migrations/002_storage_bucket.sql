@@ -53,13 +53,17 @@ create policy "Managers can read department attachments"
     )
   );
 
--- Admins can read all attachments
+-- Admins can read attachments from their org's users only
 create policy "Admins can read all attachments"
   on storage.objects for select
   to authenticated
   using (
     bucket_id = 'request-attachments'
     and public.current_user_role() = 'admin'
+    and (storage.foldername(name))[1] in (
+      select id::text from public.profiles
+      where org_id = public.current_user_org_id()
+    )
   );
 
 -- Users can delete their own attachments

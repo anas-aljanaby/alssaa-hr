@@ -9,9 +9,32 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      organizations: {
+        Row: {
+          id: string;
+          name: string;
+          is_demo: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          is_demo?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          is_demo?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+
       profiles: {
         Row: {
           id: string;
+          org_id: string;
           employee_id: string;
           name: string;
           name_ar: string;
@@ -24,6 +47,7 @@ export interface Database {
         };
         Insert: {
           id: string;
+          org_id?: string;
           employee_id: string;
           name: string;
           name_ar: string;
@@ -36,6 +60,7 @@ export interface Database {
         };
         Update: {
           id?: string;
+          org_id?: string;
           employee_id?: string;
           name?: string;
           name_ar?: string;
@@ -47,6 +72,13 @@ export interface Database {
           join_date?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'profiles_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'profiles_department_id_fkey';
             columns: ['department_id'];
@@ -60,6 +92,7 @@ export interface Database {
       departments: {
         Row: {
           id: string;
+          org_id: string;
           name: string;
           name_ar: string;
           manager_uid: string | null;
@@ -67,6 +100,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          org_id?: string;
           name: string;
           name_ar: string;
           manager_uid?: string | null;
@@ -74,12 +108,20 @@ export interface Database {
         };
         Update: {
           id?: string;
+          org_id?: string;
           name?: string;
           name_ar?: string;
           manager_uid?: string | null;
           created_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'departments_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'departments_manager_uid_fkey';
             columns: ['manager_uid'];
@@ -93,6 +135,7 @@ export interface Database {
       attendance_logs: {
         Row: {
           id: string;
+          org_id: string;
           user_id: string;
           date: string;
           check_in_time: string | null;
@@ -105,6 +148,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          org_id?: string;
           user_id: string;
           date: string;
           check_in_time?: string | null;
@@ -117,6 +161,7 @@ export interface Database {
         };
         Update: {
           id?: string;
+          org_id?: string;
           user_id?: string;
           date?: string;
           check_in_time?: string | null;
@@ -128,6 +173,13 @@ export interface Database {
           status?: 'present' | 'late' | 'absent' | 'on_leave';
         };
         Relationships: [
+          {
+            foreignKeyName: 'attendance_logs_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'attendance_logs_user_id_fkey';
             columns: ['user_id'];
@@ -141,6 +193,7 @@ export interface Database {
       leave_requests: {
         Row: {
           id: string;
+          org_id: string;
           user_id: string;
           type: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment';
           from_date_time: string;
@@ -154,6 +207,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          org_id?: string;
           user_id: string;
           type: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment';
           from_date_time: string;
@@ -167,6 +221,7 @@ export interface Database {
         };
         Update: {
           id?: string;
+          org_id?: string;
           user_id?: string;
           type?: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment';
           from_date_time?: string;
@@ -179,6 +234,13 @@ export interface Database {
           created_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'leave_requests_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'leave_requests_user_id_fkey';
             columns: ['user_id'];
@@ -199,6 +261,7 @@ export interface Database {
       leave_balances: {
         Row: {
           id: string;
+          org_id: string;
           user_id: string;
           total_annual: number;
           used_annual: number;
@@ -209,6 +272,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          org_id?: string;
           user_id: string;
           total_annual?: number;
           used_annual?: number;
@@ -219,6 +283,7 @@ export interface Database {
         };
         Update: {
           id?: string;
+          org_id?: string;
           user_id?: string;
           total_annual?: number;
           used_annual?: number;
@@ -228,6 +293,13 @@ export interface Database {
           remaining_sick?: number;
         };
         Relationships: [
+          {
+            foreignKeyName: 'leave_balances_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'leave_balances_user_id_fkey';
             columns: ['user_id'];
@@ -241,6 +313,7 @@ export interface Database {
       notifications: {
         Row: {
           id: string;
+          org_id: string;
           user_id: string;
           title: string;
           title_ar: string;
@@ -252,6 +325,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          org_id?: string;
           user_id: string;
           title: string;
           title_ar: string;
@@ -263,6 +337,7 @@ export interface Database {
         };
         Update: {
           id?: string;
+          org_id?: string;
           user_id?: string;
           title?: string;
           title_ar?: string;
@@ -273,6 +348,13 @@ export interface Database {
           created_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'notifications_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'notifications_user_id_fkey';
             columns: ['user_id'];
@@ -286,6 +368,7 @@ export interface Database {
       audit_logs: {
         Row: {
           id: string;
+          org_id: string;
           actor_id: string;
           action: string;
           action_ar: string;
@@ -296,6 +379,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          org_id?: string;
           actor_id: string;
           action: string;
           action_ar: string;
@@ -306,6 +390,7 @@ export interface Database {
         };
         Update: {
           id?: string;
+          org_id?: string;
           actor_id?: string;
           action?: string;
           action_ar?: string;
@@ -315,6 +400,13 @@ export interface Database {
           created_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'audit_logs_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'audit_logs_actor_id_fkey';
             columns: ['actor_id'];
@@ -328,6 +420,7 @@ export interface Database {
       attendance_policy: {
         Row: {
           id: string;
+          org_id: string;
           work_start_time: string;
           work_end_time: string;
           grace_period_minutes: number;
@@ -339,17 +432,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          work_start_time: string;
-          work_end_time: string;
-          grace_period_minutes?: number;
-          weekly_off_days?: number[];
-          max_late_days_before_warning?: number;
-          absent_cutoff_time?: string;
-          annual_leave_per_year?: number;
-          sick_leave_per_year?: number;
-        };
-        Update: {
-          id?: string;
+          org_id?: string;
           work_start_time?: string;
           work_end_time?: string;
           grace_period_minutes?: number;
@@ -359,7 +442,27 @@ export interface Database {
           annual_leave_per_year?: number;
           sick_leave_per_year?: number;
         };
-        Relationships: [];
+        Update: {
+          id?: string;
+          org_id?: string;
+          work_start_time?: string;
+          work_end_time?: string;
+          grace_period_minutes?: number;
+          weekly_off_days?: number[];
+          max_late_days_before_warning?: number;
+          absent_cutoff_time?: string;
+          annual_leave_per_year?: number;
+          sick_leave_per_year?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'attendance_policy_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: true;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
 

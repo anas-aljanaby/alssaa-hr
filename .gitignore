@@ -39,3 +39,6 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Demo credentials (internal only, do not commit)
+docs/DEMO_CREDENTIALS.md
