@@ -144,7 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, error: message };
       }
       if (!data.session) return { ok: false, error: 'فشل تسجيل الدخول' };
-      // onAuthStateChange will pick up the new session automatically
+      // Set user synchronously so that navigate('/') in LoginPage sees currentUser
+      // and doesn't get redirected back to /login (first-login blink).
+      const user = await fetchProfileForSession(data.session);
+      if (user) setCurrentUser(user);
       return { ok: true };
     },
     []
