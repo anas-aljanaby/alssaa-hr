@@ -77,6 +77,7 @@ export function MobileLayout() {
   const adminNav = [
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/users', icon: Users, label: 'المستخدمون' },
+    { path: '/approvals', icon: CheckSquare, label: 'الموافقات' },
     { path: '/departments', icon: Building2, label: 'الأقسام' },
     { path: '/reports', icon: BarChart3, label: 'التقارير' },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },

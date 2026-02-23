@@ -48,16 +48,19 @@ export function ApprovalsPage() {
 
   const employeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
 
+  const isAdmin = currentUser?.role === 'admin';
+
   useEffect(() => {
     if (!currentUser) return;
     loadData();
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, currentUser?.role]);
 
   useRealtimeSubscription(
     () => {
-      if (!currentUser || employees.length === 0) return undefined;
+      if (!currentUser) return undefined;
+      if (!isAdmin && employees.length === 0) return undefined;
       return requestsService.subscribeToAllRequests((event) => {
-        if (!employeeIds.has(event.new.user_id)) return;
+        if (!isAdmin && !employeeIds.has(event.new.user_id)) return;
         if (event.eventType === 'INSERT') {
           setRequests((prev) => [event.new, ...prev]);
         } else if (event.eventType === 'UPDATE') {
@@ -67,19 +70,29 @@ export function ApprovalsPage() {
         }
       });
     },
-    [currentUser?.uid, employees.length, employeeIds]
+    [currentUser?.uid, isAdmin, employees.length, employeeIds]
   );
 
   async function loadData() {
-    if (!currentUser?.departmentId) return;
+    if (!currentUser) return;
+    if (!isAdmin && !currentUser.departmentId) return;
     try {
       setLoading(true);
-      const [emps, reqs] = await Promise.all([
-        profilesService.getDepartmentEmployees(currentUser.departmentId),
-        requestsService.getDepartmentRequests(currentUser.departmentId),
-      ]);
-      setEmployees(emps);
-      setRequests(reqs);
+      if (isAdmin) {
+        const [profs, reqs] = await Promise.all([
+          profilesService.listUsers(),
+          requestsService.getAllRequests(),
+        ]);
+        setEmployees(profs);
+        setRequests(reqs);
+      } else {
+        const [emps, reqs] = await Promise.all([
+          profilesService.getDepartmentEmployees(currentUser.departmentId!),
+          requestsService.getDepartmentRequests(currentUser.departmentId!),
+        ]);
+        setEmployees(emps);
+        setRequests(reqs);
+      }
     } catch {
       toast.error('فشل تحميل البيانات');
     } finally {

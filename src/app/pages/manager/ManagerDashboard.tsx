@@ -12,6 +12,7 @@ import type { AttendanceLog } from '@/lib/services/attendance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { Department } from '@/lib/services/departments.service';
 import { DashboardSkeleton } from '../../components/skeletons';
+import { PendingRequestsCard } from '../../components/PendingRequestsCard';
 import {
   Users,
   CheckCircle2,
@@ -20,7 +21,6 @@ import {
   Coffee,
   AlertTriangle,
   BarChart3,
-  ClipboardList,
 } from 'lucide-react';
 
 function todayStr(): string {
@@ -235,39 +235,10 @@ export function ManagerDashboard() {
       </div>
 
       {pendingRequests.length > 0 && (
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-amber-500" />
-              <h3 className="text-gray-800">طلبات بانتظار الموافقة</h3>
-            </div>
-            <span className="w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center text-xs">
-              {pendingRequests.length}
-            </span>
-          </div>
-          <div className="space-y-2">
-            {pendingRequests.slice(0, 3).map((req) => {
-              const user = profilesMap.get(req.user_id);
-              return (
-                <div key={req.id} className="bg-amber-50 rounded-xl p-3 border border-amber-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-800">{user?.name_ar ?? '—'}</span>
-                    <span className="text-xs text-amber-600">
-                      {req.type === 'annual_leave'
-                        ? 'إجازة سنوية'
-                        : req.type === 'sick_leave'
-                          ? 'إجازة مرضية'
-                          : req.type === 'hourly_permission'
-                            ? 'إذن ساعي'
-                            : 'تعديل وقت'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{req.note}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <PendingRequestsCard
+          pendingRequests={pendingRequests}
+          profilesMap={profilesMap}
+        />
       )}
 
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
@@ -324,6 +295,13 @@ export function ManagerDashboard() {
           })}
         </div>
       </div>
+
+      {pendingRequests.length === 0 && (
+        <PendingRequestsCard
+          pendingRequests={pendingRequests}
+          profilesMap={profilesMap}
+        />
+      )}
     </div>
   );
 }

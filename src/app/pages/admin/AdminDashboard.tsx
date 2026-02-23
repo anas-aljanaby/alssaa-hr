@@ -8,7 +8,9 @@ import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
+import type { LeaveRequest } from '@/lib/services/requests.service';
 import { AdminDashboardSkeleton } from '../../components/skeletons';
+import { PendingRequestsCard } from '../../components/PendingRequestsCard';
 import {
   Users,
   Building2,
@@ -20,7 +22,6 @@ import {
   BarChart3,
   Activity,
   Shield,
-  AlertTriangle,
 } from 'lucide-react';
 import {
   BarChart,
@@ -34,7 +35,51 @@ import {
   Pie,
   Cell,
   Legend,
+  Rectangle,
 } from 'recharts';
+
+const STACK_KEYS = ['حاضر', 'متأخر', 'غائب'] as const;
+const SEG_GAP = 5; // px gap between segments
+
+type GappedShapeProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: Record<string, unknown>;
+  fill?: string;
+};
+
+function makeGappedShape(dataKey: (typeof STACK_KEYS)[number]) {
+  return function GappedShape(props: unknown): React.ReactElement {
+    const { x = 0, y = 0, width = 0, height = 0, payload, fill } = (props || {}) as GappedShapeProps;
+
+    if (!width || width <= 0 || !height || height <= 0) return <g />;
+
+    const vals = STACK_KEYS.map((k) => Number((payload as Record<string, number>)?.[k] ?? 0));
+    const i = STACK_KEYS.indexOf(dataKey);
+
+    if (!vals[i]) return <g />;
+
+    const hasPrev = vals.slice(0, i).some((v) => v > 0);
+
+    const nx = hasPrev ? x + SEG_GAP : x;
+    const nw = hasPrev ? Math.max(0, width - SEG_GAP) : width;
+
+    const r = Math.min(8, height / 2, nw / 2);
+
+    return (
+      <Rectangle
+        x={nx}
+        y={y}
+        width={nw}
+        height={height}
+        fill={fill}
+        radius={r}
+      />
+    );
+  };
+}
 
 function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -45,7 +90,7 @@ export function AdminDashboard() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [todayLogs, setTodayLogs] = useState<AttendanceLog[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState<LeaveRequest[]>([]);
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
 
   useEffect(() => {
@@ -78,12 +123,13 @@ export function AdminDashboard() {
     () =>
       requestsService.subscribeToAllRequests((event) => {
         if (event.eventType === 'INSERT' && event.new.status === 'pending') {
-          setPendingCount((prev) => prev + 1);
+          setPendingRequests((prev) => [event.new, ...prev]);
         } else if (event.eventType === 'UPDATE') {
-          const wasPending = event.old.status === 'pending';
-          const isPending = event.new.status === 'pending';
-          if (wasPending && !isPending) setPendingCount((prev) => Math.max(0, prev - 1));
-          else if (!wasPending && isPending) setPendingCount((prev) => prev + 1);
+          setPendingRequests((prev) =>
+            event.new.status === 'pending'
+              ? prev.map((r) => (r.id === event.new.id ? event.new : r))
+              : prev.filter((r) => r.id !== event.new.id)
+          );
         }
       }),
     []
@@ -93,16 +139,16 @@ export function AdminDashboard() {
     try {
       setLoading(true);
       const today = dateStr(new Date());
-      const [profs, depts, logs, pending] = await Promise.all([
+      const [profs, depts, logs, pendingReqs] = await Promise.all([
         profilesService.listUsers(),
         departmentsService.listDepartments(),
         attendanceService.getAllLogsForDate(today),
-        requestsService.countPendingRequests(),
+        requestsService.getAllPendingRequests(),
       ]);
       setProfiles(profs);
       setDepartments(depts);
       setTodayLogs(logs);
-      setPendingCount(pending);
+      setPendingRequests(pendingReqs);
 
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
       const weekData: { day: string; logs: AttendanceLog[] }[] = [];
@@ -141,9 +187,14 @@ export function AdminDashboard() {
       late,
       absent: allNonAdmin.length - checkedIn,
       onLeave,
-      pendingRequests: pendingCount,
+      pendingRequests: pendingRequests.length,
     };
-  }, [todayLogs, allNonAdmin, departments, pendingCount]);
+  }, [todayLogs, allNonAdmin, departments, pendingRequests.length]);
+
+  const profilesMap = useMemo(
+    () => new Map(profiles.map((p) => [p.id, p])),
+    [profiles]
+  );
 
   const deptChartData = useMemo(() => {
     return departments.map((dept) => {
@@ -219,6 +270,13 @@ export function AdminDashboard() {
         ))}
       </div>
 
+      {pendingRequests.length > 0 && (
+        <PendingRequestsCard
+          pendingRequests={pendingRequests}
+          profilesMap={profilesMap}
+        />
+      )}
+
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="w-5 h-5 text-blue-500" />
@@ -271,6 +329,7 @@ export function AdminDashboard() {
             <BarChart
               data={weeklyTrend}
               margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+              barSize={20}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="day" tick={{ fontSize: 11 }} tickMargin={6} />
@@ -294,6 +353,8 @@ export function AdminDashboard() {
               data={deptChartData}
               layout="vertical"
               margin={{ top: 8, right: 16, left: 16, bottom: 8 }}
+              barCategoryGap="12%"
+              barSize={20}
             >
               <CartesianGrid
                 strokeDasharray="3 3"
@@ -340,29 +401,34 @@ export function AdminDashboard() {
                   </div>
                 )}
               />
-              <Bar dataKey="حاضر" fill="#059669" stackId="a" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="متأخر" fill="#d97706" stackId="a" radius={[0, 0, 0, 0]} />
+              <Bar
+                dataKey="حاضر"
+                fill="#059669"
+                stackId="a"
+                shape={makeGappedShape('حاضر')}
+              />
+              <Bar
+                dataKey="متأخر"
+                fill="#d97706"
+                stackId="a"
+                shape={makeGappedShape('متأخر')}
+              />
               <Bar
                 dataKey="غائب"
                 fill="#dc2626"
                 stackId="a"
-                radius={[0, 4, 4, 0]}
+                shape={makeGappedShape('غائب')}
               />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {overallStats.pendingRequests > 0 && (
-        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h3 className="text-amber-800">تنبيهات</h3>
-          </div>
-          <p className="text-sm text-amber-700">
-            يوجد {overallStats.pendingRequests} طلب بانتظار المراجعة
-          </p>
-        </div>
+      {pendingRequests.length === 0 && (
+        <PendingRequestsCard
+          pendingRequests={pendingRequests}
+          profilesMap={profilesMap}
+        />
       )}
     </div>
   );

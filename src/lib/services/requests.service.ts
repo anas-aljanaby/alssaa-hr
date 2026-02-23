@@ -135,6 +135,16 @@ export async function getAllPendingRequests(): Promise<LeaveRequest[]> {
   return data ?? [];
 }
 
+export async function getAllRequests(): Promise<LeaveRequest[]> {
+  const { data, error } = await supabase
+    .from('leave_requests')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export type RequestChangeEvent = {
   eventType: 'INSERT' | 'UPDATE';
   new: LeaveRequest;
