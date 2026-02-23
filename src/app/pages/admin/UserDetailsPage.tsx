@@ -625,12 +625,20 @@ export function UserDetailsPage() {
                       </div>
                     </div>
                     <div className="text-xs text-gray-600 space-y-1">
-                      <div>
-                        من: {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
-                      </div>
-                      <div>
-                        إلى: {new Date(req.to_date_time).toLocaleDateString('ar-IQ')}
-                      </div>
+                      {req.type === 'time_adjustment' ? (
+                        <div>
+                          {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
+                          {' — '}
+                          {new Date(req.from_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                          {' → '}
+                          {new Date(req.to_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      ) : (
+                        <>
+                          <div>من: {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}</div>
+                          <div>إلى: {new Date(req.to_date_time).toLocaleDateString('ar-IQ')}</div>
+                        </>
+                      )}
                       {req.note && (
                         <div className="text-gray-500 italic">&ldquo;{req.note}&rdquo;</div>
                       )}
@@ -699,20 +707,32 @@ export function UserDetailsPage() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-600 space-y-1">
-                    <div>
-                      من:{' '}
-                      {new Date(req.from_date_time).toLocaleString('ar-IQ', {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
-                    </div>
-                    <div>
-                      إلى:{' '}
-                      {new Date(req.to_date_time).toLocaleString('ar-IQ', {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
-                    </div>
+                    {req.type === 'time_adjustment' ? (
+                      <div>
+                        {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
+                        {' — '}
+                        {new Date(req.from_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                        {' → '}
+                        {new Date(req.to_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          من:{' '}
+                          {new Date(req.from_date_time).toLocaleString('ar-IQ', {
+                            dateStyle: 'medium',
+                            timeStyle: req.type === 'hourly_permission' ? 'short' : undefined,
+                          })}
+                        </div>
+                        <div>
+                          إلى:{' '}
+                          {new Date(req.to_date_time).toLocaleString('ar-IQ', {
+                            dateStyle: 'medium',
+                            timeStyle: req.type === 'hourly_permission' ? 'short' : undefined,
+                          })}
+                        </div>
+                      </>
+                    )}
                     {req.note && (
                       <div className="mt-2 p-2 bg-gray-50 rounded-lg text-gray-700">
                         {req.note}

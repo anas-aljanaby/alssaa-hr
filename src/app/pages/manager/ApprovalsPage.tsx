@@ -211,19 +211,30 @@ export function ApprovalsPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-blue-600">{getRequestTypeAr(req.type)}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>
-                          من: {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>
-                          إلى: {new Date(req.to_date_time).toLocaleDateString('ar-IQ')}
-                        </span>
-                      </div>
+                    <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
+                      {req.type === 'time_adjustment' ? (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>
+                            {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
+                            {' — '}
+                            {new Date(req.from_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                            {' → '}
+                            {new Date(req.to_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>من: {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>إلى: {new Date(req.to_date_time).toLocaleDateString('ar-IQ')}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                     {req.note && (
                       <p className="text-sm text-gray-600 mt-2 pt-2 border-t border-gray-200">
