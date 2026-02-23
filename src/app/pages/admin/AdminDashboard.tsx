@@ -204,7 +204,7 @@ export function AdminDashboard() {
             <Shield className="w-6 h-6" />
           </div>
         </div>
-        <p className="text-purple-200 text-sm">شبكة السعاع الإعلامية</p>
+        <p className="text-purple-200 text-sm">شبكة الساعة</p>
       </div>
 
       <div className="grid grid-cols-3 gap-3">

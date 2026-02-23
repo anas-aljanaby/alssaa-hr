@@ -61,7 +61,7 @@ export function LoginPage() {
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl mb-4 border border-white/20">
             <Building2 className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-white mb-1">شبكة الساعة الإعلامية</h1>
+          <h1 className="text-white mb-1">شبكة الساعة</h1>
           <p className="text-blue-200">نظام إدارة الحضور والإجازات</p>
         </div>
 
@@ -162,7 +162,7 @@ export function LoginPage() {
         )}
 
         <p className="text-center text-blue-300/60 mt-6 text-sm">
-          &copy; 2026 شبكة الساعة الإعلامية - جميع الحقوق محفوظة
+          &copy; 2026 شبكة الساعة - جميع الحقوق محفوظة
         </p>
       </div>
     </div>

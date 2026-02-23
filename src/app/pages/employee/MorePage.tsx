@@ -156,7 +156,7 @@ export function MorePage() {
       </button>
 
       <p className="text-center text-xs text-gray-400 pb-4">
-        الإصدار 1.0.0 - شبكة السعاع الإعلامية
+        الإصدار 1.0.0 - شبكة الساعة
       </p>
     </div>
   );
