@@ -230,9 +230,9 @@ export function AdminDashboard() {
               <Pie
                 data={pieData}
                 cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={70}
+                cy="45%"
+                innerRadius={38}
+                outerRadius={62}
                 paddingAngle={3}
                 dataKey="value"
               >
@@ -241,7 +241,21 @@ export function AdminDashboard() {
                 ))}
               </Pie>
               <Tooltip />
-              <Legend formatter={(value) => <span style={{ fontSize: '12px' }}>{value}</span>} />
+              <Legend
+                content={({ payload }) => (
+                  <div className="flex justify-center gap-5 pt-3 flex-wrap">
+                    {payload?.map((entry) => (
+                      <div key={entry.value} className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-sm shrink-0"
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <span className="text-xs text-gray-600">{entry.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -254,10 +268,13 @@ export function AdminDashboard() {
         </div>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weeklyTrend}>
+            <BarChart
+              data={weeklyTrend}
+              margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} tickMargin={6} />
+              <YAxis tick={{ fontSize: 11 }} width={28} tickMargin={4} axisLine={false} tickLine={false} />
               <Tooltip />
               <Bar dataKey="حضور" fill="#059669" radius={[4, 4, 0, 0]} />
               <Bar dataKey="تأخر" fill="#d97706" radius={[4, 4, 0, 0]} />
@@ -266,21 +283,71 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
+      <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
           <BarChart3 className="w-5 h-5 text-indigo-500" />
-          <h3 className="text-gray-800">أداء الأقسام</h3>
+          <h3 className="text-gray-800 font-medium">أداء الأقسام</h3>
         </div>
-        <div className="h-52">
+        <div className="h-60 min-h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={deptChartData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis type="number" tick={{ fontSize: 11 }} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={80} />
-              <Tooltip />
-              <Bar dataKey="حاضر" fill="#059669" stackId="a" />
-              <Bar dataKey="متأخر" fill="#d97706" stackId="a" />
-              <Bar dataKey="غائب" fill="#dc2626" stackId="a" />
+            <BarChart
+              data={deptChartData}
+              layout="vertical"
+              margin={{ top: 8, right: 16, left: 16, bottom: 8 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#e5e7eb"
+                vertical={false}
+              />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                tickMargin={8}
+                axisLine={{ stroke: '#e5e7eb' }}
+                tickLine={false}
+              />
+              <YAxis
+                dataKey="name"
+                type="category"
+                orientation="right"
+                width={80}
+                tick={{ fontSize: 12, fill: '#374151' }}
+                tickMargin={8}
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: '8px',
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                }}
+              />
+              <Legend
+                content={({ payload }) => (
+                  <div className="flex justify-center gap-6 pt-4 flex-wrap">
+                    {payload?.map((entry) => (
+                      <div key={entry.value} className="flex items-center gap-2">
+                        <div
+                          className="w-3.5 h-3.5 rounded-md shrink-0"
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <span className="text-sm text-gray-600">{entry.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              />
+              <Bar dataKey="حاضر" fill="#059669" stackId="a" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="متأخر" fill="#d97706" stackId="a" radius={[0, 0, 0, 0]} />
+              <Bar
+                dataKey="غائب"
+                fill="#dc2626"
+                stackId="a"
+                radius={[0, 4, 4, 0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>

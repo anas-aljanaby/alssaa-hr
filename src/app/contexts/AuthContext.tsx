@@ -87,14 +87,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let subscription: { unsubscribe: () => void } | null = null;
 
     (async () => {
-      // Run getSession() first and handle invalid/expired refresh token before
+      // Run getSession() first and restore user from persisted session (fixes
+      // logout-on-refresh). Handle invalid/expired refresh token before
       // subscribing to auth changes (avoids race and uncaught AuthApiError).
       try {
-        const { data: _session, error } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         if (cancelled) return;
         if (error && isRefreshTokenError(error)) {
           await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
           setCurrentUser(null);
+        } else if (session) {
+          const user = await fetchProfileForSession(session);
+          if (!cancelled && user) setCurrentUser(user);
         }
       } catch (e: unknown) {
         if (!cancelled && isRefreshTokenError(e)) {
@@ -105,21 +109,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cancelled) return;
 
-      // Use onAuthStateChange for session updates.
+      // Use onAuthStateChange for future session updates (login, logout, token refresh).
       // Do NOT call supabase (e.g. fetchProfileForSession) inside this callback:
       // the auth client holds a Navigator LockManager lock while the callback runs.
       const {
         data: { subscription: sub },
       } = supabase.auth.onAuthStateChange((_event, session) => {
-        setAuthReady(true);
         if (!session) {
           setCurrentUser(null);
-          return;
+        } else {
+          const s = session;
+          setTimeout(() => {
+            fetchProfileForSession(s).then(setCurrentUser);
+          }, 0);
         }
-        const s = session;
-        setTimeout(() => {
-          fetchProfileForSession(s).then(setCurrentUser);
-        }, 0);
       });
       subscription = sub;
       setAuthReady(true);
