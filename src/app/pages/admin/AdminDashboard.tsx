@@ -270,12 +270,10 @@ export function AdminDashboard() {
         ))}
       </div>
 
-      {pendingRequests.length > 0 && (
-        <PendingRequestsCard
-          pendingRequests={pendingRequests}
-          profilesMap={profilesMap}
-        />
-      )}
+      <PendingRequestsCard
+        pendingRequests={pendingRequests}
+        profilesMap={profilesMap}
+      />
 
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
@@ -423,13 +421,6 @@ export function AdminDashboard() {
           </ResponsiveContainer>
         </div>
       </div>
-
-      {pendingRequests.length === 0 && (
-        <PendingRequestsCard
-          pendingRequests={pendingRequests}
-          profilesMap={profilesMap}
-        />
-      )}
     </div>
   );
 }

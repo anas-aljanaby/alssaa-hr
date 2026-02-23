@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as attendanceService from '@/lib/services/attendance.service';
@@ -32,6 +35,75 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+
+type MonthlyReportRow = {
+  name: string;
+  dept: string;
+  present: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+};
+
+type DeptReportRow = {
+  name: string;
+  'نسبة الحضور': number;
+  'عدد الموظفين': number;
+};
+
+function downloadExcel(monthlyReport: MonthlyReportRow[], deptReport: DeptReportRow[]) {
+  const ws1 = XLSX.utils.json_to_sheet(
+    monthlyReport.map((r) => ({
+      'الاسم': r.name,
+      'القسم': r.dept,
+      'حضور': r.present,
+      'تأخر': r.late,
+      'غياب': r.absent,
+      'إجازة': r.onLeave,
+    }))
+  );
+  const ws2 = XLSX.utils.json_to_sheet(deptReport);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws1, 'تقرير الموظفين');
+  XLSX.utils.book_append_sheet(wb, ws2, 'نسبة الأقسام');
+  const now = new Date();
+  const name = `تقرير_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.xlsx`;
+  XLSX.writeFile(wb, name);
+}
+
+function downloadPdf(monthlyReport: MonthlyReportRow[], deptReport: DeptReportRow[]) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const now = new Date();
+  const title = `تقرير شهري - ${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+  doc.setFontSize(14);
+  doc.text(title, 14, 16);
+
+  autoTable(doc, {
+    startY: 24,
+    head: [['الاسم', 'القسم', 'حضور', 'تأخر', 'غياب', 'إجازة']],
+    body: monthlyReport.map((r) => [
+      r.name,
+      r.dept,
+      String(r.present),
+      String(r.late),
+      String(r.absent),
+      String(r.onLeave),
+    ]),
+    styles: { font: 'Helvetica', fontSize: 9 },
+    headStyles: { fillColor: [59, 130, 246] },
+  });
+
+  const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable?.finalY ?? 24;
+  autoTable(doc, {
+    startY: finalY + 14,
+    head: [['القسم', 'نسبة الحضور %', 'عدد الموظفين']],
+    body: deptReport.map((r) => [r.name, String(r['نسبة الحضور']), String(r['عدد الموظفين'])]),
+    styles: { font: 'Helvetica', fontSize: 9 },
+    headStyles: { fillColor: [16, 185, 129] },
+  });
+
+  doc.save(`تقرير_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.pdf`);
+}
 
 const AUDIT_PAGE_SIZE = 15;
 const REPORT_PAGE_SIZE = 20;
@@ -131,6 +203,24 @@ export function ReportsPage() {
   const auditPagination = usePagination(auditLogs, AUDIT_PAGE_SIZE);
   const reportPagination = usePagination(monthlyReport, REPORT_PAGE_SIZE);
 
+  const handleExportExcel = useCallback(() => {
+    try {
+      downloadExcel(monthlyReport, deptReport);
+      toast.success('تم تصدير Excel بنجاح');
+    } catch {
+      toast.error('فشل تصدير Excel');
+    }
+  }, [monthlyReport, deptReport]);
+
+  const handleExportPdf = useCallback(() => {
+    try {
+      downloadPdf(monthlyReport, deptReport);
+      toast.success('تم تصدير PDF بنجاح');
+    } catch {
+      toast.error('فشل تصدير PDF');
+    }
+  }, [monthlyReport, deptReport]);
+
   const tabs = [
     { key: 'reports' as const, label: 'التقارير', icon: BarChart3 },
     { key: 'audit' as const, label: 'سجل المراجعة', icon: Shield },
@@ -175,11 +265,19 @@ export function ReportsPage() {
       {activeTab === 'reports' && (
         <>
           <div className="flex gap-2">
-            <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 hover:bg-emerald-100 transition-colors">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 hover:bg-emerald-100 transition-colors"
+            >
               <FileSpreadsheet className="w-4 h-4" />
               <span className="text-sm">تصدير Excel</span>
             </button>
-            <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-50 text-red-700 rounded-xl border border-red-200 hover:bg-red-100 transition-colors">
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-50 text-red-700 rounded-xl border border-red-200 hover:bg-red-100 transition-colors"
+            >
               <Download className="w-4 h-4" />
               <span className="text-sm">تصدير PDF</span>
             </button>

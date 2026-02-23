@@ -26,7 +26,10 @@ export function MobileLayout() {
     notificationsService
       .getUnreadCount(currentUser.uid)
       .then(setUnreadCount)
-      .catch(() => setUnreadCount(0));
+      .catch((e) => {
+        console.warn('Failed to load unread notification count', e);
+        setUnreadCount(0);
+      });
 
     const unsubscribe = notificationsService.subscribeToNotifications(
       currentUser.uid,
@@ -34,7 +37,7 @@ export function MobileLayout() {
         notificationsService
           .getUnreadCount(currentUser.uid)
           .then(setUnreadCount)
-          .catch(() => {});
+          .catch((e) => console.warn('Failed to refresh unread count', e));
       }
     );
 
@@ -46,7 +49,7 @@ export function MobileLayout() {
     notificationsService
       .getUnreadCount(currentUser.uid)
       .then(setUnreadCount)
-      .catch(() => {});
+      .catch((e) => console.warn('Failed to load unread count', e));
   }, [location.pathname, currentUser?.uid]);
 
   if (!authReady) {

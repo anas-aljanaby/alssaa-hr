@@ -93,7 +93,7 @@ export function UserDetailsPage() {
     attendanceService
       .getLogsInRange(userId, dateFrom, dateTo)
       .then(setAttendanceLogs)
-      .catch(() => {});
+      .catch(() => toast.error('فشل تحميل سجلات الحضور'));
   }, [userId, dateFrom, dateTo]);
 
   async function loadData() {

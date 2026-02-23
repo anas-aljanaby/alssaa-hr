@@ -296,11 +296,11 @@ export function RequestsPage() {
 
       {showForm && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-end z-50"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => setShowForm(false)}
         >
           <div
-            className="bg-white rounded-t-3xl w-full max-w-lg mx-auto p-6 max-h-[85vh] overflow-auto"
+            className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl p-6"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >

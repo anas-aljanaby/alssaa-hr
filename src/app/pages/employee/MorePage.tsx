@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Department } from '@/lib/services/departments.service';
@@ -31,7 +32,7 @@ export function MorePage() {
     departmentsService
       .getDepartmentById(currentUser.departmentId)
       .then(setDepartment)
-      .catch(() => {});
+      .catch(() => toast.error('فشل تحميل بيانات القسم'));
   }, [currentUser?.departmentId]);
 
   if (!currentUser) return null;
