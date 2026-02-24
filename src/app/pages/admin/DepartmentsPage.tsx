@@ -9,6 +9,7 @@ import type { Profile } from '@/lib/services/profiles.service';
 import { createDepartmentSchema, updateDepartmentSchema } from '@/lib/validations';
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { Pagination, usePagination } from '@/app/components/Pagination';
 import {
   Building2,
   Plus,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 
 const INITIAL_FORM = { nameAr: '', nameEn: '', managerId: '' };
+const DEPARTMENTS_PAGE_SIZE = 20;
 
 export function DepartmentsPage() {
   const { currentUser } = useAuth();
@@ -91,6 +93,14 @@ export function DepartmentsPage() {
     }
     return list;
   }, [departments, searchQuery, managerFilterId]);
+
+  const {
+    paginatedItems: paginatedDepartments,
+    currentPage,
+    totalItems: totalDepartmentsCount,
+    pageSize: departmentsPageSize,
+    setCurrentPage: setDepartmentsPage,
+  } = usePagination(filteredDepartments, DEPARTMENTS_PAGE_SIZE);
 
   if (!currentUser || currentUser.role !== 'admin') {
     return <Navigate to="/" replace />;
@@ -390,7 +400,8 @@ export function DepartmentsPage() {
             <p className="text-gray-500">لا توجد أقسام تطابق البحث أو التصفية.</p>
           </div>
         ) : (
-        filteredDepartments.map((dept, idx) => {
+        <>
+        {paginatedDepartments.map((dept, idx) => {
           const manager = profilesMap.get(dept.manager_uid ?? '');
           const isExpanded = expandedDept === dept.id;
           const colorIdx = idx % deptColors.length;
@@ -503,7 +514,14 @@ export function DepartmentsPage() {
               )}
             </div>
           );
-        })
+        })}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={totalDepartmentsCount}
+          pageSize={departmentsPageSize}
+          onPageChange={setDepartmentsPage}
+        />
+      </>
         )}
       </div>
       )}
@@ -729,12 +747,18 @@ export function DepartmentsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="delete-dept-title" className="text-gray-800 mb-2">حذف القسم</h2>
-            <p className="text-gray-600 text-sm mb-4">
+            <p className="text-gray-600 text-sm mb-2">
               هل أنت متأكد من حذف قسم &quot;{deptToDelete.name_ar}&quot;؟
               {deptToDelete.employee_count > 0
                 ? ` هذا القسم فيه ${deptToDelete.employee_count} موظف. سيُزال انتماؤهم لهذا القسم فقط ولن يُحذفوا.`
                 : ' الموظفون التابعون له سيُزال انتماؤهم لهذا القسم ولن يُحذفوا.'}
             </p>
+            {deptToDelete.employee_count > 10 && (
+              <p className="text-amber-600 text-sm mb-4 font-medium">
+                هذا القسم يحتوي على عدد كبير من الموظفين. تأكد من رغبتك في الحذف.
+              </p>
+            )}
+            {deptToDelete.employee_count <= 10 && <div className="mb-4" />}
             <div className="flex gap-3">
               <button
                 type="button"

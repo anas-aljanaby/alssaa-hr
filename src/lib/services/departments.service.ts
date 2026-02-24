@@ -15,6 +15,26 @@ export async function listDepartments(): Promise<Department[]> {
   return data ?? [];
 }
 
+export interface ListDepartmentsPaginatedResult {
+  data: Department[];
+  total: number;
+}
+
+/** List departments with limit/offset for pagination. Use when list is large. */
+export async function listDepartmentsPaginated(
+  limit: number,
+  offset: number
+): Promise<ListDepartmentsPaginatedResult> {
+  const { data: page, error, count } = await supabase
+    .from('departments')
+    .select('*', { count: 'exact' })
+    .order('name_ar')
+    .range(offset, offset + limit - 1);
+
+  if (error) throw error;
+  return { data: page ?? [], total: count ?? 0 };
+}
+
 export async function getDepartmentById(id: string): Promise<Department | null> {
   const { data, error } = await supabase
     .from('departments')
@@ -27,6 +47,16 @@ export async function getDepartmentById(id: string): Promise<Department | null> 
 }
 
 export async function createDepartment(dept: DepartmentInsert): Promise<Department> {
+  if (dept.manager_uid) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', dept.manager_uid)
+      .single();
+    if (profile && profile.role !== 'manager') {
+      throw new Error('MANAGER_ROLE_REQUIRED');
+    }
+  }
   const { data, error } = await supabase
     .from('departments')
     .insert(dept)
@@ -41,6 +71,16 @@ export async function updateDepartment(
   id: string,
   updates: DepartmentUpdate
 ): Promise<Department> {
+  if (updates.manager_uid) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', updates.manager_uid)
+      .single();
+    if (profile && profile.role !== 'manager') {
+      throw new Error('MANAGER_ROLE_REQUIRED');
+    }
+  }
   const { data, error } = await supabase
     .from('departments')
     .update(updates)

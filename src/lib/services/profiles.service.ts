@@ -88,3 +88,43 @@ export async function countUsersByStatus(): Promise<{ active: number; inactive: 
   if (e1 || e2) throw e1 ?? e2;
   return { active: active ?? 0, inactive: inactive ?? 0 };
 }
+
+export interface InviteUserPayload {
+  email: string;
+  name: string;
+  phone?: string;
+  role: Profile['role'];
+  department_id: string;
+}
+
+export interface InviteUserResult {
+  success: true;
+  user_id: string;
+}
+
+/**
+ * Invites a new user via the invite-user Edge Function (uses service role on the server).
+ * On success the trigger handle_new_user creates profile and leave_balances.
+ * On failure throws an error with optional response body for getAddUserErrorMessage.
+ */
+export async function inviteUser(payload: InviteUserPayload): Promise<InviteUserResult> {
+  const { data, error } = await supabase.functions.invoke('invite-user', {
+    body: payload,
+  });
+
+  const body = (data as { success?: boolean; user_id?: string; error?: string; code?: string } | null) ?? null;
+  if (error) {
+    const e = new Error(error.message || 'فشل إضافة المستخدم') as Error & { response?: typeof body };
+    e.response = body;
+    throw e;
+  }
+  if (body?.error && !body?.success) {
+    const e = new Error(body.error) as Error & { response?: typeof body };
+    e.response = body;
+    throw e;
+  }
+  if (body?.success && body?.user_id) {
+    return { success: true, user_id: body.user_id };
+  }
+  throw new Error('فشل إضافة المستخدم');
+}

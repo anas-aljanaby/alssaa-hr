@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { addUserSchema, type AddUserFormData } from '@/lib/validations';
+import { addUserSchema, type AddUserFormData, updateProfileSchema, type UpdateProfileFormData } from '@/lib/validations';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
+import { getAddUserErrorMessage, getProfileUpdateErrorMessage } from '@/lib/errorMessages';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import { Pagination, usePagination } from '../../components/Pagination';
@@ -20,6 +21,7 @@ import {
   Users as UsersIcon,
   User as UserIcon,
   Building2,
+  UserCheck,
 } from 'lucide-react';
 
 type UserRole = Profile['role'];
@@ -31,12 +33,24 @@ export function UsersPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [userToDeactivate, setUserToDeactivate] = useState<Profile | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const addUserForm = useForm<AddUserFormData>({
     resolver: zodResolver(addUserSchema),
     defaultValues: { name: '', email: '', phone: '', role: 'employee', department_id: '' },
+  });
+
+  const editUserForm = useForm<UpdateProfileFormData>({
+    resolver: zodResolver(updateProfileSchema),
+    defaultValues: { name_ar: '', phone: '', role: 'employee', department_id: '', status: 'active' },
   });
 
   useEffect(() => {
@@ -70,11 +84,22 @@ export function UsersPage() {
       (u.phone ?? '').includes(searchQuery) ||
       u.employee_id.includes(searchQuery);
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-    return matchesSearch && matchesRole;
+    const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
+    return matchesSearch && matchesRole && matchesStatus;
   });
 
   const { paginatedItems, currentPage, totalItems, pageSize, setCurrentPage } =
     usePagination(filteredUsers, PAGE_SIZE);
+
+  const handleModalKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setShowForm(false);
+      addUserForm.reset();
+      setEditingUser(null);
+      editUserForm.reset();
+      setUserToDeactivate(null);
+    }
+  }, [addUserForm, editUserForm]);
 
   const roleLabel = (role: string) => {
     switch (role) {
@@ -107,9 +132,89 @@ export function UsersPage() {
   }
 
   const onAddUser = async (data: AddUserFormData) => {
-    toast.info('سيتم إضافة المستخدم قريباً');
-    setShowForm(false);
-    addUserForm.reset();
+    setSubmitting(true);
+    try {
+      await profilesService.inviteUser({
+        email: data.email.trim(),
+        name: data.name.trim(),
+        phone: data.phone?.trim() || undefined,
+        role: data.role,
+        department_id: data.department_id,
+      });
+      toast.success('تم إضافة المستخدم');
+      setShowForm(false);
+      addUserForm.reset();
+      await loadData();
+    } catch (err) {
+      const msg = getAddUserErrorMessage(
+        err,
+        (err as { response?: { error?: string; code?: string } })?.response
+      );
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openEditModal = (user: Profile) => {
+    setEditingUser(user);
+    editUserForm.reset({
+      name_ar: user.name_ar,
+      phone: user.phone ?? '',
+      role: user.role,
+      department_id: user.department_id ?? '',
+      status: user.status,
+    });
+  };
+
+  const onEditUser = async (data: UpdateProfileFormData) => {
+    if (!editingUser) return;
+    setEditSubmitting(true);
+    try {
+      await profilesService.updateUser(editingUser.id, {
+        name_ar: data.name_ar.trim(),
+        phone: data.phone?.trim() || undefined,
+        role: data.role,
+        department_id: data.department_id,
+        status: data.status,
+      });
+      toast.success('تم تحديث المستخدم');
+      setEditingUser(null);
+      editUserForm.reset();
+      await loadData();
+    } catch (err) {
+      toast.error(getProfileUpdateErrorMessage(err, 'فشل تحديث المستخدم'));
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const onConfirmDeactivate = async () => {
+    if (!userToDeactivate) return;
+    setDeactivating(true);
+    try {
+      await profilesService.updateUser(userToDeactivate.id, { status: 'inactive' });
+      toast.success('تم تعطيل المستخدم');
+      setUserToDeactivate(null);
+      await loadData();
+    } catch (err) {
+      toast.error(getProfileUpdateErrorMessage(err, 'فشل تعطيل المستخدم'));
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
+  const onReactivate = async (user: Profile) => {
+    setReactivatingId(user.id);
+    try {
+      await profilesService.updateUser(user.id, { status: 'active' });
+      toast.success('تم تفعيل المستخدم');
+      await loadData();
+    } catch (err) {
+      toast.error(getProfileUpdateErrorMessage(err, 'فشل تفعيل المستخدم'));
+    } finally {
+      setReactivatingId(null);
+    }
   };
 
   return (
@@ -148,6 +253,21 @@ export function UsersPage() {
             }`}
           >
             {role === 'all' ? 'الكل' : roleLabel(role)}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {(['all', 'active', 'inactive'] as const).map((status) => (
+          <button
+            key={status}
+            onClick={() => { setStatusFilter(status); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
+              statusFilter === status
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {status === 'all' ? 'الكل' : status === 'active' ? 'نشط' : 'غير نشط'}
           </button>
         ))}
       </div>
@@ -232,12 +352,35 @@ export function UsersPage() {
                     </div>
                   </div>
                   <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                    <div className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(user)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                      aria-label="تعديل"
+                    >
                       <Edit2 className="w-4 h-4 text-gray-400" />
-                    </div>
-                    <div className="p-2 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                    </div>
+                    </button>
+                    {user.status === 'active' ? (
+                      <button
+                        type="button"
+                        onClick={() => setUserToDeactivate(user)}
+                        className="p-2 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        aria-label="تعطيل"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onReactivate(user)}
+                        disabled={reactivatingId === user.id}
+                        className="p-2 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                        aria-label="تفعيل"
+                        title="تفعيل"
+                      >
+                        <UserCheck className="w-4 h-4 text-emerald-600" />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
@@ -266,19 +409,25 @@ export function UsersPage() {
 
       {showForm && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-end z-50"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
           onClick={() => { setShowForm(false); addUserForm.reset(); }}
+          onKeyDown={handleModalKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-user-title"
         >
           <div
-            className="bg-white rounded-t-3xl w-full max-w-lg mx-auto p-6 max-h-[85vh] overflow-auto"
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-gray-800">إضافة مستخدم جديد</h2>
+              <h2 id="add-user-title" className="text-gray-800">إضافة مستخدم جديد</h2>
               <button
+                type="button"
                 onClick={() => { setShowForm(false); addUserForm.reset(); }}
                 className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
@@ -357,11 +506,156 @@ export function UsersPage() {
               </div>
               <button
                 type="submit"
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
+                disabled={submitting}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
               >
-                إضافة المستخدم
+                {submitting ? 'جاري الإضافة...' : 'إضافة المستخدم'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => { setEditingUser(null); editUserForm.reset(); }}
+          onKeyDown={handleModalKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-user-title"
+        >
+          <div
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 id="edit-user-title" className="text-gray-800">تعديل المستخدم</h2>
+              <button
+                type="button"
+                onClick={() => { setEditingUser(null); editUserForm.reset(); }}
+                className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={editUserForm.handleSubmit(onEditUser)}>
+              <div>
+                <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
+                <input
+                  type="text"
+                  {...editUserForm.register('name_ar')}
+                  placeholder="أدخل الاسم الكامل"
+                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    editUserForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
+                  }`}
+                />
+                {editUserForm.formState.errors.name_ar && (
+                  <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.name_ar.message}</p>
+                )}
+              </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">رقم الهاتف</label>
+                <input
+                  type="tel"
+                  {...editUserForm.register('phone')}
+                  placeholder="+964 770 000 0000"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  dir="ltr"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1.5 text-gray-700">الدور</label>
+                  <select
+                    {...editUserForm.register('role')}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="employee">موظف</option>
+                    <option value="manager">مدير قسم</option>
+                    <option value="admin">مدير عام</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">القسم</label>
+                  <select
+                    {...editUserForm.register('department_id')}
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      editUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  >
+                    <option value="">اختر القسم</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name_ar}
+                      </option>
+                    ))}
+                  </select>
+                  {editUserForm.formState.errors.department_id && (
+                    <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.department_id.message}</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">الحالة</label>
+                <select
+                  {...editUserForm.register('status')}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="active">نشط</option>
+                  <option value="inactive">غير نشط</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={editSubmitting}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
+                {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {userToDeactivate && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setUserToDeactivate(null)}
+          onKeyDown={handleModalKeyDown}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="deactivate-user-title"
+        >
+          <div
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm rounded-2xl shadow-xl bg-white p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="deactivate-user-title" className="text-gray-800 mb-2">تعطيل المستخدم</h2>
+            <p className="text-gray-600 text-sm mb-6">
+              هل تريد تعطيل المستخدم &quot;{userToDeactivate.name_ar}&quot;؟ لن يتمكن من تسجيل الدخول.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setUserToDeactivate(null)}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmDeactivate}
+                disabled={deactivating}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl"
+              >
+                {deactivating ? 'جاري التعطيل...' : 'تعطيل'}
+              </button>
+            </div>
           </div>
         </div>
       )}

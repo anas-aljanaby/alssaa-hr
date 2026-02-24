@@ -119,6 +119,15 @@ export const addUserSchema = z.object({
 });
 export type AddUserFormData = z.infer<typeof addUserSchema>;
 
+export const updateProfileSchema = z.object({
+  name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
+  phone: z.string().optional(),
+  role: z.enum(['employee', 'manager', 'admin'], { required_error: 'الدور مطلوب' }),
+  department_id: z.string().min(1, 'القسم مطلوب'),
+  status: z.enum(['active', 'inactive'], { required_error: 'الحالة مطلوبة' }),
+});
+export type UpdateProfileFormData = z.infer<typeof updateProfileSchema>;
+
 const departmentNameAr = z
   .string()
   .min(1, 'اسم القسم بالعربية مطلوب')

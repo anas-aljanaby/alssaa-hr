@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
+import { updateProfileSchema, type UpdateProfileFormData } from '@/lib/validations';
+import { getProfileUpdateErrorMessage } from '@/lib/errorMessages';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
@@ -34,6 +38,7 @@ import {
   MoreVertical,
   FileText,
   History,
+  X,
 } from 'lucide-react';
 
 function calculateLateMinutes(
@@ -74,6 +79,14 @@ export function UserDetailsPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [departments, setDepartments] = useState<Awaited<ReturnType<typeof departmentsService.listDepartments>>>([]);
+
+  const editProfileForm = useForm<UpdateProfileFormData>({
+    resolver: zodResolver(updateProfileSchema),
+    defaultValues: { name_ar: '', phone: '', role: 'employee', department_id: '', status: 'active' },
+  });
 
   const canAccess = useMemo(() => {
     if (!currentUser || !userId) return false;
@@ -95,6 +108,31 @@ export function UserDetailsPage() {
       .then(setAttendanceLogs)
       .catch(() => toast.error('فشل تحميل سجلات الحضور'));
   }, [userId, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (profile && currentUser?.role === 'admin') {
+      departmentsService.listDepartments().then(setDepartments).catch(() => {});
+    }
+  }, [profile, currentUser?.role]);
+ 
+  const openEditModal = useCallback(() => {
+    if (!profile) return;
+    setShowEditModal(true);
+    editProfileForm.reset({
+      name_ar: profile.name_ar,
+      phone: profile.phone ?? '',
+      role: profile.role,
+      department_id: profile.department_id ?? '',
+      status: profile.status,
+    });
+  }, [profile, editProfileForm]);
+ 
+  const handleEditModalKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setShowEditModal(false);
+      editProfileForm.reset();
+    }
+  }, [editProfileForm]);
 
   async function loadData() {
     if (!userId) return;
@@ -231,6 +269,27 @@ export function UserDetailsPage() {
     requestFilter === 'all'
       ? userRequests
       : userRequests.filter((r) => r.status === requestFilter);
+  const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
+    if (!profile) return;
+    setEditSubmitting(true);
+    try {
+      await profilesService.updateUser(profile.id, {
+        name_ar: data.name_ar.trim(),
+        phone: data.phone?.trim() || undefined,
+        role: data.role,
+        department_id: data.department_id,
+        status: data.status,
+      });
+      toast.success('تم تحديث المستخدم');
+      setShowEditModal(false);
+      editProfileForm.reset();
+      await loadData();
+    } catch (err) {
+      toast.error(getProfileUpdateErrorMessage(err, 'فشل تحديث المستخدم'));
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4 pb-20">
@@ -252,7 +311,12 @@ export function UserDetailsPage() {
             >
               <History className="w-5 h-5 text-gray-600" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <button
+              type="button"
+              onClick={openEditModal}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="تعديل الملف الشخصي"
+            >
               <Edit2 className="w-5 h-5 text-gray-600" />
             </button>
             <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -794,6 +858,112 @@ export function UserDetailsPage() {
                 <p className="text-sm text-gray-500 text-center py-4">لا توجد سجلات</p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Profile Modal */}
+      {showEditModal && profile && currentUser.role === 'admin' && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => { setShowEditModal(false); editProfileForm.reset(); }}
+          onKeyDown={handleEditModalKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-profile-title"
+        >
+          <div
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 id="edit-profile-title" className="text-gray-800">تعديل الملف الشخصي</h2>
+              <button
+                type="button"
+                onClick={() => { setShowEditModal(false); editProfileForm.reset(); }}
+                className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={editProfileForm.handleSubmit(onEditProfileSubmit)}>
+              <div>
+                <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
+                <input
+                  type="text"
+                  {...editProfileForm.register('name_ar')}
+                  placeholder="أدخل الاسم الكامل"
+                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    editProfileForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
+                  }`}
+                />
+                {editProfileForm.formState.errors.name_ar && (
+                  <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.name_ar.message}</p>
+                )}
+              </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">رقم الهاتف</label>
+                <input
+                  type="tel"
+                  {...editProfileForm.register('phone')}
+                  placeholder="+964 770 000 0000"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  dir="ltr"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1.5 text-gray-700">الدور</label>
+                  <select
+                    {...editProfileForm.register('role')}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="employee">موظف</option>
+                    <option value="manager">مدير قسم</option>
+                    <option value="admin">مدير عام</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">القسم</label>
+                  <select
+                    {...editProfileForm.register('department_id')}
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      editProfileForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  >
+                    <option value="">اختر القسم</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name_ar}
+                      </option>
+                    ))}
+                  </select>
+                  {editProfileForm.formState.errors.department_id && (
+                    <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.department_id.message}</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">الحالة</label>
+                <select
+                  {...editProfileForm.register('status')}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="active">نشط</option>
+                  <option value="inactive">غير نشط</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={editSubmitting}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
+                {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+            </form>
           </div>
         </div>
       )}
