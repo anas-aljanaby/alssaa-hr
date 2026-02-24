@@ -459,7 +459,17 @@ export function DepartmentsPage() {
                       </span>
                       <span className="flex items-center gap-1">
                         <Crown className="w-3 h-3" />
-                        {manager?.name_ar ?? '—'}
+                        {manager ? (
+                          <Link
+                            to={`/user-details/${manager.id}`}
+                            className="hover:underline focus:underline focus:outline-none"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {manager.name_ar}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
                       </span>
                     </div>
                   </div>
@@ -498,9 +508,11 @@ export function DepartmentsPage() {
                   ) : (
                     <div className="space-y-2">
                       {deptEmployees.map((emp) => (
-                        <div
+                        <Link
                           key={emp.id}
-                          className={`flex items-center justify-between p-2.5 rounded-xl ${deptColors[colorIdx]}`}
+                          to={`/user-details/${emp.id}`}
+                          className={`flex items-center justify-between p-2.5 rounded-xl transition-colors hover:opacity-90 ${deptColors[colorIdx]}`}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <div className="flex items-center gap-2">
                             <div
@@ -522,7 +534,7 @@ export function DepartmentsPage() {
                           >
                             {emp.role === 'manager' ? 'مدير' : 'موظف'}
                           </span>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   )}
