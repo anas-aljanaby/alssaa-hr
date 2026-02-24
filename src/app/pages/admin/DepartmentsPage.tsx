@@ -79,6 +79,12 @@ export function DepartmentsPage() {
     [allProfiles]
   );
 
+  /** All employees + managers: options when assigning a department manager (employees are auto-upgraded to manager). */
+  const managerOptions = useMemo(
+    () => allProfiles.filter((p) => p.role === 'employee' || p.role === 'manager'),
+    [allProfiles]
+  );
+
   const filteredDepartments = useMemo(() => {
     let list = departments;
     const q = searchQuery.trim().toLowerCase();
@@ -607,9 +613,10 @@ export function DepartmentsPage() {
                   aria-describedby={createFormErrors.managerId ? 'create-managerId-error' : undefined}
                 >
                   <option value="">-- اختيار --</option>
-                  {managers.map((u) => (
+                  {managerOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name_ar}
+                      {u.role === 'manager' ? ' (مدير)' : ''}
                     </option>
                   ))}
                 </select>
@@ -710,9 +717,10 @@ export function DepartmentsPage() {
                   aria-describedby={editFormErrors.managerId ? 'edit-managerId-error' : undefined}
                 >
                   <option value="">-- اختيار --</option>
-                  {managers.map((u) => (
+                  {managerOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name_ar}
+                      {u.role === 'manager' ? ' (مدير)' : ''}
                     </option>
                   ))}
                 </select>

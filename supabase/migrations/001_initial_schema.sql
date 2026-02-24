@@ -61,6 +61,10 @@ alter table public.departments
 alter table public.departments
   add constraint departments_org_name_unique unique (org_id, name);
 
+-- One general manager per organization: the account created for the org. No other account can become GM.
+alter table public.organizations
+  add column general_manager_id uuid references public.profiles (id) on delete set null;
+
 -- ============================================================
 -- 3. ATTENDANCE LOGS
 -- ============================================================
@@ -489,6 +493,11 @@ create policy "Admins can read org audit logs"
     public.current_user_role() = 'admin'
     and org_id = public.current_user_org_id()
   );
+
+create policy "Authenticated can insert own audit log"
+  on public.audit_logs for insert
+  to authenticated
+  with check (actor_id = auth.uid());
 
 -- ---------- attendance_policy ----------
 alter table public.attendance_policy enable row level security;

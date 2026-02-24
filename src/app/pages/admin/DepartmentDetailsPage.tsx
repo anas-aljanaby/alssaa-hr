@@ -74,7 +74,7 @@ export function DepartmentDetailsPage() {
         profilesService.listUsers(),
       ]);
       setAllDepartments(depts);
-      setManagers(profs.filter((p) => p.role === 'manager'));
+      setManagers(profs.filter((p) => p.role === 'employee' || p.role === 'manager'));
       setShowEditModal(true);
     } catch (err) {
       toast.error(getDepartmentErrorMessage(err, 'فشل تحميل البيانات'));
@@ -356,6 +356,7 @@ export function DepartmentDetailsPage() {
                   {managers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name_ar}
+                      {u.role === 'manager' ? ' (مدير)' : ''}
                     </option>
                   ))}
                 </select>

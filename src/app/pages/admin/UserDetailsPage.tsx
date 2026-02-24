@@ -370,19 +370,23 @@ export function UserDetailsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-gray-100">
-          <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-            <Phone className="w-5 h-5 text-blue-600" />
-            <span className="text-xs text-gray-600">اتصال</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-            <Mail className="w-5 h-5 text-blue-600" />
-            <span className="text-xs text-gray-600">بريد</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-            <MessageCircle className="w-5 h-5 text-blue-600" />
-            <span className="text-xs text-gray-600">رسالة</span>
-          </button>
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          {profile.phone || profile.email ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Phone className="w-4 h-4 text-gray-400" />
+                <span dir="ltr">{profile.phone ?? '—'}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Mail className="w-4 h-4 text-gray-400" />
+                <span className="truncate" dir="ltr">
+                  {profile.email ?? '—'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-xs text-gray-400 py-3">لا توجد بيانات اتصال</div>
+          )}
         </div>
       </div>
 
@@ -824,11 +828,11 @@ export function UserDetailsPage() {
       {/* Audit Log Modal */}
       {showAuditLog && currentUser.role === 'admin' && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-end z-50"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => setShowAuditLog(false)}
         >
           <div
-            className="bg-white rounded-t-3xl w-full max-w-lg mx-auto p-6 max-h-[80vh] overflow-auto"
+            className="bg-white rounded-2xl w-full max-w-lg mx-auto p-6 max-h-[80vh] overflow-auto"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >

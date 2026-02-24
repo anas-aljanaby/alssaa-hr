@@ -126,11 +126,14 @@ begin
   drop function _seed_demo_user;
 
   -- --------------------------------------------------------
-  -- 4. Set department managers
+  -- 4. Set department managers (one manager per dept; a manager can manage multiple depts)
   -- --------------------------------------------------------
   update public.departments set manager_uid = _mgr_news where id = _dept_news;
   update public.departments set manager_uid = _mgr_tech where id = _dept_tech;
   update public.departments set manager_uid = _admin    where id = _dept_hr;
+
+  -- General manager for demo org: the org account (only one GM per org)
+  update public.organizations set general_manager_id = _admin where id = _demo_org;
 
   -- --------------------------------------------------------
   -- 5. Attendance logs — last 30 days, reproducible random

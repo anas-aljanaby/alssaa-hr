@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import * as profilesService from './profiles.service';
 import type { Tables, InsertTables, UpdateTables } from '../database.types';
 
 export type Department = Tables<'departments'>;
@@ -48,13 +49,9 @@ export async function getDepartmentById(id: string): Promise<Department | null> 
 
 export async function createDepartment(dept: DepartmentInsert): Promise<Department> {
   if (dept.manager_uid) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', dept.manager_uid)
-      .single();
+    const profile = await profilesService.getUserById(dept.manager_uid);
     if (profile && profile.role !== 'manager') {
-      throw new Error('MANAGER_ROLE_REQUIRED');
+      await profilesService.updateUser(dept.manager_uid, { role: 'manager' });
     }
   }
   const { data, error } = await supabase
@@ -72,13 +69,9 @@ export async function updateDepartment(
   updates: DepartmentUpdate
 ): Promise<Department> {
   if (updates.manager_uid) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', updates.manager_uid)
-      .single();
+    const profile = await profilesService.getUserById(updates.manager_uid);
     if (profile && profile.role !== 'manager') {
-      throw new Error('MANAGER_ROLE_REQUIRED');
+      await profilesService.updateUser(updates.manager_uid, { role: 'manager' });
     }
   }
   const { data, error } = await supabase

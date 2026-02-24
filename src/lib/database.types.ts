@@ -15,20 +15,31 @@ export interface Database {
           name: string;
           is_demo: boolean;
           created_at: string;
+          general_manager_id: string | null;
         };
         Insert: {
           id?: string;
           name: string;
           is_demo?: boolean;
           created_at?: string;
+          general_manager_id?: string | null;
         };
         Update: {
           id?: string;
           name?: string;
           is_demo?: boolean;
           created_at?: string;
+          general_manager_id?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'organizations_general_manager_id_fkey';
+            columns: ['general_manager_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
       };
 
       profiles: {
