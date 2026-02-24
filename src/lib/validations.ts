@@ -118,3 +118,29 @@ export const addUserSchema = z.object({
   department_id: z.string().min(1, 'القسم مطلوب'),
 });
 export type AddUserFormData = z.infer<typeof addUserSchema>;
+
+const departmentNameAr = z
+  .string()
+  .min(1, 'اسم القسم بالعربية مطلوب')
+  .max(100, 'اسم القسم طويل جداً')
+  .transform((s) => s.trim());
+const departmentNameEn = z
+  .string()
+  .min(1, 'اسم القسم بالإنجليزية مطلوب')
+  .max(100, 'اسم القسم طويل جداً')
+  .transform((s) => s.trim());
+const departmentManagerId = z.string().optional().transform((s) => s || undefined);
+
+export const createDepartmentSchema = z.object({
+  nameAr: departmentNameAr,
+  nameEn: departmentNameEn,
+  managerId: departmentManagerId,
+});
+export type CreateDepartmentFormData = z.infer<typeof createDepartmentSchema>;
+
+export const updateDepartmentSchema = z.object({
+  nameAr: departmentNameAr,
+  nameEn: departmentNameEn,
+  managerId: departmentManagerId,
+});
+export type UpdateDepartmentFormData = z.infer<typeof updateDepartmentSchema>;

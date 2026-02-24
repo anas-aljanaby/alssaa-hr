@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Navigate } from 'react-router';
 import { toast } from 'sonner';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as profilesService from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import type { Profile } from '@/lib/services/profiles.service';
+import { createDepartmentSchema, updateDepartmentSchema } from '@/lib/validations';
+import { useAuth } from '@/app/contexts/AuthContext';
 import {
   Building2,
   Plus,
   Edit2,
+  Trash2,
   Users,
   Crown,
   X,
@@ -15,7 +19,10 @@ import {
   ChevronUp,
 } from 'lucide-react';
 
+const INITIAL_FORM = { nameAr: '', nameEn: '', managerId: '' };
+
 export function DepartmentsPage() {
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState<(Department & { employee_count: number })[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
@@ -23,8 +30,15 @@ export function DepartmentsPage() {
   const [deptEmployees, setDeptEmployees] = useState<Profile[]>([]);
   const [expandLoading, setExpandLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ nameAr: '', nameEn: '', managerId: '' });
+  const [formData, setFormData] = useState(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [editingDept, setEditingDept] = useState<(Department & { employee_count: number }) | null>(null);
+  const [editFormData, setEditFormData] = useState(INITIAL_FORM);
+  const [deptToDelete, setDeptToDelete] = useState<(Department & { employee_count: number }) | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const editModalRef = useRef<HTMLDivElement>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
@@ -39,8 +53,9 @@ export function DepartmentsPage() {
       ]);
       setDepartments(depts);
       setAllProfiles(profs);
-    } catch {
-      toast.error('فشل تحميل الأقسام');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : undefined;
+      toast.error(msg ?? 'فشل تحميل الأقسام');
     } finally {
       setLoading(false);
     }
@@ -56,6 +71,10 @@ export function DepartmentsPage() {
     [allProfiles]
   );
 
+  if (!currentUser || currentUser.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+
   const handleExpand = async (deptId: string) => {
     if (expandedDept === deptId) {
       setExpandedDept(null);
@@ -66,8 +85,9 @@ export function DepartmentsPage() {
     try {
       const emps = await profilesService.getDepartmentEmployees(deptId);
       setDeptEmployees(emps);
-    } catch {
-      toast.error('فشل تحميل الموظفين');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : undefined;
+      toast.error(msg ?? 'فشل تحميل الموظفين');
     } finally {
       setExpandLoading(false);
     }
@@ -75,24 +95,123 @@ export function DepartmentsPage() {
 
   const handleCreateDept = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nameAr || !formData.nameEn) return;
+    const parsed = createDepartmentSchema.safeParse(formData);
+    if (!parsed.success) {
+      const first = parsed.error.flatten().fieldErrors;
+      const msg = first.nameAr?.[0] ?? first.nameEn?.[0] ?? parsed.error.message;
+      toast.error(msg);
+      return;
+    }
+    const { nameAr, nameEn, managerId } = parsed.data;
     setSubmitting(true);
     try {
       await departmentsService.createDepartment({
-        name: formData.nameEn,
-        name_ar: formData.nameAr,
-        manager_uid: formData.managerId || null,
+        name: nameEn,
+        name_ar: nameAr,
+        manager_uid: managerId ?? null,
       });
       toast.success('تم إضافة القسم بنجاح');
       setShowForm(false);
-      setFormData({ nameAr: '', nameEn: '', managerId: '' });
+      setFormData(INITIAL_FORM);
       await loadData();
-    } catch {
-      toast.error('فشل إضافة القسم');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : undefined;
+      toast.error(msg ?? 'فشل إضافة القسم');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const openEditModal = (dept: Department & { employee_count: number }) => {
+    setEditingDept(dept);
+    setEditFormData({
+      nameAr: dept.name_ar,
+      nameEn: dept.name,
+      managerId: dept.manager_uid ?? '',
+    });
+  };
+
+  const handleEditDept = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDept) return;
+    const parsed = updateDepartmentSchema.safeParse(editFormData);
+    if (!parsed.success) {
+      const first = parsed.error.flatten().fieldErrors;
+      const msg = first.nameAr?.[0] ?? first.nameEn?.[0] ?? parsed.error.message;
+      toast.error(msg);
+      return;
+    }
+    const { nameAr, nameEn, managerId } = parsed.data;
+    setSubmitting(true);
+    try {
+      await departmentsService.updateDepartment(editingDept.id, {
+        name_ar: nameAr,
+        name: nameEn,
+        manager_uid: managerId ?? null,
+      });
+      toast.success('تم تحديث القسم بنجاح');
+      setEditingDept(null);
+      setEditFormData(INITIAL_FORM);
+      await loadData();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : undefined;
+      toast.error(msg ?? 'فشل تحديث القسم');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteDept = async () => {
+    if (!deptToDelete) return;
+    setDeleting(true);
+    try {
+      await departmentsService.deleteDepartment(deptToDelete.id);
+      toast.success('تم حذف القسم');
+      setDeptToDelete(null);
+      setExpandedDept((prev) => (prev === deptToDelete.id ? null : prev));
+      await loadData();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : undefined;
+      toast.error(msg ?? 'فشل حذف القسم');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleModalKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setShowForm(false);
+      setEditingDept(null);
+      setDeptToDelete(null);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const container = showForm ? modalRef.current : editingDept ? editModalRef.current : null;
+    if (!container) return;
+    const focusable = container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }, [showForm, editingDept]);
+
+  useEffect(() => {
+    if (showForm || editingDept) {
+      firstInputRef.current?.focus();
+    }
+  }, [showForm, editingDept]);
 
   const deptColors = [
     'bg-blue-50 border-blue-200',
@@ -144,6 +263,20 @@ export function DepartmentsPage() {
         </div>
       </div>
 
+      {departments.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+          <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 mb-4">لا توجد أقسام بعد. أضف أول قسم لبدء التنظيم.</p>
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            إضافة أول قسم
+          </button>
+        </div>
+      ) : (
       <div className="space-y-3">
         {departments.map((dept, idx) => {
           const manager = profilesMap.get(dept.manager_uid ?? '');
@@ -179,13 +312,23 @@ export function DepartmentsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div
-                    onClick={(e) => e.stopPropagation()}
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(dept)}
                     className="p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer"
+                    aria-label="تعديل القسم"
                   >
                     <Edit2 className="w-3.5 h-3.5 text-gray-400" />
-                  </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeptToDelete(dept)}
+                    className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"
+                    aria-label="حذف القسم"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" />
+                  </button>
                   {isExpanded ? (
                     <ChevronUp className="w-5 h-5 text-gray-400" />
                   ) : (
@@ -240,22 +383,30 @@ export function DepartmentsPage() {
           );
         })}
       </div>
+      )}
 
       {showForm && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => setShowForm(false)}
+          onKeyDown={handleModalKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-dept-title"
         >
           <div
+            ref={modalRef}
             className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl p-6"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-gray-800">إضافة قسم جديد</h2>
+              <h2 id="create-dept-title" className="text-gray-800">إضافة قسم جديد</h2>
               <button
+                type="button"
                 onClick={() => setShowForm(false)}
                 className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
@@ -265,11 +416,12 @@ export function DepartmentsPage() {
               <div>
                 <label className="block mb-1.5 text-gray-700">اسم القسم (عربي)</label>
                 <input
+                  ref={firstInputRef}
                   type="text"
                   value={formData.nameAr}
                   onChange={(e) => setFormData((p) => ({ ...p, nameAr: e.target.value }))}
                   placeholder="مثال: قسم التصميم"
-                  required
+                  maxLength={100}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
@@ -280,7 +432,7 @@ export function DepartmentsPage() {
                   value={formData.nameEn}
                   onChange={(e) => setFormData((p) => ({ ...p, nameEn: e.target.value }))}
                   placeholder="e.g. Design Department"
-                  required
+                  maxLength={100}
                   dir="ltr"
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
@@ -308,6 +460,124 @@ export function DepartmentsPage() {
                 {submitting ? 'جاري الإضافة...' : 'إضافة القسم'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {editingDept && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setEditingDept(null)}
+          onKeyDown={handleModalKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-dept-title"
+        >
+          <div
+            ref={editModalRef}
+            className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 id="edit-dept-title" className="text-gray-800">تعديل القسم</h2>
+              <button
+                type="button"
+                onClick={() => setEditingDept(null)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={handleEditDept}>
+              <div>
+                <label className="block mb-1.5 text-gray-700">اسم القسم (عربي)</label>
+                <input
+                  ref={firstInputRef}
+                  type="text"
+                  value={editFormData.nameAr}
+                  onChange={(e) => setEditFormData((p) => ({ ...p, nameAr: e.target.value }))}
+                  placeholder="مثال: قسم التصميم"
+                  maxLength={100}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">اسم القسم (إنجليزي)</label>
+                <input
+                  type="text"
+                  value={editFormData.nameEn}
+                  onChange={(e) => setEditFormData((p) => ({ ...p, nameEn: e.target.value }))}
+                  placeholder="e.g. Design Department"
+                  maxLength={100}
+                  dir="ltr"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">مدير القسم</label>
+                <select
+                  value={editFormData.managerId}
+                  onChange={(e) => setEditFormData((p) => ({ ...p, managerId: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="">-- اختيار --</option>
+                  {managers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name_ar}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
+                {submitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deptToDelete && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setDeptToDelete(null)}
+          onKeyDown={handleModalKeyDown}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-dept-title"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-lg shadow-xl p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-dept-title" className="text-gray-800 mb-2">حذف القسم</h2>
+            <p className="text-gray-600 text-sm mb-4">
+              هل أنت متأكد من حذف قسم &quot;{deptToDelete.name_ar}&quot;؟ الموظفون التابعون له سيُزال انتماؤهم لهذا القسم ولن يُحذفوا.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeptToDelete(null)}
+                className="flex-1 py-3 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteDept}
+                disabled={deleting}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl"
+              >
+                {deleting ? 'جاري الحذف...' : 'حذف'}
+              </button>
+            </div>
           </div>
         </div>
       )}
