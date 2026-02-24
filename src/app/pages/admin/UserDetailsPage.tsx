@@ -20,7 +20,7 @@ import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
 import {
-  ArrowLeft,
+  ArrowRight,
   Mail,
   Phone,
   MessageCircle,
@@ -299,7 +299,7 @@ export function UserDetailsPage() {
             onClick={() => navigate('/users')}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <ArrowRight className="w-5 h-5 text-gray-600" />
           </button>
           <h1 className="text-gray-800">تفاصيل الموظف</h1>
         </div>

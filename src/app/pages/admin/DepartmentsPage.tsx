@@ -422,12 +422,27 @@ export function DepartmentsPage() {
                 className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleExpand(dept.id);
+                    }}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer shrink-0"
+                    aria-label={isExpanded ? 'طي القسم' : 'توسيع القسم'}
+                  >
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
                   <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconColors[colorIdx]}`}
+                    className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${iconColors[colorIdx]}`}
                   >
                     <Building2 className="w-5 h-5" />
                   </div>
-                  <div className="text-right">
+                  <div className="text-right min-w-0">
                     <p className="text-gray-800">
                       <Link
                         to={`/departments/${dept.id}`}
@@ -449,7 +464,7 @@ export function DepartmentsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     onClick={() => openEditModal(dept)}
@@ -466,11 +481,6 @@ export function DepartmentsPage() {
                   >
                     <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" />
                   </button>
-                  {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  )}
                 </div>
               </button>
 
