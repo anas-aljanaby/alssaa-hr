@@ -55,6 +55,12 @@ alter table public.departments
   add constraint departments_manager_uid_fkey
   foreign key (manager_uid) references public.profiles (id) on delete set null;
 
+-- Unique department names per org: prevent duplicate name_ar or name within the same organization.
+alter table public.departments
+  add constraint departments_org_name_ar_unique unique (org_id, name_ar);
+alter table public.departments
+  add constraint departments_org_name_unique unique (org_id, name);
+
 -- ============================================================
 -- 3. ATTENDANCE LOGS
 -- ============================================================

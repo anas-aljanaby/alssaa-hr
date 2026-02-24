@@ -4,6 +4,7 @@ import { RootLayout } from './components/layout/RootLayout';
 import { MobileLayout } from './components/layout/MobileLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FullPageSpinner } from './components/skeletons';
+import { RequireAdmin } from './components/RequireAdmin';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const SignUpPage = React.lazy(() => import('./pages/SignUpPage').then(m => ({ default: m.SignUpPage })));
@@ -16,6 +17,7 @@ const MorePage = React.lazy(() => import('./pages/employee/MorePage').then(m => 
 const ApprovalsPage = React.lazy(() => import('./pages/manager/ApprovalsPage').then(m => ({ default: m.ApprovalsPage })));
 const UsersPage = React.lazy(() => import('./pages/admin/UsersPage').then(m => ({ default: m.UsersPage })));
 const DepartmentsPage = React.lazy(() => import('./pages/admin/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
+const DepartmentDetailsPage = React.lazy(() => import('./pages/admin/DepartmentDetailsPage').then(m => ({ default: m.DepartmentDetailsPage })));
 const ReportsPage = React.lazy(() => import('./pages/admin/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const UserDetailsPage = React.lazy(() => import('./pages/admin/UserDetailsPage').then(m => ({ default: m.UserDetailsPage })));
 
@@ -60,7 +62,8 @@ export const router = createBrowserRouter([
           { path: 'more', element: <Lazy><MorePage /></Lazy> },
           { path: 'approvals', element: <Lazy><ApprovalsPage /></Lazy> },
           { path: 'users', element: <Lazy><UsersPage /></Lazy> },
-          { path: 'departments', element: <Lazy><DepartmentsPage /></Lazy> },
+          { path: 'departments', element: <Lazy><RequireAdmin><DepartmentsPage /></RequireAdmin></Lazy> },
+          { path: 'departments/:deptId', element: <Lazy><RequireAdmin><DepartmentDetailsPage /></RequireAdmin></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
         ],

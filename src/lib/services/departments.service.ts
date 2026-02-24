@@ -62,18 +62,25 @@ export async function getDepartmentWithEmployeeCount(): Promise<
   (Department & { employee_count: number })[]
 > {
   const departments = await listDepartments();
+  if (departments.length === 0) return [];
 
-  const enriched = await Promise.all(
-    departments.map(async (dept) => {
-      const { count, error } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('department_id', dept.id);
+  const ids = departments.map((d) => d.id);
+  const { data: profiles, error } = await supabase
+    .from('profiles')
+    .select('department_id')
+    .in('department_id', ids);
 
-      if (error) throw error;
-      return { ...dept, employee_count: count ?? 0 };
-    })
-  );
+  if (error) throw error;
 
-  return enriched;
+  const countByDept = (profiles ?? []).reduce<Record<string, number>>((acc, p) => {
+    if (p.department_id) {
+      acc[p.department_id] = (acc[p.department_id] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  return departments.map((dept) => ({
+    ...dept,
+    employee_count: countByDept[dept.id] ?? 0,
+  }));
 }
