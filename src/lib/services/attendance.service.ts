@@ -5,6 +5,46 @@ import { now } from '../time';
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
 export type AttendanceStatus = AttendanceLog['status'];
+export type AttendancePolicy = Tables<'attendance_policy'>;
+
+// Punch entry from a session
+export interface PunchEntry {
+  id: string; // Derived ID (log_id + '_in' or '_out')
+  timestamp: string; // HH:mm time string
+  type: 'clock_in' | 'clock_out';
+  isOvertime: boolean;
+  location?: { lat: number; lng: number };
+}
+
+// Today's record with all necessary info
+export interface TodayRecord {
+  log: AttendanceLog | null;
+  policy: AttendancePolicy | null;
+  punches: PunchEntry[];
+  totalHoursWorked?: number; // For completed shifts
+  shiftStart: string; // HH:mm
+  shiftEnd: string; // HH:mm
+  gracePeriodMinutes: number;
+  isCheckedIn: boolean;
+  isCompleted: boolean;
+}
+
+// Single day record with detailed info
+export interface DayRecord {
+  log: AttendanceLog;
+  policy: AttendancePolicy;
+  punches: PunchEntry[];
+  totalHoursWorked: number;
+  shiftStart: string;
+  shiftEnd: string;
+}
+
+// Monthly summary for calendar
+export interface MonthlySummary {
+  date: string; // YYYY-MM-DD
+  status: AttendanceStatus;
+  totalHoursWorked?: number;
+}
 
 export function todayStr(d?: Date): string {
   const date = d ?? now();
@@ -278,4 +318,174 @@ export function subscribeToUserAttendance(
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+// ============================================================
+// NEW SPEC FUNCTIONS
+// ============================================================
+
+/** Get attendance policy for an organization */
+async function getOrgPolicy(orgId: string): Promise<AttendancePolicy | null> {
+  const { data, error } = await supabase
+    .from('attendance_policy')
+    .select('*')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+/** Get org_id for a user */
+async function getUserOrgId(userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('org_id')
+    .eq('id', userId)
+    .single();
+
+  if (error) throw error;
+  if (!data?.org_id) throw new Error('User organization not found');
+  return data.org_id;
+}
+
+/** Calculate total hours worked from check_in_time and check_out_time */
+function calculateHoursWorked(checkInTime: string | null, checkOutTime: string | null): number {
+  if (!checkInTime || !checkOutTime) return 0;
+
+  const [inH, inM] = checkInTime.split(':').map(Number);
+  const [outH, outM] = checkOutTime.split(':').map(Number);
+
+  const inMinutes = inH * 60 + inM;
+  const outMinutes = outH * 60 + outM;
+
+  return (outMinutes - inMinutes) / 60;
+}
+
+/** Check if a punch is overtime based on shift times */
+function isOvertimePunch(
+  punchTime: string,
+  shiftEnd: string,
+  isClockOut: boolean
+): boolean {
+  const [punchH, punchM] = punchTime.split(':').map(Number);
+  const [endH, endM] = shiftEnd.split(':').map(Number);
+
+  const punchMinutes = punchH * 60 + punchM;
+  const endMinutes = endH * 60 + endM;
+
+  return isClockOut ? punchMinutes > endMinutes : punchMinutes < endMinutes;
+}
+
+/** Build punch entries from attendance log */
+function buildPunchEntries(
+  log: AttendanceLog,
+  shiftEnd: string
+): PunchEntry[] {
+  const punches: PunchEntry[] = [];
+
+  if (log.check_in_time) {
+    punches.push({
+      id: `${log.id}_in`,
+      timestamp: log.check_in_time,
+      type: 'clock_in',
+      isOvertime: false, // Clock-in is not overtime
+      location: log.check_in_lat && log.check_in_lng
+        ? { lat: log.check_in_lat, lng: log.check_in_lng }
+        : undefined,
+    });
+  }
+
+  if (log.check_out_time) {
+    punches.push({
+      id: `${log.id}_out`,
+      timestamp: log.check_out_time,
+      type: 'clock_out',
+      isOvertime: isOvertimePunch(log.check_out_time, shiftEnd, true),
+      location: log.check_out_lat && log.check_out_lng
+        ? { lat: log.check_out_lat, lng: log.check_out_lng }
+        : undefined,
+    });
+  }
+
+  return punches;
+}
+
+/**
+ * Get today's attendance record with all punch data and shift info
+ */
+export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
+  const orgId = await getUserOrgId(userId);
+  const [log, policy] = await Promise.all([
+    getTodayLog(userId),
+    getOrgPolicy(orgId),
+  ]);
+
+  const shiftStart = policy?.work_start_time ?? '08:00';
+  const shiftEnd = policy?.work_end_time ?? '16:00';
+  const gracePeriodMinutes = policy?.grace_period_minutes ?? 15;
+
+  const punches = log ? buildPunchEntries(log, shiftEnd) : [];
+  const totalHoursWorked = log ? calculateHoursWorked(log.check_in_time, log.check_out_time) : undefined;
+
+  return {
+    log,
+    policy,
+    punches,
+    totalHoursWorked,
+    shiftStart,
+    shiftEnd,
+    gracePeriodMinutes,
+    isCheckedIn: !!(log?.check_in_time && !log?.check_out_time),
+    isCompleted: !!(log?.check_in_time && log?.check_out_time),
+  };
+}
+
+/**
+ * Get a specific day's attendance record with full punch details
+ */
+export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
+  const orgId = await getUserOrgId(userId);
+  const policy = await getOrgPolicy(orgId);
+
+  const { data: log, error } = await supabase
+    .from('attendance_logs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', date)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!log) throw new Error('No attendance record for this date');
+
+  const shiftStart = policy?.work_start_time ?? '08:00';
+  const shiftEnd = policy?.work_end_time ?? '16:00';
+  const punches = buildPunchEntries(log, shiftEnd);
+  const totalHoursWorked = calculateHoursWorked(log.check_in_time, log.check_out_time);
+
+  return {
+    log,
+    policy: policy!,
+    punches,
+    totalHoursWorked,
+    shiftStart,
+    shiftEnd,
+  };
+}
+
+/**
+ * Get monthly attendance with summary for calendar display
+ */
+export async function getAttendanceMonthlyWithSummary(
+  userId: string,
+  year: number,
+  month: number
+): Promise<MonthlySummary[]> {
+  const logs = await getMonthlyLogs(userId, year, month);
+
+  return logs.map((log) => ({
+    date: log.date,
+    status: log.status,
+    totalHoursWorked: calculateHoursWorked(log.check_in_time, log.check_out_time),
+  }));
 }
