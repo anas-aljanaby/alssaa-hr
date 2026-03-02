@@ -19,6 +19,7 @@ import type { AttendanceLog, MonthlyStats } from '@/lib/services/attendance.serv
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
+import { now } from '@/lib/time';
 import {
   ArrowRight,
   Mail,
@@ -72,12 +73,12 @@ export function UserDetailsPage() {
   const [requestFilter, setRequestFilter] = useState<'all' | LeaveRequest['status']>('all');
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [dateFrom, setDateFrom] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const n = now();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
   });
   const [dateTo, setDateTo] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const n = now();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
   });
   const [showEditModal, setShowEditModal] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -138,11 +139,11 @@ export function UserDetailsPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const now = new Date();
+      const n = now();
       const [prof, log, stats, balance, reqs, audit] = await Promise.all([
         profilesService.getUserById(userId),
         attendanceService.getTodayLog(userId),
-        attendanceService.getMonthlyStats(userId, now.getFullYear(), now.getMonth()),
+        attendanceService.getMonthlyStats(userId, n.getFullYear(), n.getMonth()),
         leaveBalanceService.getUserBalance(userId),
         requestsService.getUserRequests(userId),
         auditService.getAuditLogsForTarget(userId),

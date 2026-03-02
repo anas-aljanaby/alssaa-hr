@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import { getAttendanceStatusAr } from '../../data/mockData';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
+import { now } from '@/lib/time';
 import {
   LogIn,
   LogOut,
@@ -23,8 +24,13 @@ export function AttendancePage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
   const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now().getMonth());
+  const [selectedYear, setSelectedYear] = useState(now().getFullYear());
+  const [, setClockTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setClockTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const loadData = useCallback(async () => {
     if (!currentUser) return;
@@ -131,8 +137,7 @@ export function AttendancePage() {
     }
   };
 
-  const now = new Date();
-  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const currentTime = `${String(now().getHours()).padStart(2, '0')}:${String(now().getMinutes()).padStart(2, '0')}`;
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">

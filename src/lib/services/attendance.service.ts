@@ -1,18 +1,19 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables } from '../database.types';
+import { now } from '../time';
 
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
 export type AttendanceStatus = AttendanceLog['status'];
 
-function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export function todayStr(d?: Date): string {
+  const date = d ?? now();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function nowTimeStr(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+export function nowTimeStr(d?: Date): string {
+  const date = d ?? now();
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 export async function getTodayLog(userId: string): Promise<AttendanceLog | null> {

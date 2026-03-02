@@ -15,6 +15,7 @@ import type { AuditLog } from '@/lib/services/audit.service';
 import type { AttendancePolicy } from '@/lib/services/policy.service';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { ReportsSkeleton } from '../../components/skeletons';
+import { now } from '@/lib/time';
 import {
   BarChart3,
   Download,
@@ -66,15 +67,15 @@ function downloadExcel(monthlyReport: MonthlyReportRow[], deptReport: DeptReport
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'تقرير الموظفين');
   XLSX.utils.book_append_sheet(wb, ws2, 'نسبة الأقسام');
-  const now = new Date();
-  const name = `تقرير_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.xlsx`;
+  const n = now();
+  const name = `تقرير_${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}.xlsx`;
   XLSX.writeFile(wb, name);
 }
 
 function downloadPdf(monthlyReport: MonthlyReportRow[], deptReport: DeptReportRow[]) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const now = new Date();
-  const title = `تقرير شهري - ${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const n = now();
+  const title = `تقرير شهري - ${n.getFullYear()}/${String(n.getMonth() + 1).padStart(2, '0')}`;
   doc.setFontSize(14);
   doc.text(title, 14, 16);
 
@@ -102,7 +103,7 @@ function downloadPdf(monthlyReport: MonthlyReportRow[], deptReport: DeptReportRo
     headStyles: { fillColor: [16, 185, 129] },
   });
 
-  doc.save(`تقرير_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.pdf`);
+  doc.save(`تقرير_${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}.pdf`);
 }
 
 const AUDIT_PAGE_SIZE = 15;
@@ -124,7 +125,7 @@ export function ReportsPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const now = new Date();
+      const n = now();
       const [profs, depts, audit, pol] = await Promise.all([
         profilesService.listUsers(),
         departmentsService.listDepartments(),
@@ -141,8 +142,8 @@ export function ReportsPage() {
       for (const user of nonAdmins) {
         const logs = await attendanceService.getMonthlyLogs(
           user.id,
-          now.getFullYear(),
-          now.getMonth()
+          n.getFullYear(),
+          n.getMonth()
         );
         allMonthLogs.push(...logs);
       }

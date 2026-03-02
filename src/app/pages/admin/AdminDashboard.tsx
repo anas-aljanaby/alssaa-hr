@@ -23,6 +23,7 @@ import {
   Activity,
   Shield,
 } from 'lucide-react';
+import { now } from '@/lib/time';
 import {
   BarChart,
   Bar,
@@ -99,7 +100,7 @@ export function AdminDashboard() {
 
   const handleAttendanceEvent = useCallback(
     (event: attendanceService.AttendanceChangeEvent) => {
-      const today = dateStr(new Date());
+      const today = dateStr(now());
       if (event.new.date !== today) return;
       setTodayLogs((prev) => {
         const idx = prev.findIndex((l) => l.id === event.new.id);
@@ -138,7 +139,7 @@ export function AdminDashboard() {
   async function loadData() {
     try {
       setLoading(true);
-      const today = dateStr(new Date());
+      const today = dateStr(now());
       const [profs, depts, logs, pendingReqs] = await Promise.all([
         profilesService.listUsers(),
         departmentsService.listDepartments(),
@@ -152,8 +153,9 @@ export function AdminDashboard() {
 
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
       const weekData: { day: string; logs: AttendanceLog[] }[] = [];
+      const base = now();
       for (let i = 4; i >= 0; i--) {
-        const d = new Date();
+        const d = new Date(base);
         d.setDate(d.getDate() - i);
         const ds = dateStr(d);
         const dayLogs = await attendanceService.getAllLogsForDate(ds);

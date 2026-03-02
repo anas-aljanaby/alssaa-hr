@@ -13,6 +13,8 @@ import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { Department } from '@/lib/services/departments.service';
 import { DashboardSkeleton } from '../../components/skeletons';
 import { PendingRequestsCard } from '../../components/PendingRequestsCard';
+import { todayStr } from '@/lib/services/attendance.service';
+import { now } from '@/lib/time';
 import {
   Users,
   CheckCircle2,
@@ -22,11 +24,6 @@ import {
   AlertTriangle,
   BarChart3,
 } from 'lucide-react';
-
-function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 export function ManagerDashboard() {
   const { currentUser } = useAuth();
@@ -94,7 +91,6 @@ export function ManagerDashboard() {
     try {
       setLoading(true);
       const today = todayStr();
-      const now = new Date();
       const [dept, emps, logs, reqs] = await Promise.all([
         departmentsService.getDepartmentById(currentUser.departmentId),
         profilesService.getDepartmentEmployees(currentUser.departmentId),
@@ -110,8 +106,8 @@ export function ManagerDashboard() {
       for (const emp of emps) {
         const empLogs = await attendanceService.getMonthlyLogs(
           emp.id,
-          now.getFullYear(),
-          now.getMonth()
+          now().getFullYear(),
+          now().getMonth()
         );
         allMonthLogs.push(...empLogs);
       }

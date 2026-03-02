@@ -3,6 +3,9 @@ import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as notificationsService from '@/lib/services/notifications.service';
+import { useDevTime } from './DevTimeContext';
+import { now } from '@/lib/time';
+import { supabase } from '@/lib/supabase';
 
 type AttendanceLog = attendanceService.AttendanceLog;
 type LeaveRequest = requestsService.LeaveRequest;
@@ -20,24 +23,48 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const devTime = useDevTime();
+
   const checkIn = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
     try {
-      const result = await attendanceService.checkIn(userId, coords);
+      let result: AttendanceLog;
+      if (devTime?.isOverrideActive) {
+        const { data, error } = await supabase.functions.invoke('punch', {
+          body: { action: 'check_in', coords, devOverrideTime: now().toISOString() },
+        });
+        if (error) throw new Error(error.message ?? 'Punch failed');
+        if (!data) throw new Error('No data returned');
+        result = data as AttendanceLog;
+      } else {
+        result = await attendanceService.checkIn(userId, coords);
+      }
       toast.success('تم تسجيل الحضور بنجاح');
       return result;
-    } catch (err: any) {
-      toast.error(err.message || 'فشل تسجيل الحضور');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'فشل تسجيل الحضور';
+      toast.error(message);
       throw err;
     }
   };
 
   const checkOut = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
     try {
-      const result = await attendanceService.checkOut(userId, coords);
+      let result: AttendanceLog;
+      if (devTime?.isOverrideActive) {
+        const { data, error } = await supabase.functions.invoke('punch', {
+          body: { action: 'check_out', coords, devOverrideTime: now().toISOString() },
+        });
+        if (error) throw new Error(error.message ?? 'Punch failed');
+        if (!data) throw new Error('No data returned');
+        result = data as AttendanceLog;
+      } else {
+        result = await attendanceService.checkOut(userId, coords);
+      }
       toast.success('تم تسجيل الانصراف بنجاح');
       return result;
-    } catch (err: any) {
-      toast.error(err.message || 'فشل تسجيل الانصراف');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'فشل تسجيل الانصراف';
+      toast.error(message);
       throw err;
     }
   };
