@@ -9,7 +9,7 @@ import React, {
 } from 'react';
 import * as time from '@/lib/time';
 
-const DEV_TIME_STORAGE_KEY = 'devTimeOverride';
+export const DEV_TIME_STORAGE_KEY = 'devTimeOverride';
 
 export type SpeedMultiplier = 1 | 10 | 60;
 

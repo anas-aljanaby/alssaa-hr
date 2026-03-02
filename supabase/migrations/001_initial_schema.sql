@@ -81,6 +81,7 @@ create table public.attendance_logs (
   check_out_lng   float8,
   status          text not null default 'present'
                     check (status in ('present', 'late', 'absent', 'on_leave')),
+  is_dev          boolean not null default false,
   unique (user_id, date)
 );
 
@@ -186,7 +187,8 @@ create index idx_profiles_status        on public.profiles       (status);
 create index idx_attendance_org         on public.attendance_logs (org_id);
 create index idx_attendance_user_date   on public.attendance_logs (user_id, date desc);
 create index idx_attendance_date        on public.attendance_logs (date);
-create index idx_attendance_status      on public.attendance_logs (status);
+create index idx_attendance_status     on public.attendance_logs (status);
+create index idx_attendance_logs_is_dev_user on public.attendance_logs (user_id, is_dev) where is_dev = true;
 
 create index idx_leave_req_org          on public.leave_requests (org_id);
 create index idx_leave_req_user         on public.leave_requests (user_id);

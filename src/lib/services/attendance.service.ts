@@ -118,7 +118,7 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
 
 export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
   const [logRes, policy] = await Promise.all([
-    supabase.from('attendance_logs').select('*').eq('user_id', userId).eq('date', date).maybeSingle(),
+    supabase.from('attendance_logs').select('*').eq('user_id', userId).eq('date', date).eq('is_dev', false).maybeSingle(),
     supabase.from('attendance_policy').select('work_start_time, work_end_time, grace_period_minutes').limit(1).maybeSingle(),
   ]);
 
@@ -191,6 +191,7 @@ export async function getTodayLog(userId: string): Promise<AttendanceLog | null>
     .select('*')
     .eq('user_id', userId)
     .eq('date', todayStr())
+    .eq('is_dev', false)
     .maybeSingle();
 
   if (error) throw error;
@@ -264,7 +265,6 @@ export async function checkOut(
   userId: string,
   coords?: { lat: number; lng: number }
 ): Promise<AttendanceLog> {
-  const today = todayStr();
   const time = nowTimeStr();
 
   const existing = await getTodayLog(userId);
@@ -299,6 +299,7 @@ export async function getLogsInRange(
     .from('attendance_logs')
     .select('*')
     .eq('user_id', userId)
+    .eq('is_dev', false)
     .gte('date', fromDate)
     .lte('date', toDate)
     .order('date', { ascending: false });
@@ -362,6 +363,7 @@ export async function getDepartmentLogsForDate(
     .select('*')
     .in('user_id', userIds)
     .eq('date', date)
+    .eq('is_dev', false)
     .order('check_in_time');
 
   if (error) throw error;
@@ -373,6 +375,7 @@ export async function getAllLogsForDate(date: string): Promise<AttendanceLog[]> 
     .from('attendance_logs')
     .select('*')
     .eq('date', date)
+    .eq('is_dev', false)
     .order('check_in_time');
 
   if (error) throw error;

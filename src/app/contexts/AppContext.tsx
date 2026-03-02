@@ -4,7 +4,6 @@ import * as attendanceService from '@/lib/services/attendance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as notificationsService from '@/lib/services/notifications.service';
 import { useDevTime } from './DevTimeContext';
-import { now } from '@/lib/time';
 import { supabase } from '@/lib/supabase';
 
 type AttendanceLog = attendanceService.AttendanceLog;
@@ -28,16 +27,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const checkIn = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
     try {
       let result: AttendanceLog;
-      if (devTime?.isOverrideActive) {
+      if (devTime?.isOverrideActive && devTime.override) {
         try {
-          const { data, error } = await supabase.functions.invoke('punch', {
-            body: { action: 'check_in', coords, devOverrideTime: now().toISOString() },
+          const { date, time } = devTime.override;
+          const { data, error } = await supabase.rpc('punch', {
+            p_action: 'check_in',
+            p_lat: coords?.lat ?? null,
+            p_lng: coords?.lng ?? null,
+            p_dev_override_time: `${date}T${time}:00.000Z`,
           });
           if (error) throw new Error(error.message ?? 'Punch failed');
           if (!data) throw new Error('No data returned');
           result = data as AttendanceLog;
         } catch (fnErr) {
-          // Fallback when punch Edge Function is not deployed (404) or CORS/network fails
           toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
           result = await attendanceService.checkIn(userId, coords);
         }
@@ -56,16 +58,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const checkOut = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
     try {
       let result: AttendanceLog;
-      if (devTime?.isOverrideActive) {
+      if (devTime?.isOverrideActive && devTime.override) {
         try {
-          const { data, error } = await supabase.functions.invoke('punch', {
-            body: { action: 'check_out', coords, devOverrideTime: now().toISOString() },
+          const { date, time } = devTime.override;
+          const { data, error } = await supabase.rpc('punch', {
+            p_action: 'check_out',
+            p_lat: coords?.lat ?? null,
+            p_lng: coords?.lng ?? null,
+            p_dev_override_time: `${date}T${time}:00.000Z`,
           });
           if (error) throw new Error(error.message ?? 'Punch failed');
           if (!data) throw new Error('No data returned');
           result = data as AttendanceLog;
         } catch (fnErr) {
-          // Fallback when punch Edge Function is not deployed (404) or CORS/network fails
           toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
           result = await attendanceService.checkOut(userId, coords);
         }

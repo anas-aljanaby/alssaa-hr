@@ -493,12 +493,39 @@ The system uses org-based tenancy. Every HR table has an `org_id` column and RLS
 
 Demo account emails and password are listed in **`docs/DEMO_CREDENTIALS.md`**. That file is gitignored and not committed; create or copy it locally for your team (see the table in that file for Account / Role / Dept).
 
-### 7.3 Seeding Demo Data
+### 7.3 Punch (SQL) and Edge Functions
 
-Deploy and invoke the `seed-demo` Edge Function:
+**Punch (check-in / check-out)** is implemented in SQL and does not require an Edge Function. Run the migrations (including `005_punch_function.sql`); the app calls `supabase.rpc('punch', { ... })` for punch-in/out, including when Dev Time Override is active. No CORS or function deployment is needed for punch.
+
+**Other app features** use Edge Functions. Deploy them after linking your project:
 
 ```bash
-# Deploy edge functions
+supabase link --project-ref <your-project-ref>
+pnpm run deploy:functions
+# Or manually:
+supabase functions deploy invite-user
+supabase functions deploy dev-seed-attendance
+```
+
+| Function | Purpose |
+| -------- | ------- |
+| **invite-user** | Invite new users (admin). |
+| **dev-seed-attendance** | Seed one month of attendance for the current user (dev only; returns 403 in production). |
+
+For **production**, set the `ENVIRONMENT` secret so dev-only Edge Functions are disabled:
+
+```bash
+supabase secrets set ENVIRONMENT=production
+```
+
+Supabase injects `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` automatically; no extra env vars are required for basic behavior.
+
+### 7.4 Seeding Demo Data
+
+Deploy and invoke the `seed-demo` Edge Function (if present in your project):
+
+```bash
+# Deploy demo edge functions (when available)
 supabase functions deploy seed-demo
 supabase functions deploy reset-demo
 
@@ -512,7 +539,7 @@ curl -X POST \
   -H "Content-Type: application/json"
 ```
 
-### 7.4 Resetting Demo Data
+### 7.5 Resetting Demo Data
 
 The `reset-demo` function deletes all demo org data and auth users, then re-seeds:
 
@@ -525,7 +552,7 @@ curl -X POST \
 
 This completes in under 1 minute and restores the baseline demo dataset.
 
-### 7.5 How Org Isolation Works
+### 7.6 How Org Isolation Works
 
 - **RLS policies**: Every SELECT/INSERT/UPDATE policy includes `org_id = current_user_org_id()`.
 - **Enforcement triggers**: On INSERT, the `enforce_org_id_from_user` trigger auto-populates `org_id` from the user's profile and rejects mismatches.

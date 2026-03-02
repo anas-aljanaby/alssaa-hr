@@ -156,6 +156,7 @@ export interface Database {
           check_out_lat: number | null;
           check_out_lng: number | null;
           status: 'present' | 'late' | 'absent' | 'on_leave';
+          is_dev: boolean;
         };
         Insert: {
           id?: string;
@@ -169,6 +170,7 @@ export interface Database {
           check_out_lat?: number | null;
           check_out_lng?: number | null;
           status?: 'present' | 'late' | 'absent' | 'on_leave';
+          is_dev?: boolean;
         };
         Update: {
           id?: string;
@@ -182,6 +184,7 @@ export interface Database {
           check_out_lat?: number | null;
           check_out_lng?: number | null;
           status?: 'present' | 'late' | 'absent' | 'on_leave';
+          is_dev?: boolean;
         };
         Relationships: [
           {

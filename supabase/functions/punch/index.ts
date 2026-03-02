@@ -138,6 +138,8 @@ Deno.serve(async (req) => {
         if (nowMinutes > startMinutes) status = 'late';
       }
 
+      const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
+
       if (existing) {
         const { data: updated, error } = await admin
           .from('attendance_logs')
@@ -146,6 +148,7 @@ Deno.serve(async (req) => {
             check_in_lat: coords?.lat ?? null,
             check_in_lng: coords?.lng ?? null,
             status,
+            is_dev: isDev,
           })
           .eq('id', existing.id)
           .select()
@@ -173,6 +176,7 @@ Deno.serve(async (req) => {
           check_in_lat: coords?.lat ?? null,
           check_in_lng: coords?.lng ?? null,
           status,
+          is_dev: isDev,
         })
         .select()
         .single();
@@ -203,12 +207,15 @@ Deno.serve(async (req) => {
       );
     }
 
+    const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
+
     const { data: updated, error } = await admin
       .from('attendance_logs')
       .update({
         check_out_time: time,
         check_out_lat: coords?.lat ?? null,
         check_out_lng: coords?.lng ?? null,
+        is_dev: isDev,
       })
       .eq('id', existing.id)
       .select()
