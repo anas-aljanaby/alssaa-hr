@@ -3,274 +3,212 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
-import type { TodayRecord, MonthlySummary } from '@/lib/services/attendance.service';
+import type { TodayRecord, MonthDaySummary } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { TodayPunchLog } from '../../components/attendance/TodayPunchLog';
-import { MonthlyCalendar } from '../../components/attendance/MonthlyCalendar';
+import { MonthCalendarHeatmap } from '../../components/attendance/MonthCalendarHeatmap';
 import { DayDetailsSheet } from '../../components/attendance/DayDetailsSheet';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from '../../components/ui/alert-dialog';
+
+const COOLDOWN_SECONDS = 60;
 
 export function AttendancePage() {
   const { currentUser } = useAuth();
   const { checkIn, checkOut } = useApp();
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [todayRecord, setTodayRecord] = useState<TodayRecord | null>(null);
-  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary[]>([]);
+
+  const [today, setToday] = useState<TodayRecord>({ log: null, punches: [], shift: null });
+  const [todayLoading, setTodayLoading] = useState(true);
+
   const [selectedMonth, setSelectedMonth] = useState(now().getMonth());
   const [selectedYear, setSelectedYear] = useState(now().getFullYear());
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [showDaySheet, setShowDaySheet] = useState(false);
-  const [showOvertimeConfirm, setShowOvertimeConfirm] = useState(false);
-  const [showEarlyCheckoutConfirm, setShowEarlyCheckoutConfirm] = useState(false);
-  const cooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [actionDisabledUntil, setActionDisabledUntil] = useState<number | null>(null);
+  const [monthlySummaries, setMonthlySummaries] = useState<MonthDaySummary[]>([]);
+  const [monthlyLoading, setMonthlyLoading] = useState(true);
 
-  const loadData = useCallback(async () => {
+  const [actionLoading, setActionLoading] = useState(false);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const loadToday = useCallback(async () => {
     if (!currentUser) return;
     try {
-      setLoading(true);
-      const [today, monthly] = await Promise.all([
-        attendanceService.getAttendanceToday(currentUser.uid),
-        attendanceService.getAttendanceMonthlyWithSummary(currentUser.uid, selectedYear, selectedMonth),
-      ]);
-      setTodayRecord(today);
-      setMonthlySummary(monthly);
+      const record = await attendanceService.getAttendanceToday(currentUser.uid);
+      setToday(record);
     } catch {
       toast.error('فشل تحميل بيانات الحضور');
     } finally {
-      setLoading(false);
+      setTodayLoading(false);
     }
-  }, [currentUser?.uid, selectedMonth, selectedYear]);
+  }, [currentUser?.uid]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const loadMonthly = useCallback(async () => {
+    if (!currentUser) return;
+    setMonthlyLoading(true);
+    try {
+      const summaries = await attendanceService.getAttendanceMonthly(currentUser.uid, selectedYear, selectedMonth);
+      setMonthlySummaries(summaries);
+    } catch {
+      // Non-critical, silently fail
+    } finally {
+      setMonthlyLoading(false);
+    }
+  }, [currentUser?.uid, selectedYear, selectedMonth]);
 
-  // Handle visibility changes to refresh data
+  // Initial load — today and monthly in parallel
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        loadData();
+    if (!currentUser) return;
+    setTodayLoading(true);
+    Promise.all([loadToday(), loadMonthly()]);
+  }, [loadToday, loadMonthly]);
+
+  // Visibility refresh
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && currentUser) {
+        loadToday();
+        loadMonthly();
       }
     };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [loadToday, loadMonthly, currentUser]);
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [loadData]);
-
-  // Cooldown timer
-  useEffect(() => {
-    if (actionDisabledUntil === null) return;
-
-    const timer = setInterval(() => {
-      setActionDisabledUntil((prev) => {
-        if (prev === null || Date.now() >= prev) {
-          clearInterval(timer);
-          return null;
+  const startCooldown = () => {
+    setCooldownLeft(COOLDOWN_SECONDS);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setCooldownLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!);
+          cooldownRef.current = null;
+          return 0;
         }
-        return prev;
+        return prev - 1;
       });
-    }, 100);
+    }, 1000);
+  };
 
-    return () => clearInterval(timer);
-  }, [actionDisabledUntil]);
-
-  if (!currentUser) return null;
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
 
   const getCoords = (): Promise<{ lat: number; lng: number } | undefined> =>
     new Promise((resolve) => {
       if (!navigator.geolocation) return resolve(undefined);
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {
-          toast.warning('تعذر الحصول على موقعك، سيتم التسجيل بدونه');
-          resolve(undefined);
-        },
+        () => resolve(undefined),
         { timeout: 5000 }
       );
     });
 
-  const isButtonDisabled = actionLoading || (actionDisabledUntil !== null && Date.now() < actionDisabledUntil);
-
-  const handleCheckIn = async (skipConfirm = false) => {
-    if (isButtonDisabled) return;
-
-    const [endH, endM] = (todayRecord?.shiftEnd ?? '16:00').split(':').map(Number);
-    const shiftEndMinutes = endH * 60 + endM;
-    const nowMinutes = now().getHours() * 60 + now().getMinutes();
-    const wouldBeOvertime = nowMinutes > shiftEndMinutes;
-
-    if (wouldBeOvertime && !skipConfirm) {
-      setShowOvertimeConfirm(true);
-      return;
-    }
-
+  const handleCheckIn = async () => {
+    if (!currentUser || actionLoading || cooldownLeft > 0) return;
     setActionLoading(true);
     try {
       const coords = await getCoords();
       const result = await checkIn(currentUser.uid, coords);
+      if (navigator.vibrate) navigator.vibrate(100);
+      startCooldown();
       const updated = await attendanceService.getAttendanceToday(currentUser.uid);
-      setTodayRecord(updated);
-      setActionDisabledUntil(Date.now() + 60000); // 60 second cooldown
-      setShowOvertimeConfirm(false);
+      setToday({ ...updated, log: result });
+      loadMonthly();
     } catch {
-      /* toast handled by context */
+      // toast handled by context
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleCheckOut = async (skipConfirm = false) => {
-    if (isButtonDisabled) return;
-
-    const [endH, endM] = (todayRecord?.shiftEnd ?? '16:00').split(':').map(Number);
-    const shiftEndMinutes = endH * 60 + endM;
-    const nowMinutes = now().getHours() * 60 + now().getMinutes();
-    const earlyCheckout = nowMinutes < shiftEndMinutes - 60;
-
-    if (earlyCheckout && !skipConfirm) {
-      setShowEarlyCheckoutConfirm(true);
-      return;
-    }
-
+  const handleCheckOut = async () => {
+    if (!currentUser || actionLoading || cooldownLeft > 0) return;
     setActionLoading(true);
     try {
       const coords = await getCoords();
       const result = await checkOut(currentUser.uid, coords);
+      if (navigator.vibrate) navigator.vibrate(100);
+      startCooldown();
       const updated = await attendanceService.getAttendanceToday(currentUser.uid);
-      setTodayRecord(updated);
-      setActionDisabledUntil(Date.now() + 60000); // 60 second cooldown
-      setShowEarlyCheckoutConfirm(false);
-      
-      // Optional vibration feedback
-      if (navigator.vibrate) {
-        navigator.vibrate([50, 30, 50]);
-      }
+      setToday({ ...updated, log: result });
+      loadMonthly();
     } catch {
-      /* toast handled by context */
+      // toast handled by context
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleDayTap = (date: string) => {
-    setSelectedDay(date);
-    setShowDaySheet(true);
+  const prevMonth = () => {
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear((y) => y - 1);
+    } else {
+      setSelectedMonth((m) => m - 1);
+    }
   };
 
-  const cooldownRemaining = actionDisabledUntil ? Math.max(0, Math.ceil((actionDisabledUntil - Date.now()) / 1000)) : 0;
+  const nextMonth = () => {
+    const currentNow = now();
+    const isAtCurrentMonth =
+      selectedYear === currentNow.getFullYear() && selectedMonth === currentNow.getMonth();
+    if (isAtCurrentMonth) return;
+
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear((y) => y + 1);
+    } else {
+      setSelectedMonth((m) => m + 1);
+    }
+  };
+
+  if (!currentUser) return null;
+
+  const isCheckedIn = !!(today.log?.check_in_time && !today.log?.check_out_time);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4" dir="rtl">
-      <div className="max-w-lg mx-auto space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between pt-2">
-          <h1 className="text-xl font-semibold text-gray-800">الحضور والانصراف</h1>
-        </div>
+    <div className="p-4 max-w-lg mx-auto space-y-4 pb-24">
+      <h1 className="text-gray-800 font-semibold text-lg">الحضور والانصراف</h1>
 
-        {/* Loading State */}
-        {loading ? (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 h-80 animate-pulse" />
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 h-32 animate-pulse" />
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 h-64 animate-pulse" />
-          </div>
-        ) : todayRecord ? (
-          <>
-            {/* Section 1: Today's Status Card */}
-            <TodayStatusCard
-              record={todayRecord}
-              onCheckIn={() => handleCheckIn()}
-              onCheckOut={() => handleCheckOut()}
-              isLoading={isButtonDisabled}
-              onShowOvertime={() => setShowOvertimeConfirm(true)}
-              onShowEarlyCheckout={() => setShowEarlyCheckoutConfirm(true)}
-            />
-
-            {/* Cooldown Message */}
-            {cooldownRemaining > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center text-sm text-blue-700">
-                يرجى الانتظار {cooldownRemaining} ثانية قبل المحاولة مجدداً
-              </div>
-            )}
-
-            {/* Section 2: Today's Punch Log */}
-            <TodayPunchLog
-              punches={todayRecord.punches}
-              isCheckedIn={todayRecord.isCheckedIn}
-            />
-
-            {/* Section 3: Monthly Calendar */}
-            <MonthlyCalendar
-              year={selectedYear}
-              month={selectedMonth}
-              data={monthlySummary}
-              onMonthChange={(y, m) => {
-                setSelectedYear(y);
-                setSelectedMonth(m);
-              }}
-              onDayTap={handleDayTap}
-            />
-          </>
-        ) : (
-          <div className="bg-white rounded-2xl p-6 border border-gray-100 text-center text-gray-500">
-            فشل تحميل البيانات
-          </div>
-        )}
-      </div>
-
-      {/* Confirmation Dialogs */}
-      <AlertDialog open={showOvertimeConfirm} onOpenChange={setShowOvertimeConfirm}>
-        <AlertDialogContent dir="rtl">
-          <AlertDialogTitle>تحذير: عمل إضافي</AlertDialogTitle>
-          <AlertDialogDescription>
-            أنت خارج ساعات الدوام. سيتم تسجيل هذا كعمل إضافي. هل تريد المتابعة؟
-          </AlertDialogDescription>
-          <div className="flex gap-3 flex-row-reverse">
-            <AlertDialogAction onClick={() => handleCheckIn(true)}>
-              نعم، تابع
-            </AlertDialogAction>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showEarlyCheckoutConfirm} onOpenChange={setShowEarlyCheckoutConfirm}>
-        <AlertDialogContent dir="rtl">
-          <AlertDialogTitle>تحذير: انصراف مبكر</AlertDialogTitle>
-          <AlertDialogDescription>
-            أنت تغادر قبل نهاية الدوام بأكثر من ساعة. هل تريد المتابعة؟
-          </AlertDialogDescription>
-          <div className="flex gap-3 flex-row-reverse">
-            <AlertDialogAction onClick={() => handleCheckOut(true)}>
-              نعم، تابع
-            </AlertDialogAction>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Day Details Sheet */}
-      {selectedDay && (
-        <DayDetailsSheet
-          userId={currentUser.uid}
-          date={selectedDay}
-          isOpen={showDaySheet}
-          onClose={() => {
-            setShowDaySheet(false);
-            setSelectedDay(null);
-          }}
+      {/* Section 1: Today's Status Card */}
+      {todayLoading ? (
+        <div className="bg-gray-100 rounded-2xl h-64 animate-pulse" />
+      ) : (
+        <TodayStatusCard
+          today={today}
+          actionLoading={actionLoading}
+          cooldownSecondsLeft={cooldownLeft}
+          onCheckIn={handleCheckIn}
+          onCheckOut={handleCheckOut}
         />
       )}
+
+      {/* Section 2: Today's Punch Log */}
+      {todayLoading ? (
+        <div className="bg-gray-100 rounded-2xl h-28 animate-pulse" />
+      ) : (
+        <TodayPunchLog punches={today.punches} isCheckedIn={isCheckedIn} />
+      )}
+
+      {/* Section 3: Monthly Calendar Heatmap */}
+      <MonthCalendarHeatmap
+        year={selectedYear}
+        month={selectedMonth}
+        summaries={monthlySummaries}
+        loading={monthlyLoading}
+        onPrevMonth={prevMonth}
+        onNextMonth={nextMonth}
+        onDayTap={setSelectedDay}
+      />
+
+      {/* Day Details Bottom Sheet */}
+      <DayDetailsSheet
+        userId={currentUser.uid}
+        date={selectedDay}
+        onClose={() => setSelectedDay(null)}
+      />
     </div>
   );
 }

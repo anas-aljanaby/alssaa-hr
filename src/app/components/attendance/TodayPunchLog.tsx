@@ -1,80 +1,90 @@
 import React from 'react';
-import { LogIn, LogOut } from 'lucide-react';
+import { LogIn, LogOut, Clock } from 'lucide-react';
 import type { PunchEntry } from '@/lib/services/attendance.service';
 
-interface TodayPunchLogProps {
+interface Props {
   punches: PunchEntry[];
   isCheckedIn: boolean;
 }
 
-export function TodayPunchLog({ punches, isCheckedIn }: TodayPunchLogProps) {
-  if (punches.length === 0 && !isCheckedIn) {
-    return (
-      <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-center" dir="rtl">
-        <p className="text-gray-400">لا يوجد تسجيلات لهذا اليوم</p>
-      </div>
-    );
-  }
+function formatTime(t: string): string {
+  return t.slice(0, 5);
+}
 
+export function TodayPunchLog({ punches, isCheckedIn }: Props) {
   return (
-    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm" dir="rtl">
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">سجل اليوم</h2>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <h2 className="text-sm font-semibold text-gray-700 mb-3">سجل اليوم</h2>
 
-      <div className="space-y-3">
-        {punches.map((punch, index) => (
-          <div
-            key={punch.id}
-            className="flex items-center gap-4 pb-3"
-            style={{
-              borderBottom: index < punches.length - 1 || isCheckedIn ? '1px solid #e5e7eb' : 'none',
-            }}
-          >
-            {/* Arrow Icon */}
-            <div className="flex-shrink-0 text-gray-400">
-              {punch.type === 'clock_in' ? (
-                <LogIn className="w-5 h-5" />
-              ) : (
-                <LogOut className="w-5 h-5" />
-              )}
-            </div>
+      {punches.length === 0 && !isCheckedIn ? (
+        <div className="text-center py-6 text-gray-400">
+          <Clock className="w-8 h-8 mx-auto mb-1.5 opacity-40" />
+          <p className="text-sm">لا يوجد تسجيلات لهذا اليوم</p>
+        </div>
+      ) : (
+        <div className="space-y-0">
+          {punches.map((punch, i) => (
+            <PunchRow key={punch.id} punch={punch} isLast={i === punches.length - 1 && !isCheckedIn} />
+          ))}
+          {isCheckedIn && (
+            <PendingPunchRow />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-            {/* Time */}
-            <div className="font-tabular-nums font-semibold text-gray-800 w-16">
-              {punch.timestamp}
-            </div>
-
-            {/* Label */}
-            <div className="flex-1">
-              <p className="text-sm text-gray-600">
-                {punch.type === 'clock_in' ? '→ تسجيل حضور' : '← تسجيل انصراف'}
-              </p>
-            </div>
-
-            {/* Overtime Tag */}
-            {punch.isOvertime && (
-              <div className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
-                عمل إضافي
-              </div>
-            )}
+function PunchRow({ punch, isLast }: { punch: PunchEntry; isLast: boolean }) {
+  const isIn = punch.type === 'clock_in';
+  return (
+    <div className="flex items-start gap-3 relative">
+      {/* Timeline line */}
+      {!isLast && (
+        <div className="absolute right-[19px] top-7 bottom-0 w-0.5 bg-gray-100" />
+      )}
+      {/* Icon */}
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${
+        isIn ? 'bg-emerald-100' : 'bg-rose-100'
+      }`}>
+        {isIn
+          ? <LogIn className="w-4 h-4 text-emerald-600" />
+          : <LogOut className="w-4 h-4 text-rose-500" />
+        }
+      </div>
+      {/* Content */}
+      <div className="flex-1 pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-800">
+              {formatTime(punch.timestamp)}
+            </span>
+            <span className="text-xs text-gray-500">
+              {isIn ? '← تسجيل حضور' : '→ تسجيل انصراف'}
+            </span>
           </div>
-        ))}
+          {punch.isOvertime && (
+            <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+              عمل إضافي
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Pending Checkout Row */}
-        {isCheckedIn && punches.some((p) => p.type === 'clock_in') && !punches.some((p) => p.type === 'clock_out') && (
-          <div className="flex items-center gap-4 pt-2 border-t border-gray-200">
-            <div className="flex-shrink-0 text-gray-300">
-              <LogOut className="w-5 h-5" />
-            </div>
-
-            <div className="font-tabular-nums text-gray-400 w-16">
-              --:--
-            </div>
-
-            <div className="flex-1">
-              <p className="text-sm text-gray-400">← تسجيل انصراف (قيد الانتظار)</p>
-            </div>
-          </div>
-        )}
+function PendingPunchRow() {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-100 animate-pulse">
+        <LogOut className="w-4 h-4 text-gray-400" />
+      </div>
+      <div className="flex-1 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-400 tabular-nums">--:--</span>
+          <span className="text-xs text-gray-400">→ تسجيل انصراف (قيد الانتظار)</span>
+        </div>
       </div>
     </div>
   );

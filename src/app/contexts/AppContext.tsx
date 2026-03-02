@@ -29,12 +29,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       let result: AttendanceLog;
       if (devTime?.isOverrideActive) {
-        const { data, error } = await supabase.functions.invoke('punch', {
-          body: { action: 'check_in', coords, devOverrideTime: now().toISOString() },
-        });
-        if (error) throw new Error(error.message ?? 'Punch failed');
-        if (!data) throw new Error('No data returned');
-        result = data as AttendanceLog;
+        try {
+          const { data, error } = await supabase.functions.invoke('punch', {
+            body: { action: 'check_in', coords, devOverrideTime: now().toISOString() },
+          });
+          if (error) throw new Error(error.message ?? 'Punch failed');
+          if (!data) throw new Error('No data returned');
+          result = data as AttendanceLog;
+        } catch (fnErr) {
+          // Fallback when punch Edge Function is not deployed (404) or CORS/network fails
+          toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
+          result = await attendanceService.checkIn(userId, coords);
+        }
       } else {
         result = await attendanceService.checkIn(userId, coords);
       }
@@ -51,12 +57,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       let result: AttendanceLog;
       if (devTime?.isOverrideActive) {
-        const { data, error } = await supabase.functions.invoke('punch', {
-          body: { action: 'check_out', coords, devOverrideTime: now().toISOString() },
-        });
-        if (error) throw new Error(error.message ?? 'Punch failed');
-        if (!data) throw new Error('No data returned');
-        result = data as AttendanceLog;
+        try {
+          const { data, error } = await supabase.functions.invoke('punch', {
+            body: { action: 'check_out', coords, devOverrideTime: now().toISOString() },
+          });
+          if (error) throw new Error(error.message ?? 'Punch failed');
+          if (!data) throw new Error('No data returned');
+          result = data as AttendanceLog;
+        } catch (fnErr) {
+          // Fallback when punch Edge Function is not deployed (404) or CORS/network fails
+          toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
+          result = await attendanceService.checkOut(userId, coords);
+        }
       } else {
         result = await attendanceService.checkOut(userId, coords);
       }

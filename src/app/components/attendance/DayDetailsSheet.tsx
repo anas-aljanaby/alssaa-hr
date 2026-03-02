@@ -1,188 +1,165 @@
-import React, { useState, useEffect } from 'react';
-import { X, Loader2, LogIn, LogOut } from 'lucide-react';
-import * as attendanceService from '@/lib/services/attendance.service';
-import type { DayRecord } from '@/lib/services/attendance.service';
+import React, { useEffect, useState } from 'react';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/app/components/ui/drawer';
+import { LogIn, LogOut, Clock } from 'lucide-react';
+import type { DayRecord, PunchEntry } from '@/lib/services/attendance.service';
+import { getAttendanceDay } from '@/lib/services/attendance.service';
 
-interface DayDetailsSheetProps {
+interface Props {
   userId: string;
-  date: string;
-  isOpen: boolean;
+  date: string | null;
   onClose: () => void;
 }
 
-export function DayDetailsSheet({
-  userId,
-  date,
-  isOpen,
-  onClose,
-}: DayDetailsSheetProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [record, setRecord] = useState<DayRecord | null>(null);
+const STATUS_LABELS: Record<string, string> = {
+  present: 'حاضر',
+  late: 'متأخر',
+  absent: 'غائب',
+  on_leave: 'إجازة',
+};
 
-  useEffect(() => {
-    if (!isOpen) {
-      setRecord(null);
-      setError(null);
-      return;
-    }
+const STATUS_COLORS: Record<string, string> = {
+  present: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  late: 'bg-amber-100 text-amber-700 border-amber-200',
+  absent: 'bg-red-100 text-red-700 border-red-200',
+  on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
+};
 
-    const loadDay = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await attendanceService.getAttendanceDay(userId, date);
-        setRecord(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'فشل تحميل التفاصيل');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDay();
-  }, [isOpen, userId, date]);
-
-  if (!isOpen) return null;
-
-  const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('ar-IQ', {
+function formatDateAr(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('ar-IQ', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
+}
 
+function formatTime(t: string): string {
+  return t.slice(0, 5);
+}
+
+function PunchRow({ punch, isLast }: { punch: PunchEntry; isLast: boolean }) {
+  const isIn = punch.type === 'clock_in';
   return (
-    <>
-      {/* Overlay */}
-      <div
-        className="fixed inset-0 bg-black/40 z-40 transition-opacity"
-        onClick={onClose}
-      />
-
-      {/* Sheet */}
-      <div
-        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-lg z-50 max-h-[80vh] overflow-y-auto animate-in slide-in-from-bottom"
-        dir="rtl"
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-800">{displayDate}</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-4 space-y-4">
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-              <p className="text-gray-500 text-sm mt-2">جاري التحميل...</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-
-          {record && (
-            <div className="space-y-4">
-              {/* Shift Info */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-2">الدوام</p>
-                <p className="text-gray-800 font-semibold">
-                  {record.shiftStart} — {record.shiftEnd}
-                </p>
-              </div>
-
-              {/* Status Badge */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-2">الحالة</p>
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-3 h-3 rounded-full ${
-                      record.log.status === 'present'
-                        ? 'bg-emerald-500'
-                        : record.log.status === 'late'
-                          ? 'bg-amber-500'
-                          : record.log.status === 'absent'
-                            ? 'bg-red-500'
-                            : 'bg-blue-500'
-                    }`}
-                  />
-                  <p className="text-gray-800">
-                    {record.log.status === 'present'
-                      ? 'حاضر'
-                      : record.log.status === 'late'
-                        ? 'متأخر'
-                        : record.log.status === 'absent'
-                          ? 'غائب'
-                          : 'في إجازة'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Total Hours */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-2">إجمالي الساعات</p>
-                <p className="text-gray-800 font-semibold text-lg">
-                  {record.totalHoursWorked.toFixed(1)} ساعة
-                </p>
-              </div>
-
-              {/* Punch Log */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-gray-800">سجل التسجيلات</h3>
-                {record.punches.length === 0 ? (
-                  <p className="text-gray-400 text-sm">لا يوجد تسجيلات</p>
-                ) : (
-                  <div className="space-y-2">
-                    {record.punches.map((punch, index) => (
-                      <div
-                        key={punch.id}
-                        className="flex items-center gap-4 pb-2"
-                        style={{
-                          borderBottom: index < record.punches.length - 1 ? '1px solid #e5e7eb' : 'none',
-                        }}
-                      >
-                        <div className="flex-shrink-0 text-gray-400">
-                          {punch.type === 'clock_in' ? (
-                            <LogIn className="w-5 h-5" />
-                          ) : (
-                            <LogOut className="w-5 h-5" />
-                          )}
-                        </div>
-
-                        <div className="font-tabular-nums font-semibold text-gray-800 w-16">
-                          {punch.timestamp}
-                        </div>
-
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-600">
-                            {punch.type === 'clock_in' ? 'تسجيل حضور' : 'تسجيل انصراف'}
-                          </p>
-                        </div>
-
-                        {punch.isOvertime && (
-                          <div className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
-                            عمل إضافي
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+    <div className="flex items-start gap-3 relative">
+      {!isLast && (
+        <div className="absolute right-[19px] top-7 bottom-0 w-0.5 bg-gray-100" />
+      )}
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${
+        isIn ? 'bg-emerald-100' : 'bg-rose-100'
+      }`}>
+        {isIn
+          ? <LogIn className="w-4 h-4 text-emerald-600" />
+          : <LogOut className="w-4 h-4 text-rose-500" />
+        }
+      </div>
+      <div className="flex-1 pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-800">
+              {formatTime(punch.timestamp)}
+            </span>
+            <span className="text-xs text-gray-500">
+              {isIn ? '← تسجيل حضور' : '→ تسجيل انصراف'}
+            </span>
+          </div>
+          {punch.isOvertime && (
+            <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+              عمل إضافي
+            </span>
           )}
         </div>
       </div>
-    </>
+    </div>
+  );
+}
+
+export function DayDetailsSheet({ userId, date, onClose }: Props) {
+  const [record, setRecord] = useState<DayRecord | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!date) return;
+    setRecord(null);
+    setLoading(true);
+    getAttendanceDay(userId, date)
+      .then(setRecord)
+      .catch(() => setRecord(null))
+      .finally(() => setLoading(false));
+  }, [userId, date]);
+
+  const open = !!date;
+
+  return (
+    <Drawer open={open} onOpenChange={(o) => { if (!o) onClose(); }} direction="bottom">
+      <DrawerContent className="max-h-[85vh] overflow-y-auto">
+        <DrawerHeader className="pb-2">
+          <DrawerTitle className="text-base text-right">
+            {date ? formatDateAr(date) : ''}
+          </DrawerTitle>
+        </DrawerHeader>
+
+        <div className="px-4 pb-8">
+          {loading ? (
+            <div className="space-y-3 animate-pulse">
+              <div className="h-5 bg-gray-100 rounded w-1/2" />
+              <div className="h-4 bg-gray-100 rounded w-1/3" />
+              <div className="h-12 bg-gray-100 rounded" />
+              <div className="h-12 bg-gray-100 rounded" />
+            </div>
+          ) : record ? (
+            <>
+              {/* Shift */}
+              {record.shift && (
+                <p className="text-sm text-gray-500 mb-3">
+                  الدوام: {formatTime(record.shift.workStartTime)} — {formatTime(record.shift.workEndTime)}
+                </p>
+              )}
+
+              {/* Status + total hours */}
+              <div className="flex items-center gap-3 mb-4">
+                {record.log?.status && (
+                  <span className={`px-2.5 py-1 text-xs rounded-full border ${STATUS_COLORS[record.log.status] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                    {STATUS_LABELS[record.log.status] ?? record.log.status}
+                  </span>
+                )}
+                {record.totalMinutesWorked > 0 && (
+                  <span className="text-sm text-gray-600">
+                    إجمالي العمل: <span className="font-semibold">{Math.floor(record.totalMinutesWorked / 60)}س {record.totalMinutesWorked % 60}د</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Punch log */}
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">سجل الحضور</h3>
+              {record.punches.length === 0 ? (
+                <div className="text-center py-6 text-gray-400">
+                  <Clock className="w-8 h-8 mx-auto mb-1.5 opacity-40" />
+                  <p className="text-sm">لا توجد بيانات لهذا اليوم</p>
+                </div>
+              ) : (
+                <div>
+                  {record.punches.map((punch, i) => (
+                    <PunchRow
+                      key={punch.id}
+                      punch={punch}
+                      isLast={i === record.punches.length - 1}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-6 text-gray-400">
+              <p className="text-sm">تعذر تحميل البيانات</p>
+            </div>
+          )}
+        </div>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -5,45 +5,174 @@ import { now } from '../time';
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
 export type AttendanceStatus = AttendanceLog['status'];
-export type AttendancePolicy = Tables<'attendance_policy'>;
 
-// Punch entry from a session
+export type PunchType = 'clock_in' | 'clock_out';
+
 export interface PunchEntry {
-  id: string; // Derived ID (log_id + '_in' or '_out')
-  timestamp: string; // HH:mm time string
-  type: 'clock_in' | 'clock_out';
+  id: string;
+  timestamp: string;
+  type: PunchType;
   isOvertime: boolean;
-  location?: { lat: number; lng: number };
+  location?: { lat: number; lng: number } | null;
 }
 
-// Today's record with all necessary info
+export interface ShiftInfo {
+  workStartTime: string;
+  workEndTime: string;
+  gracePeriodMinutes: number;
+}
+
 export interface TodayRecord {
   log: AttendanceLog | null;
-  policy: AttendancePolicy | null;
   punches: PunchEntry[];
-  totalHoursWorked?: number; // For completed shifts
-  shiftStart: string; // HH:mm
-  shiftEnd: string; // HH:mm
-  gracePeriodMinutes: number;
-  isCheckedIn: boolean;
-  isCompleted: boolean;
+  shift: ShiftInfo | null;
 }
 
-// Single day record with detailed info
 export interface DayRecord {
-  log: AttendanceLog;
-  policy: AttendancePolicy;
+  log: AttendanceLog | null;
   punches: PunchEntry[];
-  totalHoursWorked: number;
-  shiftStart: string;
-  shiftEnd: string;
+  shift: ShiftInfo | null;
+  totalMinutesWorked: number;
 }
 
-// Monthly summary for calendar
-export interface MonthlySummary {
-  date: string; // YYYY-MM-DD
-  status: AttendanceStatus;
-  totalHoursWorked?: number;
+export interface MonthDaySummary {
+  date: string;
+  status: AttendanceStatus | 'weekend' | 'future' | null;
+  totalMinutesWorked: number;
+}
+
+function buildPunches(log: AttendanceLog, shift: ShiftInfo | null): PunchEntry[] {
+  if (!log.check_in_time) return [];
+
+  const shiftEndMinutes = shift
+    ? shift.workEndTime.split(':').reduce((h, m, i) => i === 0 ? Number(h) * 60 : Number(h) + Number(m), 0 as unknown as number)
+    : null;
+
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const punches: PunchEntry[] = [];
+
+  const inTime = log.check_in_time;
+  const inMinutes = toMinutes(inTime);
+  const inOvertime = shiftEndMinutes !== null && inMinutes > (shiftEndMinutes as number);
+
+  punches.push({
+    id: `${log.id}-in`,
+    timestamp: inTime,
+    type: 'clock_in',
+    isOvertime: inOvertime,
+    location: log.check_in_lat != null && log.check_in_lng != null
+      ? { lat: log.check_in_lat, lng: log.check_in_lng }
+      : null,
+  });
+
+  if (log.check_out_time) {
+    const outTime = log.check_out_time;
+    const outMinutes = toMinutes(outTime);
+    const outOvertime = shiftEndMinutes !== null && outMinutes > (shiftEndMinutes as number);
+
+    punches.push({
+      id: `${log.id}-out`,
+      timestamp: outTime,
+      type: 'clock_out',
+      isOvertime: outOvertime,
+      location: log.check_out_lat != null && log.check_out_lng != null
+        ? { lat: log.check_out_lat, lng: log.check_out_lng }
+        : null,
+    });
+  }
+
+  return punches;
+}
+
+function computeTotalMinutes(log: AttendanceLog): number {
+  if (!log.check_in_time || !log.check_out_time) return 0;
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  return Math.max(0, toMinutes(log.check_out_time) - toMinutes(log.check_in_time));
+}
+
+export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
+  const [log, policy] = await Promise.all([
+    getTodayLog(userId),
+    supabase.from('attendance_policy').select('work_start_time, work_end_time, grace_period_minutes').limit(1).maybeSingle(),
+  ]);
+
+  const shift: ShiftInfo | null = policy.data
+    ? {
+        workStartTime: policy.data.work_start_time,
+        workEndTime: policy.data.work_end_time,
+        gracePeriodMinutes: policy.data.grace_period_minutes,
+      }
+    : null;
+
+  const punches = log ? buildPunches(log, shift) : [];
+
+  return { log, punches, shift };
+}
+
+export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
+  const [logRes, policy] = await Promise.all([
+    supabase.from('attendance_logs').select('*').eq('user_id', userId).eq('date', date).maybeSingle(),
+    supabase.from('attendance_policy').select('work_start_time, work_end_time, grace_period_minutes').limit(1).maybeSingle(),
+  ]);
+
+  if (logRes.error) throw logRes.error;
+
+  const shift: ShiftInfo | null = policy.data
+    ? {
+        workStartTime: policy.data.work_start_time,
+        workEndTime: policy.data.work_end_time,
+        gracePeriodMinutes: policy.data.grace_period_minutes,
+      }
+    : null;
+
+  const log = logRes.data ?? null;
+  const punches = log ? buildPunches(log, shift) : [];
+  const totalMinutesWorked = log ? computeTotalMinutes(log) : 0;
+
+  return { log, punches, shift, totalMinutesWorked };
+}
+
+export async function getAttendanceMonthly(
+  userId: string,
+  year: number,
+  month: number
+): Promise<MonthDaySummary[]> {
+  const logs = await getMonthlyLogs(userId, year, month);
+  const logMap = new Map(logs.map((l) => [l.date, l]));
+
+  const today = now();
+  const todayStr_ = todayStr(today);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const summaries: MonthDaySummary[] = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dayOfWeek = new Date(dateStr).getDay();
+    const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+    const isFuture = dateStr > todayStr_;
+
+    const log = logMap.get(dateStr);
+
+    let status: MonthDaySummary['status'] = null;
+    if (isFuture) status = 'future';
+    else if (isWeekend && !log) status = 'weekend';
+    else if (log) status = log.status;
+
+    summaries.push({
+      date: dateStr,
+      status,
+      totalMinutesWorked: log ? computeTotalMinutes(log) : 0,
+    });
+  }
+
+  return summaries;
 }
 
 export function todayStr(d?: Date): string {
@@ -76,7 +205,7 @@ export async function checkIn(
   const time = nowTimeStr();
 
   const existing = await getTodayLog(userId);
-  if (existing?.check_in_time) {
+  if (existing?.check_in_time && !existing?.check_out_time) {
     throw new Error('Already checked in today');
   }
 
@@ -101,6 +230,7 @@ export async function checkIn(
       .from('attendance_logs')
       .update({
         check_in_time: time,
+        check_out_time: null,
         check_in_lat: coords?.lat ?? null,
         check_in_lng: coords?.lng ?? null,
         status,
@@ -318,174 +448,4 @@ export function subscribeToUserAttendance(
   return () => {
     supabase.removeChannel(channel);
   };
-}
-
-// ============================================================
-// NEW SPEC FUNCTIONS
-// ============================================================
-
-/** Get attendance policy for an organization */
-async function getOrgPolicy(orgId: string): Promise<AttendancePolicy | null> {
-  const { data, error } = await supabase
-    .from('attendance_policy')
-    .select('*')
-    .eq('org_id', orgId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
-/** Get org_id for a user */
-async function getUserOrgId(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('org_id')
-    .eq('id', userId)
-    .single();
-
-  if (error) throw error;
-  if (!data?.org_id) throw new Error('User organization not found');
-  return data.org_id;
-}
-
-/** Calculate total hours worked from check_in_time and check_out_time */
-function calculateHoursWorked(checkInTime: string | null, checkOutTime: string | null): number {
-  if (!checkInTime || !checkOutTime) return 0;
-
-  const [inH, inM] = checkInTime.split(':').map(Number);
-  const [outH, outM] = checkOutTime.split(':').map(Number);
-
-  const inMinutes = inH * 60 + inM;
-  const outMinutes = outH * 60 + outM;
-
-  return (outMinutes - inMinutes) / 60;
-}
-
-/** Check if a punch is overtime based on shift times */
-function isOvertimePunch(
-  punchTime: string,
-  shiftEnd: string,
-  isClockOut: boolean
-): boolean {
-  const [punchH, punchM] = punchTime.split(':').map(Number);
-  const [endH, endM] = shiftEnd.split(':').map(Number);
-
-  const punchMinutes = punchH * 60 + punchM;
-  const endMinutes = endH * 60 + endM;
-
-  return isClockOut ? punchMinutes > endMinutes : punchMinutes < endMinutes;
-}
-
-/** Build punch entries from attendance log */
-function buildPunchEntries(
-  log: AttendanceLog,
-  shiftEnd: string
-): PunchEntry[] {
-  const punches: PunchEntry[] = [];
-
-  if (log.check_in_time) {
-    punches.push({
-      id: `${log.id}_in`,
-      timestamp: log.check_in_time,
-      type: 'clock_in',
-      isOvertime: false, // Clock-in is not overtime
-      location: log.check_in_lat && log.check_in_lng
-        ? { lat: log.check_in_lat, lng: log.check_in_lng }
-        : undefined,
-    });
-  }
-
-  if (log.check_out_time) {
-    punches.push({
-      id: `${log.id}_out`,
-      timestamp: log.check_out_time,
-      type: 'clock_out',
-      isOvertime: isOvertimePunch(log.check_out_time, shiftEnd, true),
-      location: log.check_out_lat && log.check_out_lng
-        ? { lat: log.check_out_lat, lng: log.check_out_lng }
-        : undefined,
-    });
-  }
-
-  return punches;
-}
-
-/**
- * Get today's attendance record with all punch data and shift info
- */
-export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
-  const orgId = await getUserOrgId(userId);
-  const [log, policy] = await Promise.all([
-    getTodayLog(userId),
-    getOrgPolicy(orgId),
-  ]);
-
-  const shiftStart = policy?.work_start_time ?? '08:00';
-  const shiftEnd = policy?.work_end_time ?? '16:00';
-  const gracePeriodMinutes = policy?.grace_period_minutes ?? 15;
-
-  const punches = log ? buildPunchEntries(log, shiftEnd) : [];
-  const totalHoursWorked = log ? calculateHoursWorked(log.check_in_time, log.check_out_time) : undefined;
-
-  return {
-    log,
-    policy,
-    punches,
-    totalHoursWorked,
-    shiftStart,
-    shiftEnd,
-    gracePeriodMinutes,
-    isCheckedIn: !!(log?.check_in_time && !log?.check_out_time),
-    isCompleted: !!(log?.check_in_time && log?.check_out_time),
-  };
-}
-
-/**
- * Get a specific day's attendance record with full punch details
- */
-export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
-  const orgId = await getUserOrgId(userId);
-  const policy = await getOrgPolicy(orgId);
-
-  const { data: log, error } = await supabase
-    .from('attendance_logs')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', date)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!log) throw new Error('No attendance record for this date');
-
-  const shiftStart = policy?.work_start_time ?? '08:00';
-  const shiftEnd = policy?.work_end_time ?? '16:00';
-  const punches = buildPunchEntries(log, shiftEnd);
-  const totalHoursWorked = calculateHoursWorked(log.check_in_time, log.check_out_time);
-
-  return {
-    log,
-    policy: policy!,
-    punches,
-    totalHoursWorked,
-    shiftStart,
-    shiftEnd,
-  };
-}
-
-/**
- * Get monthly attendance with summary for calendar display
- */
-export async function getAttendanceMonthlyWithSummary(
-  userId: string,
-  year: number,
-  month: number
-): Promise<MonthlySummary[]> {
-  const logs = await getMonthlyLogs(userId, year, month);
-
-  return logs.map((log) => ({
-    date: log.date,
-    status: log.status,
-    totalHoursWorked: calculateHoursWorked(log.check_in_time, log.check_out_time),
-  }));
 }
