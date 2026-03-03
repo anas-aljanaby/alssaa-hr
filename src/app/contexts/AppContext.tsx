@@ -3,8 +3,6 @@ import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as notificationsService from '@/lib/services/notifications.service';
-import { useDevTime } from './DevTimeContext';
-import { supabase } from '@/lib/supabase';
 
 type AttendanceLog = attendanceService.AttendanceLog;
 type LeaveRequest = requestsService.LeaveRequest;
@@ -22,28 +20,9 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const devTime = useDevTime();
-
   const checkIn = async (userId: string): Promise<AttendanceLog> => {
     try {
-      let result: AttendanceLog;
-      if (devTime?.isOverrideActive && devTime.override) {
-        try {
-          const { date, time } = devTime.override;
-          const { data, error } = await supabase.rpc('punch', {
-            p_action: 'check_in',
-            p_dev_override_time: `${date}T${time}:00.000Z`,
-          });
-          if (error) throw new Error(error.message ?? 'Punch failed');
-          if (!data) throw new Error('No data returned');
-          result = data as AttendanceLog;
-        } catch (fnErr) {
-          toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
-          result = await attendanceService.checkIn(userId);
-        }
-      } else {
-        result = await attendanceService.checkIn(userId);
-      }
+      const result = await attendanceService.checkIn(userId);
       toast.success('تم تسجيل الحضور بنجاح');
       return result;
     } catch (err: unknown) {
@@ -55,24 +34,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const checkOut = async (userId: string): Promise<AttendanceLog> => {
     try {
-      let result: AttendanceLog;
-      if (devTime?.isOverrideActive && devTime.override) {
-        try {
-          const { date, time } = devTime.override;
-          const { data, error } = await supabase.rpc('punch', {
-            p_action: 'check_out',
-            p_dev_override_time: `${date}T${time}:00.000Z`,
-          });
-          if (error) throw new Error(error.message ?? 'Punch failed');
-          if (!data) throw new Error('No data returned');
-          result = data as AttendanceLog;
-        } catch (fnErr) {
-          toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
-          result = await attendanceService.checkOut(userId);
-        }
-      } else {
-        result = await attendanceService.checkOut(userId);
-      }
+      const result = await attendanceService.checkOut(userId);
       toast.success('تم تسجيل الانصراف بنجاح');
       return result;
     } catch (err: unknown) {

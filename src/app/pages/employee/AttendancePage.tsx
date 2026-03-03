@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import { useDevTime } from '../../contexts/DevTimeContext';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import type { TodayRecord, MonthDaySummary } from '@/lib/services/attendance.service';
@@ -15,6 +16,7 @@ const COOLDOWN_SECONDS = 60;
 export function AttendancePage() {
   const { currentUser } = useAuth();
   const { checkIn, checkOut } = useApp();
+  const devTime = useDevTime();
 
   const [today, setToday] = useState<TodayRecord>({ log: null, punches: [], shift: null });
   const [todayLoading, setTodayLoading] = useState(true);
@@ -73,6 +75,13 @@ export function AttendancePage() {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [loadToday, loadMonthly, currentUser]);
+
+  // Refresh today when dev toolbar date changes
+  useEffect(() => {
+    if (devTime?.override?.date && currentUser) {
+      loadToday();
+    }
+  }, [devTime?.override?.date, loadToday, currentUser]);
 
   const startCooldown = () => {
     setCooldownLeft(COOLDOWN_SECONDS);

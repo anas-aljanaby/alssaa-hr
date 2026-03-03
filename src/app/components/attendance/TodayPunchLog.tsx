@@ -26,9 +26,7 @@ export function TodayPunchLog({ punches, isCheckedIn }: Props) {
           {punches.map((punch, i) => (
             <PunchRow key={punch.id} punch={punch} isLast={i === punches.length - 1 && !isCheckedIn} />
           ))}
-          {isCheckedIn && (
-            <PendingPunchRow />
-          )}
+          {/* No manual checkout: no pending checkout row */}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LogIn, LogOut, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { TodayRecord } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
@@ -8,7 +8,7 @@ interface Props {
   actionLoading: boolean;
   cooldownSecondsLeft: number;
   onCheckIn: () => void;
-  onCheckOut: () => void;
+  onCheckOut: () => void; // kept for compatibility, but no manual checkout in UI
 }
 
 function toMinutes(t: string): number {
@@ -42,6 +42,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<'overtime' | 'early_checkout' | null>(null);
+  const autoCheckoutTriggeredRef = useRef(false);
 
   const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
   const isCompleted = !!(log?.check_in_time && log?.check_out_time);
@@ -99,19 +100,32 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     }
   };
 
-  const handleCheckOutClick = () => {
-    if (isEarlyCheckout) {
-      setConfirmDialog('early_checkout');
-    } else {
-      onCheckOut();
-    }
-  };
+  // Manual checkout disabled: no handler needed in UI.
 
   const handleConfirm = () => {
     setConfirmDialog(null);
     if (confirmDialog === 'overtime') onCheckIn();
     else onCheckOut();
   };
+
+  // Automatically check out when reaching end of work day while still checked in.
+  // Depends on elapsedSeconds so it re-evaluates every tick at high dev speeds.
+  useEffect(() => {
+    if (
+      isCheckedIn &&
+      !log?.check_out_time &&
+      shiftEndMinutes !== null &&
+      currentMinutes >= shiftEndMinutes &&
+      !autoCheckoutTriggeredRef.current
+    ) {
+      autoCheckoutTriggeredRef.current = true;
+      onCheckOut();
+    }
+
+    if (!isCheckedIn || log?.check_out_time) {
+      autoCheckoutTriggeredRef.current = false;
+    }
+  }, [isCheckedIn, log?.check_out_time, shiftEndMinutes, currentMinutes, elapsedSeconds, onCheckOut]);
 
   const buttonDisabled = actionLoading || cooldownSecondsLeft > 0;
 
@@ -240,16 +254,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
               {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الحضور'}
             </button>
           )}
-          {isCheckedIn && (
-            <button
-              onClick={handleCheckOutClick}
-              disabled={buttonDisabled}
-              className="w-full py-3.5 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الانصراف'}
-            </button>
-          )}
+          {/* Manual checkout removed: day ends automatically at shift end */}
           {isCompleted && (
             <button
               onClick={handleCheckInClick}

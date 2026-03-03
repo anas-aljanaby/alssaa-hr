@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Clock, RotateCcw, Database, ChevronLeft, ChevronRight, Trash2, Check } from 'lucide-react';
+import { Clock, RotateCcw, Database, ChevronLeft, ChevronRight, Trash2, Check, FastForward } from 'lucide-react';
 import { useDevTime, type SpeedMultiplier, DEV_TIME_STORAGE_KEY } from '@/app/contexts/DevTimeContext';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -11,10 +11,10 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { getPolicy } from '@/lib/services/policy.service';
 
 const SPEEDS: { value: SpeedMultiplier; label: string }[] = [
   { value: 1, label: '1x' },
-  { value: 10, label: '10x' },
   { value: 60, label: '60x' },
 ];
 
@@ -31,6 +31,7 @@ export function DevTimeToolbar() {
   const [open, setOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [workEndTime, setWorkEndTime] = useState<string | null>(null);
 
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
     if (typeof window === 'undefined') return { x: 16, y: 200 };
@@ -65,9 +66,25 @@ export function DevTimeToolbar() {
     };
   }, [isDragging]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getPolicy()
+      .then((policy) => {
+        if (!cancelled && policy?.work_end_time) {
+          setWorkEndTime(policy.work_end_time);
+        }
+      })
+      .catch(() => {
+        // ignore; skip button will show a toast if used without policy
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (!devTime) return null;
 
-  const { isOverrideActive, override, setOverride, reset, now } = devTime;
+  const { isOverrideActive, override, setOverride, reset, clearDevLogs, now } = devTime;
   const current = now();
   const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
   const timeStr = `${String(current.getHours()).padStart(2, '0')}:${String(current.getMinutes()).padStart(2, '0')}`;
@@ -108,23 +125,14 @@ export function DevTimeToolbar() {
     }
   };
 
-  const handleResetDevData = async () => {
+  const handleResetDevData = () => {
     setResetting(true);
     setOpen(false);
-    try {
-      const { data, error } = await supabase.functions.invoke('dev-reset-attendance', {
-        method: 'POST',
-      });
-      if (error) throw error;
-      reset();
-      toast.success(data?.message ?? 'Dev data reset');
-      setTimeout(() => window.location.reload(), 100);
-    } catch (e: unknown) {
-      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'Reset failed';
-      toast.error(msg);
-    } finally {
-      setResetting(false);
-    }
+    clearDevLogs();
+    reset();
+    toast.success('Dev data reset');
+    setResetting(false);
+    setTimeout(() => window.location.reload(), 100);
   };
 
   const handleResetAllData = () => {
@@ -140,6 +148,26 @@ export function DevTimeToolbar() {
   const handleConfirmReload = () => {
     setOpen(false);
     window.location.reload();
+  };
+
+  const handleSkipToEndOfDay = () => {
+    if (!workEndTime) {
+      toast.error('لا يوجد وقت نهاية دوام محدد في الإعدادات');
+      return;
+    }
+
+    const baseDate = override?.date ?? dateStr;
+    const endOfDay = new Date(`${baseDate}T${workEndTime}:00`);
+    endOfDay.setSeconds(endOfDay.getSeconds() - 3);
+    const y = endOfDay.getFullYear();
+    const m = String(endOfDay.getMonth() + 1).padStart(2, '0');
+    const d = String(endOfDay.getDate()).padStart(2, '0');
+    const hh = String(endOfDay.getHours()).padStart(2, '0');
+    const mm = String(endOfDay.getMinutes()).padStart(2, '0');
+    const newDate = `${y}-${m}-${d}`;
+    const newTime = `${hh}:${mm}`;
+    // Jump to the last few seconds of the selected day at normal speed
+    setOverride(newDate, newTime, 1);
   };
 
   const goPrevDay = () => {
@@ -190,7 +218,7 @@ export function DevTimeToolbar() {
                   onClick={goPrevDay}
                   title="Previous day"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
                 <Input
                   type="date"
@@ -209,7 +237,7 @@ export function DevTimeToolbar() {
                   onClick={goNextDay}
                   title="Next day"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -246,6 +274,16 @@ export function DevTimeToolbar() {
                 ))}
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleSkipToEndOfDay}
+              title="Skip to last 3 seconds of the day"
+            >
+              <FastForward className="h-4 w-4 mr-1" />
+              Skip to day end (3s left)
+            </Button>
             <Button
               variant="outline"
               size="sm"
