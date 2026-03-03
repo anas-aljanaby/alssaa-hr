@@ -11,8 +11,8 @@ type LeaveRequest = requestsService.LeaveRequest;
 type LeaveRequestInsert = requestsService.LeaveRequestInsert;
 
 interface AppContextType {
-  checkIn: (userId: string, coords?: { lat: number; lng: number }) => Promise<AttendanceLog>;
-  checkOut: (userId: string, coords?: { lat: number; lng: number }) => Promise<AttendanceLog>;
+  checkIn: (userId: string) => Promise<AttendanceLog>;
+  checkOut: (userId: string) => Promise<AttendanceLog>;
   submitRequest: (request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>) => Promise<LeaveRequest>;
   updateRequestStatus: (requestId: string, status: 'approved' | 'rejected', approverId: string, note: string) => Promise<LeaveRequest>;
   markNotificationRead: (notifId: string) => Promise<void>;
@@ -24,7 +24,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   const devTime = useDevTime();
 
-  const checkIn = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
+  const checkIn = async (userId: string): Promise<AttendanceLog> => {
     try {
       let result: AttendanceLog;
       if (devTime?.isOverrideActive && devTime.override) {
@@ -32,8 +32,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const { date, time } = devTime.override;
           const { data, error } = await supabase.rpc('punch', {
             p_action: 'check_in',
-            p_lat: coords?.lat ?? null,
-            p_lng: coords?.lng ?? null,
             p_dev_override_time: `${date}T${time}:00.000Z`,
           });
           if (error) throw new Error(error.message ?? 'Punch failed');
@@ -41,10 +39,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           result = data as AttendanceLog;
         } catch (fnErr) {
           toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
-          result = await attendanceService.checkIn(userId, coords);
+          result = await attendanceService.checkIn(userId);
         }
       } else {
-        result = await attendanceService.checkIn(userId, coords);
+        result = await attendanceService.checkIn(userId);
       }
       toast.success('تم تسجيل الحضور بنجاح');
       return result;
@@ -55,7 +53,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const checkOut = async (userId: string, coords?: { lat: number; lng: number }): Promise<AttendanceLog> => {
+  const checkOut = async (userId: string): Promise<AttendanceLog> => {
     try {
       let result: AttendanceLog;
       if (devTime?.isOverrideActive && devTime.override) {
@@ -63,8 +61,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const { date, time } = devTime.override;
           const { data, error } = await supabase.rpc('punch', {
             p_action: 'check_out',
-            p_lat: coords?.lat ?? null,
-            p_lng: coords?.lng ?? null,
             p_dev_override_time: `${date}T${time}:00.000Z`,
           });
           if (error) throw new Error(error.message ?? 'Punch failed');
@@ -72,10 +68,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           result = data as AttendanceLog;
         } catch (fnErr) {
           toast.info('دالة الخادم غير متوفرة — تم التسجيل بالوقت المحلي');
-          result = await attendanceService.checkOut(userId, coords);
+          result = await attendanceService.checkOut(userId);
         }
       } else {
-        result = await attendanceService.checkOut(userId, coords);
+        result = await attendanceService.checkOut(userId);
       }
       toast.success('تم تسجيل الانصراف بنجاح');
       return result;

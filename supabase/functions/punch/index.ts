@@ -10,9 +10,8 @@ const corsHeaders = {
 
 interface PunchBody {
   action: 'check_in' | 'check_out';
-  coords?: { lat: number; lng: number };
+  // coords removed from handling: location tracking disabled
   devOverrideTime?: string; // ISO string
-}
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -87,7 +86,6 @@ Deno.serve(async (req) => {
 
     const today = toDateStr(effectiveNow);
     const time = toTimeStr(effectiveNow);
-    const coords = body?.coords;
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
@@ -145,8 +143,6 @@ Deno.serve(async (req) => {
           .from('attendance_logs')
           .update({
             check_in_time: time,
-            check_in_lat: coords?.lat ?? null,
-            check_in_lng: coords?.lng ?? null,
             status,
             is_dev: isDev,
           })
@@ -173,8 +169,6 @@ Deno.serve(async (req) => {
           user_id: caller.id,
           date: today,
           check_in_time: time,
-          check_in_lat: coords?.lat ?? null,
-          check_in_lng: coords?.lng ?? null,
           status,
           is_dev: isDev,
         })
@@ -213,8 +207,6 @@ Deno.serve(async (req) => {
       .from('attendance_logs')
       .update({
         check_out_time: time,
-        check_out_lat: coords?.lat ?? null,
-        check_out_lng: coords?.lng ?? null,
         is_dev: isDev,
       })
       .eq('id', existing.id)

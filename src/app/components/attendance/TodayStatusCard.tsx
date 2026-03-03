@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LogIn, LogOut, Clock, CheckCircle2, MapPin, AlertTriangle } from 'lucide-react';
+import { LogIn, LogOut, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { TodayRecord } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 
@@ -262,10 +262,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-1.5 mt-3 text-xs text-gray-400">
-          <MapPin className="w-3.5 h-3.5" />
-          <span>سيتم تسجيل موقعك تلقائياً</span>
-        </div>
+        {/* Location note removed: location tracking disabled */}
       </div>
 
       {/* Confirmation Dialog */}

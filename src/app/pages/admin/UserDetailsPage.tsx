@@ -27,7 +27,6 @@ import {
   MessageCircle,
   Calendar,
   Clock,
-  MapPin,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -610,12 +609,7 @@ export function UserDetailsPage() {
                         </div>
                       </div>
                     )}
-                    {log.check_in_lat != null && (
-                      <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
-                        <MapPin className="w-3 h-3" />
-                        <span>الموقع: متوفر</span>
-                      </div>
-                    )}
+                    {/* Location details removed: location tracking disabled */}
                   </div>
                 );
               })

@@ -95,22 +95,11 @@ export function AttendancePage() {
     };
   }, []);
 
-  const getCoords = (): Promise<{ lat: number; lng: number } | undefined> =>
-    new Promise((resolve) => {
-      if (!navigator.geolocation) return resolve(undefined);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => resolve(undefined),
-        { timeout: 5000 }
-      );
-    });
-
   const handleCheckIn = async () => {
     if (!currentUser || actionLoading || cooldownLeft > 0) return;
     setActionLoading(true);
     try {
-      const coords = await getCoords();
-      const result = await checkIn(currentUser.uid, coords);
+      const result = await checkIn(currentUser.uid);
       if (navigator.vibrate) navigator.vibrate(100);
       startCooldown();
       const updated = await attendanceService.getAttendanceToday(currentUser.uid);
@@ -127,8 +116,7 @@ export function AttendancePage() {
     if (!currentUser || actionLoading || cooldownLeft > 0) return;
     setActionLoading(true);
     try {
-      const coords = await getCoords();
-      const result = await checkOut(currentUser.uid, coords);
+      const result = await checkOut(currentUser.uid);
       if (navigator.vibrate) navigator.vibrate(100);
       startCooldown();
       const updated = await attendanceService.getAttendanceToday(currentUser.uid);

@@ -4,8 +4,6 @@
 
 create or replace function public.punch(
   p_action text,
-  p_lat double precision default null,
-  p_lng double precision default null,
   p_dev_override_time timestamptz default null
 )
 returns public.attendance_logs
@@ -73,8 +71,6 @@ begin
       update public.attendance_logs
       set
         check_in_time = _time_str::time,
-        check_in_lat = p_lat,
-        check_in_lng = p_lng,
         status = _status,
         is_dev = _is_dev
       where id = _existing.id
@@ -83,10 +79,10 @@ begin
     end if;
 
     insert into public.attendance_logs (
-      org_id, user_id, date, check_in_time, check_in_lat, check_in_lng, status, is_dev
+      org_id, user_id, date, check_in_time, status, is_dev
     )
     values (
-      _org_id, _uid, _today, _time_str::time, p_lat, p_lng, _status, _is_dev
+      _org_id, _uid, _today, _time_str::time, _status, _is_dev
     )
     returning * into _existing;
     return _existing;
@@ -103,8 +99,6 @@ begin
   update public.attendance_logs
   set
     check_out_time = _time_str::time,
-    check_out_lat = p_lat,
-    check_out_lng = p_lng,
     is_dev = _is_dev
   where id = _existing.id
   returning * into _existing;
@@ -112,8 +106,8 @@ begin
 end;
 $$;
 
-comment on function public.punch(text, double precision, double precision, timestamptz) is
-  'Check-in or check-out for the authenticated user. Optional lat/lng and dev_override_time for testing.';
+comment on function public.punch(text, timestamptz) is
+  'Check-in or check-out for the authenticated user. Optional dev_override_time for testing.';
 
-grant execute on function public.punch(text, double precision, double precision, timestamptz) to authenticated;
-grant execute on function public.punch(text, double precision, double precision, timestamptz) to service_role;
+grant execute on function public.punch(text, timestamptz) to authenticated;
+grant execute on function public.punch(text, timestamptz) to service_role;

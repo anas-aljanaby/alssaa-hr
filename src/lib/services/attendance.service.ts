@@ -13,7 +13,6 @@ export interface PunchEntry {
   timestamp: string;
   type: PunchType;
   isOvertime: boolean;
-  location?: { lat: number; lng: number } | null;
 }
 
 export interface ShiftInfo {
@@ -64,9 +63,6 @@ function buildPunches(log: AttendanceLog, shift: ShiftInfo | null): PunchEntry[]
     timestamp: inTime,
     type: 'clock_in',
     isOvertime: inOvertime,
-    location: log.check_in_lat != null && log.check_in_lng != null
-      ? { lat: log.check_in_lat, lng: log.check_in_lng }
-      : null,
   });
 
   if (log.check_out_time) {
@@ -79,9 +75,6 @@ function buildPunches(log: AttendanceLog, shift: ShiftInfo | null): PunchEntry[]
       timestamp: outTime,
       type: 'clock_out',
       isOvertime: outOvertime,
-      location: log.check_out_lat != null && log.check_out_lng != null
-        ? { lat: log.check_out_lat, lng: log.check_out_lng }
-        : null,
     });
   }
 
@@ -198,10 +191,7 @@ export async function getTodayLog(userId: string): Promise<AttendanceLog | null>
   return data;
 }
 
-export async function checkIn(
-  userId: string,
-  coords?: { lat: number; lng: number }
-): Promise<AttendanceLog> {
+export async function checkIn(userId: string): Promise<AttendanceLog> {
   const today = todayStr();
   const time = nowTimeStr();
 
@@ -232,8 +222,6 @@ export async function checkIn(
       .update({
         check_in_time: time,
         check_out_time: null,
-        check_in_lat: coords?.lat ?? null,
-        check_in_lng: coords?.lng ?? null,
         status,
       })
       .eq('id', existing.id)
@@ -250,8 +238,6 @@ export async function checkIn(
       user_id: userId,
       date: today,
       check_in_time: time,
-      check_in_lat: coords?.lat ?? null,
-      check_in_lng: coords?.lng ?? null,
       status,
     })
     .select()
@@ -261,10 +247,7 @@ export async function checkIn(
   return data;
 }
 
-export async function checkOut(
-  userId: string,
-  coords?: { lat: number; lng: number }
-): Promise<AttendanceLog> {
+export async function checkOut(userId: string): Promise<AttendanceLog> {
   const time = nowTimeStr();
 
   const existing = await getTodayLog(userId);
@@ -279,8 +262,6 @@ export async function checkOut(
     .from('attendance_logs')
     .update({
       check_out_time: time,
-      check_out_lat: coords?.lat ?? null,
-      check_out_lng: coords?.lng ?? null,
     })
     .eq('id', existing.id)
     .select()
