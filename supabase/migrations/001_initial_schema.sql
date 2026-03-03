@@ -49,9 +49,16 @@ create table public.profiles (
                   check (status in ('active', 'inactive')),
   avatar_url    text,
   join_date     date not null default current_date,
+  work_days       int[] default null,
+  work_start_time time default null,
+  work_end_time   time default null,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
+
+comment on column public.profiles.work_days is 'Days the user works: 0=Sun .. 6=Sat. Null/empty = use org policy.';
+comment on column public.profiles.work_start_time is 'Start of work (same for all work days). Null = use org policy.';
+comment on column public.profiles.work_end_time is 'End of work (same for all work days). Null = use org policy.';
 
 alter table public.departments
   add constraint departments_manager_uid_fkey

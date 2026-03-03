@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await admin
       .from('profiles')
-      .select('org_id')
+      .select('org_id, work_days, work_start_time, work_end_time')
       .eq('id', caller.id)
       .single();
 
@@ -120,16 +120,24 @@ Deno.serve(async (req) => {
       }
 
       let status: 'present' | 'late' = 'present';
+      const hasCustomSchedule =
+        profile.work_days &&
+        profile.work_days.length > 0 &&
+        profile.work_start_time &&
+        profile.work_end_time;
+
       const { data: policy } = await admin
         .from('attendance_policy')
         .select('work_start_time, grace_period_minutes')
         .eq('org_id', orgId)
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (policy) {
-        const [startH, startM] = policy.work_start_time.split(':').map(Number);
-        const grace = policy.grace_period_minutes ?? 0;
+      const workStartTime = hasCustomSchedule ? profile.work_start_time : policy?.work_start_time;
+      const grace = policy?.grace_period_minutes ?? 0;
+
+      if (workStartTime) {
+        const [startH, startM] = workStartTime.split(':').map(Number);
         const [nowH, nowM] = time.split(':').map(Number);
         const startMinutes = startH * 60 + startM + grace;
         const nowMinutes = nowH * 60 + nowM;

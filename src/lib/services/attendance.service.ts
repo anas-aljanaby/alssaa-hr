@@ -19,6 +19,8 @@ export interface ShiftInfo {
   workStartTime: string;
   workEndTime: string;
   gracePeriodMinutes: number;
+  /** JavaScript getDay() values that are off (e.g. [5, 6] = Fri, Sat). Default [5, 6]. */
+  weeklyOffDays: number[];
 }
 
 export interface TodayRecord {
@@ -93,19 +95,57 @@ function computeTotalMinutes(log: AttendanceLog): number {
   return Math.max(0, toMinutes(log.check_out_time) - toMinutes(log.check_in_time));
 }
 
-export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
-  const [log, policy] = await Promise.all([
-    getTodayLog(userId),
-    supabase.from('attendance_policy').select('work_start_time, work_end_time, grace_period_minutes').limit(1).maybeSingle(),
-  ]);
+/** Returns effective shift for a user: per-user schedule if set, else org policy. */
+export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInfo | null> {
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('work_days, work_start_time, work_end_time, org_id')
+    .eq('id', userId)
+    .single();
 
-  const shift: ShiftInfo | null = policy.data
-    ? {
-        workStartTime: policy.data.work_start_time,
-        workEndTime: policy.data.work_end_time,
-        gracePeriodMinutes: policy.data.grace_period_minutes,
-      }
-    : null;
+  if (profileError || !profile) return null;
+
+  const hasCustomSchedule =
+    profile.work_days &&
+    profile.work_days.length > 0 &&
+    profile.work_start_time &&
+    profile.work_end_time;
+
+  if (hasCustomSchedule) {
+    const { data: policy } = await supabase
+      .from('attendance_policy')
+      .select('grace_period_minutes')
+      .eq('org_id', profile.org_id)
+      .limit(1)
+      .maybeSingle();
+
+    const weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !profile.work_days!.includes(d));
+    return {
+      workStartTime: profile.work_start_time!,
+      workEndTime: profile.work_end_time!,
+      gracePeriodMinutes: policy?.grace_period_minutes ?? 15,
+      weeklyOffDays,
+    };
+  }
+
+  const { data: policy } = await supabase
+    .from('attendance_policy')
+    .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days')
+    .eq('org_id', profile.org_id)
+    .limit(1)
+    .maybeSingle();
+
+  if (!policy) return null;
+  return {
+    workStartTime: policy.work_start_time,
+    workEndTime: policy.work_end_time,
+    gracePeriodMinutes: policy.grace_period_minutes,
+    weeklyOffDays: policy.weekly_off_days ?? [5, 6],
+  };
+}
+
+export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
+  const [log, shift] = await Promise.all([getTodayLog(userId), getEffectiveShiftForUser(userId)]);
 
   const punches = log ? buildPunches(log, shift) : [];
 
@@ -113,20 +153,12 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
 }
 
 export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
-  const [logRes, policy] = await Promise.all([
+  const [logRes, shift] = await Promise.all([
     supabase.from('attendance_logs').select('*').eq('user_id', userId).eq('date', date).maybeSingle(),
-    supabase.from('attendance_policy').select('work_start_time, work_end_time, grace_period_minutes').limit(1).maybeSingle(),
+    getEffectiveShiftForUser(userId),
   ]);
 
   if (logRes.error) throw logRes.error;
-
-  const shift: ShiftInfo | null = policy.data
-    ? {
-        workStartTime: policy.data.work_start_time,
-        workEndTime: policy.data.work_end_time,
-        gracePeriodMinutes: policy.data.grace_period_minutes,
-      }
-    : null;
 
   const log = logRes.data ?? null;
   const punches = log ? buildPunches(log, shift) : [];
@@ -210,16 +242,12 @@ export async function checkIn(userId: string): Promise<AttendanceLog> {
     throw new Error('Already checked in today');
   }
 
-  const policyRes = await supabase
-    .from('attendance_policy')
-    .select('work_start_time, grace_period_minutes')
-    .limit(1)
-    .single();
+  const shift = await getEffectiveShiftForUser(userId);
 
   let status: AttendanceStatus = 'present';
-  if (policyRes.data) {
-    const [startH, startM] = policyRes.data.work_start_time.split(':').map(Number);
-    const grace = policyRes.data.grace_period_minutes;
+  if (shift) {
+    const [startH, startM] = shift.workStartTime.split(':').map(Number);
+    const grace = shift.gracePeriodMinutes;
     const [nowH, nowM] = time.split(':').map(Number);
     const startMinutes = startH * 60 + startM + grace;
     const nowMinutes = nowH * 60 + nowM;
@@ -257,9 +285,9 @@ export async function checkIn(userId: string): Promise<AttendanceLog> {
   return data;
 }
 
-export async function checkOut(userId: string): Promise<AttendanceLog> {
+export async function checkOut(userId: string, checkoutTime?: string): Promise<AttendanceLog> {
   const today = todayStr();
-  const time = nowTimeStr();
+  const time = checkoutTime ?? nowTimeStr();
 
   const { data: existing, error: existingError } = await supabase
     .from('attendance_logs')

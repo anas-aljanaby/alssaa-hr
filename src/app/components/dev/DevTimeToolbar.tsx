@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Clock, Database, ChevronLeft, ChevronRight, FastForward } from 'lucide-react';
 import { useDevTime, type SpeedMultiplier } from '@/app/contexts/DevTimeContext';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { Button } from '@/app/components/ui/button';
 import {
   Popover,
@@ -12,6 +13,7 @@ import { Label } from '@/app/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { getPolicy } from '@/lib/services/policy.service';
+import * as attendanceService from '@/lib/services/attendance.service';
 
 const SPEEDS: { value: SpeedMultiplier; label: string }[] = [
   { value: 1, label: '1x' },
@@ -39,6 +41,7 @@ function formatTimeWithSeconds(d: Date): string {
 
 export function DevTimeToolbar() {
   const devTime = useDevTime();
+  const { currentUser } = useAuth();
   const [open, setOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [workEndTime, setWorkEndTime] = useState<string | null>(null);
@@ -78,23 +81,38 @@ export function DevTimeToolbar() {
 
   useEffect(() => {
     let cancelled = false;
-    getPolicy()
+    
+    if (!currentUser?.uid) {
+      return;
+    }
+    
+    // Try to get user's specific shift, fall back to org policy
+    attendanceService.getEffectiveShiftForUser(currentUser.uid)
+      .then((shift) => {
+        if (!cancelled && shift?.workEndTime) {
+          setWorkEndTime(shift.workEndTime);
+          return;
+        }
+        // Fall back to org policy if no user shift
+        return getPolicy();
+      })
       .then((policy) => {
-        if (!cancelled && policy?.work_end_time) {
+        if (!cancelled && policy?.work_end_time && !workEndTime) {
           setWorkEndTime(policy.work_end_time);
         }
       })
       .catch(() => {
         // ignore; skip button will show a toast if used without policy
       });
+    
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentUser?.uid]);
 
   if (!devTime) return null;
 
-  const { isOverrideActive, override, setOverride, setOverrideWithStop, now: devNow } = devTime;
+  const { isOverrideActive, override, setOverride, now: devNow } = devTime;
 
   // Single source of truth for displayed date & time (with seconds): the dev-time clock.
   const simulatedNow = devNow();
@@ -171,14 +189,8 @@ export function DevTimeToolbar() {
     const newDate = baseDate;
     const newTime = `${hh}:${mm}:${ss}`;
 
-    const endH = String(h).padStart(2, '0');
-    const endM = String(m).padStart(2, '0');
-    const endS = String(s).padStart(2, '0');
-    const stopAt = `${baseDate}T${endH}:${endM}:${endS}`;
-
-    // Jump to just before the end of the workday on the same selected day,
-    // and cap simulated time so both timers stop exactly at shift end.
-    setOverrideWithStop(newDate, newTime, override?.speed ?? 1, stopAt);
+    // Jump to just before the end of the workday; timer keeps moving past end (no cap).
+    setOverride(newDate, newTime, override?.speed ?? 1);
   };
 
   const goPrevDay = () => {
@@ -186,7 +198,7 @@ export function DevTimeToolbar() {
   };
 
   const goNextDay = () => {
-    setOverride(addDays(currentDate, 1), currentTime, override?.speed ?? 1);
+    setOverride(addDays(currentDate, 1), '07:55:00', override?.speed ?? 1);
   };
 
   return (

@@ -55,6 +55,9 @@ export interface Database {
           status: 'active' | 'inactive';
           avatar_url: string | null;
           join_date: string;
+          work_days: number[] | null;
+          work_start_time: string | null;
+          work_end_time: string | null;
         };
         Insert: {
           id: string;
@@ -68,6 +71,9 @@ export interface Database {
           status?: 'active' | 'inactive';
           avatar_url?: string | null;
           join_date?: string;
+          work_days?: number[] | null;
+          work_start_time?: string | null;
+          work_end_time?: string | null;
         };
         Update: {
           id?: string;
@@ -81,6 +87,9 @@ export interface Database {
           status?: 'active' | 'inactive';
           avatar_url?: string | null;
           join_date?: string;
+          work_days?: number[] | null;
+          work_start_time?: string | null;
+          work_end_time?: string | null;
         };
         Relationships: [
           {

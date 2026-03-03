@@ -85,7 +85,16 @@ export function UserDetailsPage() {
 
   const editProfileForm = useForm<UpdateProfileFormData>({
     resolver: zodResolver(updateProfileSchema),
-    defaultValues: { name_ar: '', phone: '', role: 'employee', department_id: '', status: 'active' },
+    defaultValues: {
+      name_ar: '',
+      phone: '',
+      role: 'employee',
+      department_id: '',
+      status: 'active',
+      work_days: undefined,
+      work_start_time: '',
+      work_end_time: '',
+    },
   });
 
   const canAccess = useMemo(() => {
@@ -124,6 +133,9 @@ export function UserDetailsPage() {
       role: profile.role,
       department_id: profile.department_id ?? '',
       status: profile.status,
+      work_days: profile.work_days ?? undefined,
+      work_start_time: profile.work_start_time ?? '',
+      work_end_time: profile.work_end_time ?? '',
     });
   }, [profile, editProfileForm]);
  
@@ -273,12 +285,18 @@ export function UserDetailsPage() {
     if (!profile) return;
     setEditSubmitting(true);
     try {
+      const hasWorkDays = data.work_days && data.work_days.length > 0;
+      const workStart = data.work_start_time?.trim();
+      const workEnd = data.work_end_time?.trim();
       await profilesService.updateUser(profile.id, {
         name_ar: data.name_ar.trim(),
         phone: data.phone?.trim() || undefined,
         role: data.role,
         department_id: data.department_id,
         status: data.status,
+        work_days: hasWorkDays && workStart && workEnd ? data.work_days! : null,
+        work_start_time: hasWorkDays && workStart && workEnd ? workStart : null,
+        work_end_time: hasWorkDays && workStart && workEnd ? workEnd : null,
       });
       toast.success('تم تحديث المستخدم');
       setShowEditModal(false);
@@ -361,6 +379,25 @@ export function UserDetailsPage() {
                 </span>
               </div>
             </div>
+            {profile.work_days && profile.work_days.length > 0 && profile.work_start_time && profile.work_end_time && (
+              <p className="text-xs text-gray-500 mt-2" dir="rtl">
+                أيام العمل:{' '}
+                {[
+                  { d: 0, label: 'الأحد' },
+                  { d: 1, label: 'الإثنين' },
+                  { d: 2, label: 'الثلاثاء' },
+                  { d: 3, label: 'الأربعاء' },
+                  { d: 4, label: 'الخميس' },
+                  { d: 5, label: 'الجمعة' },
+                  { d: 6, label: 'السبت' },
+                ]
+                  .filter(({ d }) => profile.work_days!.includes(d))
+                  .map(({ label }) => label)
+                  .join('، ')}
+                {' — '}
+                <span dir="ltr">{profile.work_start_time}–{profile.work_end_time}</span>
+              </p>
+            )}
             {department && (
               <div className="flex items-center gap-1 mt-2 text-xs text-gray-600">
                 <Building2 className="w-3.5 h-3.5" />
@@ -534,6 +571,46 @@ export function UserDetailsPage() {
       {/* Attendance Tab */}
       {activeTab === 'attendance' && (
         <div className="space-y-3">
+          {/* Work schedule card: show days and times; admin can edit */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-700">جدول العمل</h3>
+              {currentUser?.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={openEditModal}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="تعديل جدول العمل"
+                >
+                  <Edit2 className="w-4 h-4 text-gray-500" />
+                </button>
+              )}
+            </div>
+            {profile.work_days && profile.work_days.length > 0 && profile.work_start_time && profile.work_end_time ? (
+              <div className="text-sm text-gray-700">
+                <p className="text-xs text-gray-500 mb-1">أيام العمل</p>
+                <p className="mb-2">
+                  {[
+                    { d: 0, label: 'الأحد' },
+                    { d: 1, label: 'الإثنين' },
+                    { d: 2, label: 'الثلاثاء' },
+                    { d: 3, label: 'الأربعاء' },
+                    { d: 4, label: 'الخميس' },
+                    { d: 5, label: 'الجمعة' },
+                    { d: 6, label: 'السبت' },
+                  ]
+                    .filter(({ d }) => profile.work_days!.includes(d))
+                    .map(({ label }) => label)
+                    .join('، ')}
+                </p>
+                <p className="text-xs text-gray-500">وقت الدوام</p>
+                <p dir="ltr">{profile.work_start_time} – {profile.work_end_time}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">حسب إعدادات المنظمة</p>
+            )}
+          </div>
+
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -955,6 +1032,69 @@ export function UserDetailsPage() {
                   <option value="inactive">غير نشط</option>
                 </select>
               </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
+                <p className="text-xs text-gray-500 mb-3">اختر أيام العمل ووقت البداية والنهاية (نفس التوقيت لجميع الأيام). إن لم تختر أي أيام تُستخدم إعدادات المنظمة.</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[
+                    { d: 0, label: 'الأحد' },
+                    { d: 1, label: 'الإثنين' },
+                    { d: 2, label: 'الثلاثاء' },
+                    { d: 3, label: 'الأربعاء' },
+                    { d: 4, label: 'الخميس' },
+                    { d: 5, label: 'الجمعة' },
+                    { d: 6, label: 'السبت' },
+                  ].map(({ d, label }) => {
+                    const workDays = editProfileForm.watch('work_days') ?? [];
+                    const checked = workDays.includes(d);
+                    return (
+                      <label
+                        key={d}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
+                          checked ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const prev = editProfileForm.getValues('work_days') ?? [];
+                            const next = prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b);
+                            editProfileForm.setValue('work_days', next);
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">وقت البداية</label>
+                    <input
+                      type="time"
+                      {...editProfileForm.register('work_start_time')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">وقت النهاية</label>
+                    <input
+                      type="time"
+                      {...editProfileForm.register('work_end_time')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+                {editProfileForm.formState.errors.work_end_time && (
+                  <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.work_end_time.message}</p>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={editSubmitting}

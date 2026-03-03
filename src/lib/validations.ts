@@ -119,13 +119,32 @@ export const addUserSchema = z.object({
 });
 export type AddUserFormData = z.infer<typeof addUserSchema>;
 
-export const updateProfileSchema = z.object({
-  name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
-  phone: z.string().optional(),
-  role: z.enum(['employee', 'manager', 'admin'], { required_error: 'الدور مطلوب' }),
-  department_id: z.string().min(1, 'القسم مطلوب'),
-  status: z.enum(['active', 'inactive'], { required_error: 'الحالة مطلوبة' }),
-});
+const workDay = z.number().int().min(0).max(6);
+
+export const updateProfileSchema = z
+  .object({
+    name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
+    phone: z.string().optional(),
+    role: z.enum(['employee', 'manager', 'admin'], { required_error: 'الدور مطلوب' }),
+    department_id: z.string().min(1, 'القسم مطلوب'),
+    status: z.enum(['active', 'inactive'], { required_error: 'الحالة مطلوبة' }),
+    work_days: z.array(workDay).optional(),
+    work_start_time: z.string().optional(),
+    work_end_time: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      const hasDays = data.work_days && data.work_days.length > 0;
+      if (!hasDays) return true;
+      const hasStart = data.work_start_time && /^\d{1,2}:\d{2}$/.test(data.work_start_time);
+      const hasEnd = data.work_end_time && /^\d{1,2}:\d{2}$/.test(data.work_end_time);
+      if (!hasStart || !hasEnd) return false;
+      const [sh, sm] = data.work_start_time!.split(':').map(Number);
+      const [eh, em] = data.work_end_time!.split(':').map(Number);
+      return sh * 60 + sm < eh * 60 + em;
+    },
+    { message: 'يجب تحديد وقت البداية والنهاية وأن يكون وقت النهاية بعد البداية', path: ['work_end_time'] }
+  );
 export type UpdateProfileFormData = z.infer<typeof updateProfileSchema>;
 
 const departmentNameAr = z

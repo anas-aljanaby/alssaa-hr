@@ -63,15 +63,10 @@ function computeSimulatedNow(o: DevTimeOverride): Date {
   }
 
   const elapsed = (Date.now() - o.startedAt) * o.speed;
-  let simulated = new Date(base.getTime() + elapsed);
+  const simulated = new Date(base.getTime() + elapsed);
 
-  // If there's a configured stopAt time, never go past it.
-  if (o.stopAt) {
-    const stop = new Date(o.stopAt);
-    if (!Number.isNaN(stop.getTime()) && simulated.getTime() > stop.getTime()) {
-      simulated = stop;
-    }
-  }
+  // Timer never stops: we never cap at stopAt. Dev time is like a real clock
+  // that can be traveled through (skip/speed) but always keeps moving.
 
   // Extra safety: never return an invalid Date
   if (Number.isNaN(simulated.getTime())) {

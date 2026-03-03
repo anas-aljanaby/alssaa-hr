@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { LogIn, LogOut, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { LogIn, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { TodayRecord } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 
@@ -8,7 +8,7 @@ interface Props {
   actionLoading: boolean;
   cooldownSecondsLeft: number;
   onCheckIn: () => void;
-  onCheckOut: () => void; // kept for compatibility, but no manual checkout in UI
+  onCheckOut: (checkoutTime?: string) => void; // kept for compatibility, but no manual checkout in UI
 }
 
 function toMinutes(t: string): number {
@@ -63,8 +63,17 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     return () => clearInterval(id);
   }, [isCheckedIn, log?.check_in_time]);
 
+  // Tick every second so current time (and isOvertime / isBeforeShift) stays in sync with dev or real clock
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!shift) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [shift]);
+
   const currentNow = now();
   const currentMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
+  const dayOfWeek = currentNow.getDay(); // 0 = Sun, 5 = Fri, 6 = Sat
 
   const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
   const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
@@ -72,8 +81,15 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     ? shiftEndMinutes - shiftStartMinutes
     : null;
 
+  // When checked in, cap elapsed time at shift end time if it has been reached
+  let displayElapsedSeconds = elapsedSeconds;
+  if (isCheckedIn && shiftEndMinutes !== null && shiftStartMinutes !== null) {
+    const maxElapsedSeconds = (shiftEndMinutes - shiftStartMinutes) * 60;
+    displayElapsedSeconds = Math.min(elapsedSeconds, maxElapsedSeconds);
+  }
+
   const workedMinutes = isCheckedIn
-    ? Math.floor(elapsedSeconds / 60)
+    ? Math.floor(displayElapsedSeconds / 60)
     : isCompleted && log?.check_in_time && log?.check_out_time
       ? toMinutes(log.check_out_time) - toMinutes(log.check_in_time)
       : 0;
@@ -82,13 +98,16 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     ? Math.min(100, Math.round((workedMinutes / shiftDuration) * 100))
     : 0;
 
+  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
   const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
-  // Overtime = outside working hours: before shift start OR after shift end (e.g. before 8:00 or after 16:00)
-  const isOvertime =
+  // Overtime only when: (1) not a scheduled working day) OR (2) working day but outside shift hours
+  // Allow up to 30 minutes before shift start without counting as overtime
+  const earlyLoginThresholdMinutes = shiftStartMinutes !== null ? shiftStartMinutes - 30 : null;
+  const outsideShiftHours =
     shiftStartMinutes !== null &&
     shiftEndMinutes !== null &&
-    (currentMinutes < shiftStartMinutes || currentMinutes > shiftEndMinutes);
-  const isEarlyCheckout = shiftEndMinutes !== null && currentMinutes < shiftEndMinutes - 60;
+    (currentMinutes < (earlyLoginThresholdMinutes ?? shiftStartMinutes) || currentMinutes > shiftEndMinutes);
+  const isOvertime = !isWorkingDay || (isWorkingDay && outsideShiftHours);
 
   const firstPunchIsLate =
     log?.check_in_time && shift
@@ -96,7 +115,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
       : false;
   const firstPunchIsOvertime =
     log?.check_in_time && shiftStartMinutes !== null && shiftEndMinutes !== null
-      ? (toMinutes(log.check_in_time) < shiftStartMinutes || toMinutes(log.check_in_time) > shiftEndMinutes)
+      ? (toMinutes(log.check_in_time) < (earlyLoginThresholdMinutes ?? shiftStartMinutes) || toMinutes(log.check_in_time) > shiftEndMinutes)
       : false;
 
   const handleCheckInClick = () => {
@@ -124,16 +143,18 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
       !log?.check_out_time &&
       shiftEndMinutes !== null &&
       currentMinutes >= shiftEndMinutes &&
-      !autoCheckoutTriggeredRef.current
+      !autoCheckoutTriggeredRef.current &&
+      shift
     ) {
       autoCheckoutTriggeredRef.current = true;
-      onCheckOut();
+      // Pass shift end time to cap the checkout time at shift end, not at current time
+      onCheckOut(shift.workEndTime);
     }
 
     if (!isCheckedIn || log?.check_out_time) {
       autoCheckoutTriggeredRef.current = false;
     }
-  }, [isCheckedIn, log?.check_out_time, shiftEndMinutes, currentMinutes, elapsedSeconds, onCheckOut]);
+  }, [isCheckedIn, log?.check_out_time, shiftEndMinutes, currentMinutes, elapsedSeconds, onCheckOut, shift]);
 
   const buttonDisabled = actionLoading || cooldownSecondsLeft > 0;
 
@@ -169,7 +190,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
             <>
               <Clock className="w-7 h-7 text-blue-500 mb-0.5" />
               <span className="text-xs font-mono tabular-nums text-blue-700 font-semibold leading-tight">
-                {formatElapsed(elapsedSeconds)}
+                {formatElapsed(displayElapsedSeconds)}
               </span>
               <span className="text-xs text-blue-500">في العمل</span>
             </>
@@ -244,7 +265,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
             <span>سيتم احتساب هذا كعمل إضافي</span>
           </div>
         )}
-        {isCompleted && isOvertime && (
+        {isCompleted && firstPunchIsOvertime && (
           <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-amber-500">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>سيتم احتساب هذا كعمل إضافي</span>
@@ -263,25 +284,14 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
               {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الحضور'}
             </button>
           )}
-          {/* After workday: overtime = blue punch-in; within hours = gray return from break */}
-          {isCompleted && isOvertime && (
+          {isCompleted && (
             <button
-              onClick={handleCheckInClick}
+              onClick={() => setConfirmDialog('overtime')}
               disabled={buttonDisabled}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
             >
               <LogIn className="w-5 h-5" />
               {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الحضور (عمل إضافي)'}
-            </button>
-          )}
-          {isCompleted && !isOvertime && (
-            <button
-              onClick={handleCheckInClick}
-              disabled={buttonDisabled}
-              className="w-full py-3 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-xl flex flex-col items-center justify-center gap-0.5 text-sm font-medium transition-colors"
-            >
-              <span className="flex items-center gap-1.5"><LogIn className="w-4 h-4" /> تسجيل الحضور</span>
-              <span className="text-xs text-gray-400 font-normal">العودة من الاستراحة</span>
             </button>
           )}
         </div>

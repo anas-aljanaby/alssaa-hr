@@ -180,6 +180,19 @@ begin
   drop function _seed_demo_user;
 
   -- --------------------------------------------------------
+  -- 3b. Default work schedule: Mon–Fri 9:00–18:00 for all; عمر الجبوري = 7 days
+  -- --------------------------------------------------------
+  update public.profiles
+  set work_days = array[1, 2, 3, 4, 5],
+      work_start_time = time '09:00',
+      work_end_time   = time '18:00'
+  where org_id = _demo_org;
+
+  update public.profiles
+  set work_days = array[0, 1, 2, 3, 4, 5, 6]
+  where id = _emp1;
+
+  -- --------------------------------------------------------
   -- 4. Set department managers (one manager per dept; a manager can manage multiple depts)
   -- --------------------------------------------------------
   update public.departments set manager_uid = _mgr_news where id = _dept_news;

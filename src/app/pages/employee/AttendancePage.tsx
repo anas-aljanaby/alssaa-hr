@@ -121,11 +121,11 @@ export function AttendancePage() {
     }
   };
 
-  const handleCheckOut = async () => {
+  const handleCheckOut = async (checkoutTime?: string) => {
     if (!currentUser || actionLoading || cooldownLeft > 0) return;
     setActionLoading(true);
     try {
-      const result = await checkOut(currentUser.uid);
+      const result = await checkOut(currentUser.uid, checkoutTime);
       if (navigator.vibrate) navigator.vibrate(100);
       startCooldown();
       // Always update UI with checkout result so completed (green) state shows immediately.
