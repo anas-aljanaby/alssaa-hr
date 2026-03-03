@@ -30,6 +30,7 @@ drop function if exists public.enforce_org_id_from_user()         cascade;
 drop function if exists public.enforce_org_id_from_actor()        cascade;
 drop function if exists public.enforce_org_id_from_current_user() cascade;
 drop function if exists public.protect_profile_fields()           cascade;
+drop function if exists public.punch(text, timestamptz)           cascade;
 
 -- 4. Delete ALL auth users (wipes every account)
 delete from auth.users;

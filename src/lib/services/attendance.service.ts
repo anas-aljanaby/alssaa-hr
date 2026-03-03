@@ -1,6 +1,12 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables } from '../database.types';
 import { now } from '../time';
+import {
+  isDevModeActive,
+  getDevLogFromStorage,
+  setDevLogInStorage,
+  type DevAttendanceLog,
+} from '@/app/contexts/DevTimeContext';
 
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
@@ -111,7 +117,7 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
 
 export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
   const [logRes, policy] = await Promise.all([
-    supabase.from('attendance_logs').select('*').eq('user_id', userId).eq('date', date).maybeSingle(),
+    supabase.from('attendance_logs').select('*').eq('user_id', userId).eq('date', date).eq('is_dev', false).maybeSingle(),
     supabase.from('attendance_policy').select('work_start_time, work_end_time, grace_period_minutes').limit(1).maybeSingle(),
   ]);
 
@@ -180,11 +186,18 @@ export function nowTimeStr(d?: Date): string {
 
 export async function getTodayLog(userId: string): Promise<AttendanceLog | null> {
   const today = todayStr();
+  if (isDevModeActive()) {
+    const devLog = getDevLogFromStorage(userId, today);
+    if (devLog) return devLog as AttendanceLog;
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('attendance_logs')
     .select('*')
     .eq('user_id', userId)
     .eq('date', today)
+    .eq('is_dev', false)
     .maybeSingle();
 
   if (error) throw error;
@@ -195,7 +208,47 @@ export async function checkIn(userId: string): Promise<AttendanceLog> {
   const today = todayStr();
   const time = nowTimeStr();
 
-  // For enforcing the unique (user_id, date) constraint, we consider all logs when checking existence.
+  if (isDevModeActive()) {
+    const existing = getDevLogFromStorage(userId, today);
+    if (existing?.check_in_time && !existing?.check_out_time) {
+      throw new Error('Already checked in today');
+    }
+
+    const policyRes = await supabase
+      .from('attendance_policy')
+      .select('work_start_time, grace_period_minutes')
+      .limit(1)
+      .maybeSingle();
+
+    let status: AttendanceStatus = 'present';
+    if (policyRes.data) {
+      const [startH, startM] = policyRes.data.work_start_time.split(':').map(Number);
+      const grace = policyRes.data.grace_period_minutes ?? 0;
+      const [nowH, nowM] = time.split(':').map(Number);
+      const startMinutes = startH * 60 + startM + grace;
+      const nowMinutes = nowH * 60 + nowM;
+      if (nowMinutes > startMinutes) status = 'late';
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', userId).single();
+    const orgId = profile?.org_id ?? '00000000-0000-0000-0000-000000000000';
+
+    const devLog: DevAttendanceLog = {
+      id: existing?.id ?? `dev-${today}`,
+      org_id: orgId,
+      user_id: userId,
+      date: today,
+      check_in_time: time,
+      check_out_time: null,
+      status,
+      is_dev: true,
+    };
+    setDevLogInStorage(userId, today, devLog);
+    return devLog as AttendanceLog;
+  }
+
+  // For enforcing the unique (user_id, date) constraint, we must consider
+  // both dev and non-dev logs when checking existence.
   const { data: existing, error: existingError } = await supabase
     .from('attendance_logs')
     .select('*')
@@ -259,6 +312,24 @@ export async function checkOut(userId: string): Promise<AttendanceLog> {
   const today = todayStr();
   const time = nowTimeStr();
 
+  if (isDevModeActive()) {
+    const existing = getDevLogFromStorage(userId, today);
+    if (!existing?.check_in_time) {
+      throw new Error('Must check in before checking out');
+    }
+    if (existing.check_out_time) {
+      throw new Error('Already checked out today');
+    }
+
+    const updated: DevAttendanceLog = {
+      ...existing,
+      check_out_time: time,
+    };
+    setDevLogInStorage(userId, today, updated);
+    return updated as AttendanceLog;
+  }
+
+  // Must also consider dev logs here to avoid duplicate rows for the same day.
   const { data: existing, error: existingError } = await supabase
     .from('attendance_logs')
     .select('*')
@@ -296,6 +367,7 @@ export async function getLogsInRange(
     .from('attendance_logs')
     .select('*')
     .eq('user_id', userId)
+    .eq('is_dev', false)
     .gte('date', fromDate)
     .lte('date', toDate)
     .order('date', { ascending: false });
@@ -359,6 +431,7 @@ export async function getDepartmentLogsForDate(
     .select('*')
     .in('user_id', userIds)
     .eq('date', date)
+    .eq('is_dev', false)
     .order('check_in_time');
 
   if (error) throw error;
@@ -370,6 +443,7 @@ export async function getAllLogsForDate(date: string): Promise<AttendanceLog[]> 
     .from('attendance_logs')
     .select('*')
     .eq('date', date)
+    .eq('is_dev', false)
     .order('check_in_time');
 
   if (error) throw error;

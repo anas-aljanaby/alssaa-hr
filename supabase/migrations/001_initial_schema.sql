@@ -48,7 +48,9 @@ create table public.profiles (
   status        text not null default 'active'
                   check (status in ('active', 'inactive')),
   avatar_url    text,
-  join_date     date not null default current_date
+  join_date     date not null default current_date,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
 );
 
 alter table public.departments
