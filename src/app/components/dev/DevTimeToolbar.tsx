@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Clock, RotateCcw, Database, ChevronLeft, ChevronRight, Trash2, Check, FastForward } from 'lucide-react';
-import { useDevTime, type SpeedMultiplier, DEV_TIME_STORAGE_KEY } from '@/app/contexts/DevTimeContext';
+import { Clock, Database, ChevronLeft, ChevronRight, FastForward } from 'lucide-react';
+import { useDevTime, type SpeedMultiplier } from '@/app/contexts/DevTimeContext';
 import { Button } from '@/app/components/ui/button';
 import {
   Popover,
@@ -30,7 +30,6 @@ export function DevTimeToolbar() {
   const devTime = useDevTime();
   const [open, setOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [workEndTime, setWorkEndTime] = useState<string | null>(null);
 
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -84,7 +83,7 @@ export function DevTimeToolbar() {
 
   if (!devTime) return null;
 
-  const { isOverrideActive, override, setOverride, reset, clearDevLogs, now } = devTime;
+  const { isOverrideActive, override, setOverride, now } = devTime;
   const current = now();
   const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
   const timeStr = `${String(current.getHours()).padStart(2, '0')}:${String(current.getMinutes()).padStart(2, '0')}`;
@@ -123,31 +122,6 @@ export function DevTimeToolbar() {
     } finally {
       setSeeding(false);
     }
-  };
-
-  const handleResetDevData = () => {
-    setResetting(true);
-    setOpen(false);
-    clearDevLogs();
-    reset();
-    toast.success('Dev data reset');
-    setResetting(false);
-    setTimeout(() => window.location.reload(), 100);
-  };
-
-  const handleResetAllData = () => {
-    setOpen(false);
-    localStorage.removeItem(DEV_TIME_STORAGE_KEY);
-    toast.success('Dev time reset — reloading…');
-    // Force full reload so app reinitializes with no override
-    setTimeout(() => {
-      window.location.href = window.location.href;
-    }, 100);
-  };
-
-  const handleConfirmReload = () => {
-    setOpen(false);
-    window.location.reload();
   };
 
   const handleSkipToEndOfDay = () => {
@@ -284,31 +258,6 @@ export function DevTimeToolbar() {
               <FastForward className="h-4 w-4 mr-1" />
               Skip to day end (3s left)
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                reset();
-                setOpen(false);
-              }}
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Reset to real time
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full border-amber-200 bg-amber-50 hover:bg-amber-100"
-              onClick={handleResetDevData}
-              disabled={resetting}
-              title="Delete dev attendance records, reset time override, and refresh"
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              {resetting ? 'Resetting…' : 'Reset Dev Data'}
-            </Button>
-
             <div className="border-t pt-3 space-y-2">
               <Label className="text-xs text-muted-foreground">Dev seed</Label>
               <Button
@@ -320,29 +269,6 @@ export function DevTimeToolbar() {
               >
                 <Database className="h-4 w-4 mr-1" />
                 {seeding ? 'Seeding…' : 'Seed 1 month attendance'}
-              </Button>
-            </div>
-
-            <div className="border-t pt-3 flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={handleResetAllData}
-                title="Reset dev override and local state"
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Reset all data
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                className="flex-1"
-                onClick={handleConfirmReload}
-                title="Reload the site"
-              >
-                <Check className="h-4 w-4 mr-1" />
-                Confirm
               </Button>
             </div>
           </div>
