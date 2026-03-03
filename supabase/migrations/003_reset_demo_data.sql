@@ -28,3 +28,4 @@ begin
   raise notice 'Demo data reset complete. Run 004_seed_demo.sql to re-populate.';
 end;
 $$;
+

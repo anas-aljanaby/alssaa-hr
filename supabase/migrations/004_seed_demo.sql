@@ -69,12 +69,13 @@ begin
     (_dept_hr,   _demo_org, 'HR Department',         'قسم الموارد البشرية');
 
   -- --------------------------------------------------------
-  -- 3. Helper: insert one demo auth user + identity
+  -- 3. Helper: insert/upsert one demo auth user + identity + profile
   -- --------------------------------------------------------
   create or replace function _seed_demo_user(
     _id uuid, _email text, _pw text, _meta jsonb
   ) returns void language plpgsql as $fn$
   begin
+    -- Upsert auth.users so reseeding doesn't create duplicate/new rows
     insert into auth.users (
       id, instance_id, aud, role, email, encrypted_password,
       email_confirmed_at, last_sign_in_at, recovery_sent_at,
@@ -88,8 +89,17 @@ begin
       '{"provider":"email","providers":["email"]}'::jsonb,
       _meta, now(), now(),
       '', '', '', ''
-    );
+    )
+    on conflict (id) do update set
+      email = excluded.email,
+      encrypted_password = excluded.encrypted_password,
+      email_confirmed_at = excluded.email_confirmed_at,
+      last_sign_in_at = excluded.last_sign_in_at,
+      recovery_sent_at = excluded.recovery_sent_at,
+      raw_user_meta_data = excluded.raw_user_meta_data,
+      updated_at = now();
 
+    -- Upsert identity row
     insert into auth.identities (
       id, user_id, provider_id, identity_data, provider,
       last_sign_in_at, created_at, updated_at
@@ -97,7 +107,51 @@ begin
       _id, _id, _id::text,
       format('{"sub":"%s","email":"%s"}', _id::text, _email)::jsonb,
       'email', now(), now(), now()
-    );
+    )
+    on conflict (id) do update set
+      identity_data = excluded.identity_data,
+      last_sign_in_at = now(),
+      updated_at = now();
+
+    -- Upsert profile explicitly (don't rely on auth trigger during reseed)
+    insert into public.profiles (
+      id, org_id, name, name_ar, phone, role, employee_id, department_id,
+      created_at, updated_at
+    ) values (
+      _id,
+      (_meta->>'org_id')::uuid,
+      _meta->>'name',
+      _meta->>'name_ar',
+      _meta->>'phone',
+      _meta->>'role',
+      _meta->>'employee_id',
+      (_meta->>'department_id')::uuid,
+      now(), now()
+    )
+    on conflict (id) do update set
+      org_id = excluded.org_id,
+      name = excluded.name,
+      name_ar = excluded.name_ar,
+      phone = excluded.phone,
+      role = excluded.role,
+      employee_id = excluded.employee_id,
+      department_id = excluded.department_id,
+      updated_at = now();
+
+    -- Ensure leave_balances row exists and has sensible defaults
+    insert into public.leave_balances (
+      org_id, user_id, total_annual, used_annual, remaining_annual,
+      total_sick, used_sick, remaining_sick
+    ) values (
+      (_meta->>'org_id')::uuid, _id, 21, 0, 21, 10, 0, 10
+    )
+    on conflict (user_id) do update set
+      total_annual = excluded.total_annual,
+      used_annual = excluded.used_annual,
+      remaining_annual = excluded.remaining_annual,
+      total_sick = excluded.total_sick,
+      used_sick = excluded.used_sick,
+      remaining_sick = excluded.remaining_sick;
   end;
   $fn$;
 
