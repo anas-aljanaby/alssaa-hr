@@ -84,12 +84,20 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     : 0;
 
   const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
-  const isOvertime = shiftEndMinutes !== null && currentMinutes > shiftEndMinutes;
+  // Overtime = outside working hours: before shift start OR after shift end (e.g. before 8:00 or after 16:00)
+  const isOvertime =
+    shiftStartMinutes !== null &&
+    shiftEndMinutes !== null &&
+    (currentMinutes < shiftStartMinutes || currentMinutes > shiftEndMinutes);
   const isEarlyCheckout = shiftEndMinutes !== null && currentMinutes < shiftEndMinutes - 60;
 
   const firstPunchIsLate =
     log?.check_in_time && shift
       ? toMinutes(log.check_in_time) > shiftStartMinutes! + shift.gracePeriodMinutes
+      : false;
+  const firstPunchIsOvertime =
+    log?.check_in_time && shiftStartMinutes !== null && shiftEndMinutes !== null
+      ? (toMinutes(log.check_in_time) < shiftStartMinutes || toMinutes(log.check_in_time) > shiftEndMinutes)
       : false;
 
   const handleCheckInClick = () => {
@@ -182,7 +190,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
                 <p className="text-gray-800 font-medium">{formatTime(log.check_in_time)}</p>
                 {firstPunchIsLate ? (
                   <span className="px-1.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200">متأخر</span>
-                ) : isOvertime && isCheckedIn ? (
+                ) : firstPunchIsOvertime ? (
                   <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">عمل إضافي</span>
                 ) : (
                   <span className="px-1.5 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">في الوقت</span>

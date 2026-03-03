@@ -11,13 +11,14 @@ import * as time from '@/lib/time';
 
 export const DEV_TIME_STORAGE_KEY = 'devTimeOverride';
 
-export type SpeedMultiplier = 1 | 60;
+export type SpeedMultiplier = 1 | 10 | 60;
 
 export interface DevTimeOverride {
   date: string; // YYYY-MM-DD
-  time: string; // HH:mm
+  time: string; // HH:mm or HH:mm:ss
   speed: SpeedMultiplier;
   startedAt: number; // real timestamp
+  stopAt?: string; // optional ISO datetime string to cap simulated time
 }
 
 export type DevAttendanceStatus = 'present' | 'late' | 'absent' | 'on_leave';
@@ -27,6 +28,12 @@ interface DevTimeContextType {
   isOverrideActive: boolean;
   override: DevTimeOverride | null;
   setOverride: (date: string, time: string, speed: SpeedMultiplier) => void;
+  setOverrideWithStop: (
+    date: string,
+    time: string,
+    speed: SpeedMultiplier,
+    stopAt: string | null
+  ) => void;
   reset: () => void;
 }
 
@@ -56,7 +63,15 @@ function computeSimulatedNow(o: DevTimeOverride): Date {
   }
 
   const elapsed = (Date.now() - o.startedAt) * o.speed;
-  const simulated = new Date(base.getTime() + elapsed);
+  let simulated = new Date(base.getTime() + elapsed);
+
+  // If there's a configured stopAt time, never go past it.
+  if (o.stopAt) {
+    const stop = new Date(o.stopAt);
+    if (!Number.isNaN(stop.getTime()) && simulated.getTime() > stop.getTime()) {
+      simulated = stop;
+    }
+  }
 
   // Extra safety: never return an invalid Date
   if (Number.isNaN(simulated.getTime())) {
@@ -75,11 +90,34 @@ export function DevTimeProvider({ children }: { children: ReactNode }) {
   const [tick, setTick] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const setOverride = useCallback((date: string, timeStr: string, speed: SpeedMultiplier) => {
-    const next: DevTimeOverride = { date, time: timeStr, speed, startedAt: Date.now() };
-    setOverrideState(next);
-    localStorage.setItem(DEV_TIME_STORAGE_KEY, JSON.stringify(next));
-  }, []);
+  const setOverrideInternal = useCallback(
+    (date: string, timeStr: string, speed: SpeedMultiplier, stopAt?: string | null) => {
+      const next: DevTimeOverride = {
+        date,
+        time: timeStr,
+        speed,
+        startedAt: Date.now(),
+        ...(stopAt ? { stopAt } : {}),
+      };
+      setOverrideState(next);
+      localStorage.setItem(DEV_TIME_STORAGE_KEY, JSON.stringify(next));
+    },
+    []
+  );
+
+  const setOverride = useCallback(
+    (date: string, timeStr: string, speed: SpeedMultiplier) => {
+      setOverrideInternal(date, timeStr, speed, null);
+    },
+    [setOverrideInternal]
+  );
+
+  const setOverrideWithStop = useCallback(
+    (date: string, timeStr: string, speed: SpeedMultiplier, stopAt: string | null) => {
+      setOverrideInternal(date, timeStr, speed, stopAt);
+    },
+    [setOverrideInternal]
+  );
 
   const reset = useCallback(() => {
     setOverrideState(null);
@@ -121,6 +159,7 @@ export function DevTimeProvider({ children }: { children: ReactNode }) {
     isOverrideActive: override != null,
     override,
     setOverride,
+    setOverrideWithStop,
     reset,
   };
 

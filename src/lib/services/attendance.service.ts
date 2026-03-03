@@ -43,20 +43,23 @@ export interface MonthDaySummary {
 function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_out_time'>, shift: ShiftInfo | null): PunchEntry[] {
   if (!log.check_in_time) return [];
 
-  const shiftEndMinutes = shift
-    ? shift.workEndTime.split(':').reduce((h, m, i) => i === 0 ? Number(h) * 60 : Number(h) + Number(m), 0 as unknown as number)
-    : null;
-
   const toMinutes = (t: string) => {
     const [h, m] = t.split(':').map(Number);
     return h * 60 + m;
   };
 
+  const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
+  const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
+  const outsideWorkingHours = (minutes: number) =>
+    shiftStartMinutes !== null &&
+    shiftEndMinutes !== null &&
+    (minutes < shiftStartMinutes || minutes > shiftEndMinutes);
+
   const punches: PunchEntry[] = [];
 
   const inTime = log.check_in_time;
   const inMinutes = toMinutes(inTime);
-  const inOvertime = shiftEndMinutes !== null && inMinutes > (shiftEndMinutes as number);
+  const inOvertime = outsideWorkingHours(inMinutes);
 
   punches.push({
     id: `${log.id}-in`,
@@ -68,7 +71,7 @@ function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_o
   if (log.check_out_time) {
     const outTime = log.check_out_time;
     const outMinutes = toMinutes(outTime);
-    const outOvertime = shiftEndMinutes !== null && outMinutes > (shiftEndMinutes as number);
+    const outOvertime = outsideWorkingHours(outMinutes);
 
     punches.push({
       id: `${log.id}-out`,

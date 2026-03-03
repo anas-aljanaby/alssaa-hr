@@ -15,6 +15,7 @@ import { getPolicy } from '@/lib/services/policy.service';
 
 const SPEEDS: { value: SpeedMultiplier; label: string }[] = [
   { value: 1, label: '1x' },
+  { value: 10, label: '10x' },
   { value: 60, label: '60x' },
 ];
 
@@ -24,6 +25,16 @@ function addDays(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00');
   d.setDate(d.getDate() + delta);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatTimeWithSeconds(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(
+    d.getSeconds()
+  ).padStart(2, '0')}`;
 }
 
 export function DevTimeToolbar() {
@@ -83,19 +94,12 @@ export function DevTimeToolbar() {
 
   if (!devTime) return null;
 
-  const { isOverrideActive, override, setOverride } = devTime;
+  const { isOverrideActive, override, setOverride, setOverrideWithStop, now: devNow } = devTime;
 
-  // Defaults should always be based on real current time,
-  // regardless of any active dev-time override.
-  const realNow = new Date();
-  const dateStr = `${realNow.getFullYear()}-${String(realNow.getMonth() + 1).padStart(2, '0')}-${String(realNow.getDate()).padStart(2, '0')}`;
-  const timeStr = `${String(realNow.getHours()).padStart(2, '0')}:${String(realNow.getMinutes()).padStart(2, '0')}`;
-
-  // If there is an override time but it is invalid (e.g. legacy '--:--'),
-  // fall back to the real current time so the input never shows an empty/placeholder value.
-  const overrideTime = override?.time;
-  const effectiveTime =
-    overrideTime && /^\d{2}:\d{2}$/.test(overrideTime) ? overrideTime : timeStr;
+  // Single source of truth for displayed date & time (with seconds): the dev-time clock.
+  const simulatedNow = devNow();
+  const currentDate = formatDate(simulatedNow);
+  const currentTime = formatTimeWithSeconds(simulatedNow);
 
   const handleTriggerPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -139,14 +143,14 @@ export function DevTimeToolbar() {
       return;
     }
 
-    const baseDate = override?.date ?? dateStr;
+    const baseDate = override?.date ?? currentDate;
 
     // workEndTime comes from Postgres TIME, typically "HH:MM:SS" (or "HH:MM").
     // Parse it safely and compute "3 seconds before" while staying on the same day.
     const [hStr, mStr = '0', sStr = '0'] = workEndTime.split(':');
     const h = Number(hStr);
     const m = Number(mStr);
-    const s = Number(sStr);
+    const s = Number.isNaN(Number(sStr)) ? 0 : Number(sStr);
 
     if ([h, m, s].some((v) => Number.isNaN(v))) {
       toast.error('وقت نهاية الدوام غير صالح');
@@ -158,24 +162,31 @@ export function DevTimeToolbar() {
 
     const newH = Math.floor(totalSeconds / 3600);
     const newM = Math.floor((totalSeconds % 3600) / 60);
+    const newS = totalSeconds % 60;
 
     const hh = String(newH).padStart(2, '0');
     const mm = String(newM).padStart(2, '0');
-    const newDate = baseDate;
-    const newTime = `${hh}:${mm}`;
+    const ss = String(newS).padStart(2, '0');
 
-    // Jump to just before the end of the workday on the same selected day, at normal speed.
-    setOverride(newDate, newTime, 1);
+    const newDate = baseDate;
+    const newTime = `${hh}:${mm}:${ss}`;
+
+    const endH = String(h).padStart(2, '0');
+    const endM = String(m).padStart(2, '0');
+    const endS = String(s).padStart(2, '0');
+    const stopAt = `${baseDate}T${endH}:${endM}:${endS}`;
+
+    // Jump to just before the end of the workday on the same selected day,
+    // and cap simulated time so both timers stop exactly at shift end.
+    setOverrideWithStop(newDate, newTime, override?.speed ?? 1, stopAt);
   };
 
   const goPrevDay = () => {
-    const d = override?.date ?? dateStr;
-    setOverride(addDays(d, -1), effectiveTime, override?.speed ?? 1);
+    setOverride(addDays(currentDate, -1), currentTime, override?.speed ?? 1);
   };
 
   const goNextDay = () => {
-    const d = override?.date ?? dateStr;
-    setOverride(addDays(d, 1), effectiveTime, override?.speed ?? 1);
+    setOverride(addDays(currentDate, 1), currentTime, override?.speed ?? 1);
   };
 
   return (
@@ -221,10 +232,10 @@ export function DevTimeToolbar() {
                 <Input
                   type="date"
                   className="flex-1"
-                  value={override?.date ?? dateStr}
+                  value={currentDate}
                   onChange={(e) => {
-                    const v = e.target.value;
-                    setOverride(v, effectiveTime, override?.speed ?? 1);
+                    const v = e.target.value || currentDate;
+                    setOverride(v, currentTime, override?.speed ?? 1);
                   }}
                 />
                 <Button
@@ -243,10 +254,13 @@ export function DevTimeToolbar() {
               <Label className="text-xs">Time</Label>
               <Input
                 type="time"
-                value={effectiveTime}
+                step={1}
+                value={currentTime}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setOverride(override?.date ?? dateStr, v || timeStr, override?.speed ?? 1);
+                  const nextTime =
+                    v && /^\d{2}:\d{2}(:\d{2})?$/.test(v) ? (v.length === 5 ? `${v}:00` : v) : currentTime;
+                  setOverride(currentDate, nextTime, override?.speed ?? 1);
                 }}
               />
             </div>
@@ -261,8 +275,8 @@ export function DevTimeToolbar() {
                     className="flex-1"
                     onClick={() =>
                       setOverride(
-                        override?.date ?? dateStr,
-                        effectiveTime,
+                        currentDate,
+                        currentTime,
                         value
                       )
                     }
