@@ -128,8 +128,15 @@ export function AttendancePage() {
       const result = await checkOut(currentUser.uid);
       if (navigator.vibrate) navigator.vibrate(100);
       startCooldown();
-      const updated = await attendanceService.getAttendanceToday(currentUser.uid);
-      setToday({ ...updated, log: result });
+      // Always update UI with checkout result so completed (green) state shows immediately.
+      // If getAttendanceToday fails (e.g. network), we still show the completed day.
+      setToday((prev) => ({ ...prev, log: result }));
+      try {
+        const updated = await attendanceService.getAttendanceToday(currentUser.uid);
+        setToday({ ...updated, log: result });
+      } catch {
+        // Keep today with result log; punches may be stale until next load
+      }
       loadMonthly();
     } catch {
       // toast handled by context

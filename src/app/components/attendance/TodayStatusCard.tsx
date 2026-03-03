@@ -46,7 +46,6 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
 
   const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
   const isCompleted = !!(log?.check_in_time && log?.check_out_time);
-  const isOnBreak = !!(log?.check_in_time && log?.check_out_time);
 
   useEffect(() => {
     if (!isCheckedIn || !log?.check_in_time) {
@@ -116,7 +115,8 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     else onCheckOut();
   };
 
-  // Automatically check out when reaching end of work day while still checked in.
+  // Always auto-checkout at shift end time (e.g. 16:00), regardless of hours worked.
+  // If the user was late they may have only worked 80% — we still checkout because the day is over.
   // Depends on elapsedSeconds so it re-evaluates every tick at high dev speeds.
   useEffect(() => {
     if (
@@ -222,7 +222,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           </div>
         )}
 
-        {/* Total worked for completed day */}
+        {/* Total worked — single line for completed day */}
         {isCompleted && workedMinutes > 0 && (
           <div className="text-center mb-4">
             <span className="text-sm text-gray-600">
@@ -244,9 +244,10 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
             <span>سيتم احتساب هذا كعمل إضافي</span>
           </div>
         )}
-        {isOnBreak && (
-          <div className="text-center mb-3 text-xs text-gray-500">
-            إجمالي العمل حتى الآن: <span className="font-medium">{Math.floor(workedMinutes / 60)}س {workedMinutes % 60}د</span>
+        {isCompleted && isOvertime && (
+          <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-amber-500">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>سيتم احتساب هذا كعمل إضافي</span>
           </div>
         )}
 
@@ -262,8 +263,18 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
               {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الحضور'}
             </button>
           )}
-          {/* Manual checkout removed: day ends automatically at shift end */}
-          {isCompleted && (
+          {/* After workday: overtime = blue punch-in; within hours = gray return from break */}
+          {isCompleted && isOvertime && (
+            <button
+              onClick={handleCheckInClick}
+              disabled={buttonDisabled}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+            >
+              <LogIn className="w-5 h-5" />
+              {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الحضور (عمل إضافي)'}
+            </button>
+          )}
+          {isCompleted && !isOvertime && (
             <button
               onClick={handleCheckInClick}
               disabled={buttonDisabled}
