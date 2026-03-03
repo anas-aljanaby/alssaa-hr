@@ -83,10 +83,19 @@ export function DevTimeToolbar() {
 
   if (!devTime) return null;
 
-  const { isOverrideActive, override, setOverride, now } = devTime;
-  const current = now();
-  const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-  const timeStr = `${String(current.getHours()).padStart(2, '0')}:${String(current.getMinutes()).padStart(2, '0')}`;
+  const { isOverrideActive, override, setOverride } = devTime;
+
+  // Defaults should always be based on real current time,
+  // regardless of any active dev-time override.
+  const realNow = new Date();
+  const dateStr = `${realNow.getFullYear()}-${String(realNow.getMonth() + 1).padStart(2, '0')}-${String(realNow.getDate()).padStart(2, '0')}`;
+  const timeStr = `${String(realNow.getHours()).padStart(2, '0')}:${String(realNow.getMinutes()).padStart(2, '0')}`;
+
+  // If there is an override time but it is invalid (e.g. legacy '--:--'),
+  // fall back to the real current time so the input never shows an empty/placeholder value.
+  const overrideTime = override?.time;
+  const effectiveTime =
+    overrideTime && /^\d{2}:\d{2}$/.test(overrideTime) ? overrideTime : timeStr;
 
   const handleTriggerPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -131,27 +140,42 @@ export function DevTimeToolbar() {
     }
 
     const baseDate = override?.date ?? dateStr;
-    const endOfDay = new Date(`${baseDate}T${workEndTime}:00`);
-    endOfDay.setSeconds(endOfDay.getSeconds() - 3);
-    const y = endOfDay.getFullYear();
-    const m = String(endOfDay.getMonth() + 1).padStart(2, '0');
-    const d = String(endOfDay.getDate()).padStart(2, '0');
-    const hh = String(endOfDay.getHours()).padStart(2, '0');
-    const mm = String(endOfDay.getMinutes()).padStart(2, '0');
-    const newDate = `${y}-${m}-${d}`;
+
+    // workEndTime comes from Postgres TIME, typically "HH:MM:SS" (or "HH:MM").
+    // Parse it safely and compute "3 seconds before" while staying on the same day.
+    const [hStr, mStr = '0', sStr = '0'] = workEndTime.split(':');
+    const h = Number(hStr);
+    const m = Number(mStr);
+    const s = Number(sStr);
+
+    if ([h, m, s].some((v) => Number.isNaN(v))) {
+      toast.error('وقت نهاية الدوام غير صالح');
+      return;
+    }
+
+    let totalSeconds = h * 3600 + m * 60 + s;
+    totalSeconds = Math.max(0, totalSeconds - 3);
+
+    const newH = Math.floor(totalSeconds / 3600);
+    const newM = Math.floor((totalSeconds % 3600) / 60);
+
+    const hh = String(newH).padStart(2, '0');
+    const mm = String(newM).padStart(2, '0');
+    const newDate = baseDate;
     const newTime = `${hh}:${mm}`;
-    // Jump to the last few seconds of the selected day at normal speed
+
+    // Jump to just before the end of the workday on the same selected day, at normal speed.
     setOverride(newDate, newTime, 1);
   };
 
   const goPrevDay = () => {
     const d = override?.date ?? dateStr;
-    setOverride(addDays(d, -1), override?.time ?? timeStr, override?.speed ?? 1);
+    setOverride(addDays(d, -1), effectiveTime, override?.speed ?? 1);
   };
 
   const goNextDay = () => {
     const d = override?.date ?? dateStr;
-    setOverride(addDays(d, 1), override?.time ?? timeStr, override?.speed ?? 1);
+    setOverride(addDays(d, 1), effectiveTime, override?.speed ?? 1);
   };
 
   return (
@@ -200,7 +224,7 @@ export function DevTimeToolbar() {
                   value={override?.date ?? dateStr}
                   onChange={(e) => {
                     const v = e.target.value;
-                    setOverride(v, override?.time ?? timeStr, override?.speed ?? 1);
+                    setOverride(v, effectiveTime, override?.speed ?? 1);
                   }}
                 />
                 <Button
@@ -219,10 +243,10 @@ export function DevTimeToolbar() {
               <Label className="text-xs">Time</Label>
               <Input
                 type="time"
-                value={override?.time ?? timeStr}
+                value={effectiveTime}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setOverride(override?.date ?? dateStr, v, override?.speed ?? 1);
+                  setOverride(override?.date ?? dateStr, v || timeStr, override?.speed ?? 1);
                 }}
               />
             </div>
@@ -238,7 +262,7 @@ export function DevTimeToolbar() {
                     onClick={() =>
                       setOverride(
                         override?.date ?? dateStr,
-                        override?.time ?? timeStr,
+                        effectiveTime,
                         value
                       )
                     }
