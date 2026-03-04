@@ -86,29 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let subscription: { unsubscribe: () => void } | null = null;
 
-    (async () => {
-      // Run getSession() first and restore user from persisted session (fixes
-      // logout-on-refresh). Handle invalid/expired refresh token before
-      // subscribing to auth changes (avoids race and uncaught AuthApiError).
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (cancelled) return;
-        if (error && isRefreshTokenError(error)) {
-          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-          setCurrentUser(null);
-        } else if (session) {
-          const user = await fetchProfileForSession(session);
-          if (!cancelled && user) setCurrentUser(user);
-        }
-      } catch (e: unknown) {
-        if (!cancelled && isRefreshTokenError(e)) {
-          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-          setCurrentUser(null);
-        }
-      }
+    const AUTH_INIT_TIMEOUT_MS = 12_000;
 
+    function finishAuthInit() {
       if (cancelled) return;
-
       // Use onAuthStateChange for future session updates (login, logout, token refresh).
       // Do NOT call supabase (e.g. fetchProfileForSession) inside this callback:
       // the auth client holds a Navigator LockManager lock while the callback runs.
@@ -126,6 +107,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       subscription = sub;
       setAuthReady(true);
+    }
+
+    (async () => {
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        setTimeout(() => resolve('timeout'), AUTH_INIT_TIMEOUT_MS);
+      });
+
+      const sessionRestorePromise = (async () => {
+        try {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (cancelled) return;
+          if (error && isRefreshTokenError(error)) {
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+            setCurrentUser(null);
+          } else if (session) {
+            const user = await fetchProfileForSession(session);
+            if (!cancelled && user) setCurrentUser(user);
+          }
+        } catch (e: unknown) {
+          if (!cancelled && isRefreshTokenError(e)) {
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+            setCurrentUser(null);
+          }
+        }
+      })();
+
+      const result = await Promise.race([sessionRestorePromise.then(() => 'ok'), timeoutPromise]);
+
+      if (cancelled) return;
+      if (result === 'timeout') {
+        setCurrentUser(null);
+      }
+      finishAuthInit();
     })();
 
     return () => {

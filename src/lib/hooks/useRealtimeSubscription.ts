@@ -20,8 +20,19 @@ export function useRealtimeSubscription(
 
   useEffect(() => {
     teardown();
-    unsubRef.current = subscribe();
-    return teardown;
+    try {
+      unsubRef.current = subscribe();
+    } catch (err) {
+      console.warn('[useRealtimeSubscription] subscribe failed (e.g. network/realtime unavailable):', err);
+      unsubRef.current = undefined;
+    }
+    return () => {
+      try {
+        teardown();
+      } catch (err) {
+        console.warn('[useRealtimeSubscription] teardown error:', err);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
