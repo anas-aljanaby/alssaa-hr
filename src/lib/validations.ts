@@ -121,6 +121,8 @@ export type AddUserFormData = z.infer<typeof addUserSchema>;
 
 const workDay = z.number().int().min(0).max(6);
 
+const timeRegex = /^([01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
+
 export const updateProfileSchema = z
   .object({
     name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
@@ -136,9 +138,11 @@ export const updateProfileSchema = z
     (data) => {
       const hasDays = data.work_days && data.work_days.length > 0;
       if (!hasDays) return true;
-      const hasStart = data.work_start_time && /^\d{1,2}:\d{2}$/.test(data.work_start_time);
-      const hasEnd = data.work_end_time && /^\d{1,2}:\d{2}$/.test(data.work_end_time);
+
+      const hasStart = data.work_start_time && timeRegex.test(data.work_start_time);
+      const hasEnd = data.work_end_time && timeRegex.test(data.work_end_time);
       if (!hasStart || !hasEnd) return false;
+
       const [sh, sm] = data.work_start_time!.split(':').map(Number);
       const [eh, em] = data.work_end_time!.split(':').map(Number);
       return sh * 60 + sm < eh * 60 + em;
