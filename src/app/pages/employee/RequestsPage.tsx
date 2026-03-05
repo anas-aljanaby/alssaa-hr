@@ -27,6 +27,10 @@ import {
   Loader2,
   Info,
 } from 'lucide-react';
+import { PageLayout } from '../../components/layout/PageLayout';
+import { FilterChips } from '../../components/shared/FilterChips';
+import { RequestCard } from '../../components/shared/RequestCard';
+import { EmptyState } from '../../components/shared/EmptyState';
 
 const PAGE_SIZE = 10;
 
@@ -204,138 +208,30 @@ export function RequestsPage() {
   ];
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-gray-800">الطلبات</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          طلب جديد
-        </button>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {filterTabs.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => { setFilter(tab.value); setCurrentPage(1); }}
-            className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
-              filter === tab.value
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+    <PageLayout
+      title="الطلبات"
+    >
+      <FilterChips
+        tabs={filterTabs}
+        activeValue={filter}
+        onChange={(value) => {
+          setFilter(value);
+          setCurrentPage(1);
+        }}
+      />
 
       {loading ? (
         <ListPageSkeleton count={3} />
       ) : filteredRequests.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>لا توجد طلبات</p>
-        </div>
+        <EmptyState
+          icon={<FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />}
+          title="لا توجد طلبات"
+        />
       ) : (
         <>
           <div className="space-y-3">
             {paginatedItems.map((req) => (
-              <div
-                key={req.id}
-                className={`bg-white rounded-xl p-4 border border-gray-100 border-r-4 shadow-sm ${statusBg(req.status)}`}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    {statusIcon(req.status)}
-                    <span className="text-gray-800">{getRequestTypeAr(req.type)}</span>
-                  </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-xs ${
-                      req.status === 'pending'
-                        ? 'bg-amber-100 text-amber-700'
-                        : req.status === 'approved'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-red-100 text-red-700'
-                    }`}
-                  >
-                    {getStatusAr(req.status)}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-4 text-xs text-gray-500 mb-2 flex-wrap">
-                  {req.type === 'time_adjustment' ? (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>
-                        {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
-                        {' — '}
-                        {new Date(req.from_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
-                        {' → '}
-                        {new Date(req.to_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>من: {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>إلى: {new Date(req.to_date_time).toLocaleDateString('ar-IQ')}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {req.note && (
-                  <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-2 mb-2">{req.note}</p>
-                )}
-
-                {req.attachment_url && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const url = await storageService.getAttachmentUrl(req.attachment_url!);
-                        window.open(url, '_blank');
-                      } catch {
-                        toast.error('فشل فتح المرفق');
-                      }
-                    }}
-                    className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 mb-2 transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    عرض المرفق
-                  </button>
-                )}
-
-                {req.decision_note && (
-                  <div
-                    className={`text-sm p-2 rounded-lg ${
-                      req.status === 'approved'
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-red-50 text-red-700'
-                    }`}
-                  >
-                    <span className="text-xs opacity-70">ملاحظة المدير: </span>
-                    {req.decision_note}
-                  </div>
-                )}
-
-                <div className="text-xs text-gray-400 mt-2">
-                  {new Date(req.created_at).toLocaleDateString('ar-IQ', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </div>
-              </div>
+              <RequestCard key={req.id} request={req} />
             ))}
           </div>
 
@@ -595,6 +491,16 @@ export function RequestsPage() {
           </div>
         </div>
       )}
-    </div>
+      {!showForm && (
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="fixed bottom-24 right-4 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span className="text-sm">طلب جديد</span>
+        </button>
+      )}
+    </PageLayout>
   );
 }

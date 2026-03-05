@@ -97,6 +97,20 @@ export function UserDetailsPage() {
     },
   });
 
+  const handleBack = useCallback(() => {
+    if (!currentUser) {
+      navigate('/');
+      return;
+    }
+    if (currentUser.role === 'admin') {
+      navigate('/users');
+    } else if (currentUser.role === 'manager') {
+      navigate('/approvals');
+    } else {
+      navigate('/more');
+    }
+  }, [currentUser, navigate]);
+
   const canAccess = useMemo(() => {
     if (!currentUser || !userId) return false;
     if (currentUser.role === 'admin') return true;
@@ -187,10 +201,10 @@ export function UserDetailsPage() {
           <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
           <p className="text-red-800">خطأ في تحميل البيانات</p>
           <button
-            onClick={() => navigate('/users')}
+            onClick={handleBack}
             className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700"
           >
-            العودة للمستخدمين
+            العودة
           </button>
         </div>
       </div>
@@ -205,7 +219,7 @@ export function UserDetailsPage() {
           <h2 className="text-gray-800 mb-2">غير مصرح</h2>
           <p className="text-amber-800 text-sm mb-4">ليس لديك صلاحية لعرض تفاصيل هذا الموظف</p>
           <button
-            onClick={() => navigate('/users')}
+            onClick={handleBack}
             className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700"
           >
             العودة
@@ -232,7 +246,7 @@ export function UserDetailsPage() {
         <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
           <p className="text-gray-600">الموظف غير موجود</p>
           <button
-            onClick={() => navigate('/users')}
+            onClick={handleBack}
             className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700"
           >
             العودة
@@ -314,7 +328,7 @@ export function UserDetailsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/users')}
+            onClick={handleBack}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowRight className="w-5 h-5 text-gray-600" />

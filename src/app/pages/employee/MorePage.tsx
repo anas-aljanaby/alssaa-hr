@@ -46,9 +46,32 @@ export function MorePage() {
     {
       title: 'الحساب',
       items: [
-        { icon: User, label: 'الملف الشخصي', color: 'text-blue-500', bgColor: 'bg-blue-50' },
-        { icon: Bell, label: 'إعدادات الإشعارات', color: 'text-purple-500', bgColor: 'bg-purple-50' },
+        {
+          icon: User,
+          label: 'الملف الشخصي',
+          color: 'text-blue-500',
+          bgColor: 'bg-blue-50',
+          onClick: () => navigate(`/user-details/${currentUser.uid}`),
+        },
+        {
+          icon: Bell,
+          label: 'الإشعارات',
+          color: 'text-purple-500',
+          bgColor: 'bg-purple-50',
+          onClick: () => navigate('/notifications'),
+        },
         { icon: Shield, label: 'الأمان والخصوصية', color: 'text-emerald-500', bgColor: 'bg-emerald-50' },
+        ...(currentUser.role === 'manager'
+          ? [
+              {
+                icon: FileText,
+                label: 'طلباتي',
+                color: 'text-blue-500',
+                bgColor: 'bg-blue-50',
+                onClick: () => navigate('/requests'),
+              } as const,
+            ]
+          : []),
       ],
     },
     {
@@ -65,6 +88,52 @@ export function MorePage() {
         { icon: FileText, label: 'الشروط والأحكام', color: 'text-gray-500', bgColor: 'bg-gray-100' },
       ],
     },
+    ...(currentUser.role === 'admin'
+      ? [
+          {
+            title: 'إدارة النظام',
+            items: [
+              {
+                icon: Building2,
+                label: 'إدارة الأقسام',
+                color: 'text-indigo-500',
+                bgColor: 'bg-indigo-50',
+                onClick: () => navigate('/departments'),
+              },
+              {
+                icon: Calendar,
+                label: 'تسجيل الحضور',
+                color: 'text-emerald-500',
+                bgColor: 'bg-emerald-50',
+                onClick: () => navigate('/attendance'),
+              },
+              {
+                icon: FileText,
+                label: 'طلباتي',
+                color: 'text-blue-500',
+                bgColor: 'bg-blue-50',
+                onClick: () => navigate('/requests'),
+              },
+            ],
+          } as const,
+        ]
+      : []),
+    ...(currentUser.role === 'manager' || currentUser.role === 'admin'
+      ? [
+          {
+            title: 'التقارير',
+            items: [
+              {
+                icon: FileText,
+                label: 'تقارير الحضور',
+                color: 'text-indigo-500',
+                bgColor: 'bg-indigo-50',
+                onClick: () => navigate('/reports'),
+              },
+            ],
+          } as const,
+        ]
+      : []),
   ];
 
   return (
@@ -127,6 +196,7 @@ export function MorePage() {
           {section.items.map((item, idx) => (
             <button
               key={idx}
+              onClick={item.onClick}
               className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
             >
               <div className="flex items-center gap-3">

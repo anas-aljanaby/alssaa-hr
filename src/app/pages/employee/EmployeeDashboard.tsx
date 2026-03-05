@@ -22,6 +22,9 @@ import {
   Timer,
   Coffee,
 } from 'lucide-react';
+import { StatCard } from '../../components/shared/StatCard';
+import { DashboardHeader } from '../../components/shared/DashboardHeader';
+import { getStatusColor } from '@/lib/ui-helpers';
 
 export function EmployeeDashboard() {
   const { currentUser } = useAuth();
@@ -103,39 +106,22 @@ export function EmployeeDashboard() {
   const current = now();
   const greeting = current.getHours() < 12 ? 'صباح الخير' : 'مساء الخير';
 
-  const statusColor = (status: string) => {
-    switch (status) {
-      case 'present': return 'bg-emerald-100 text-emerald-700';
-      case 'late': return 'bg-amber-100 text-amber-700';
-      case 'absent': return 'bg-red-100 text-red-700';
-      case 'on_leave': return 'bg-blue-100 text-blue-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
-      {/* Header */}
-      <div className="bg-gradient-to-l from-blue-600 to-blue-700 rounded-2xl p-5 text-white">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-blue-200 text-sm">{greeting}</p>
-            <h2 className="text-white">{currentUser.nameAr}</h2>
-            <p className="text-blue-200 text-sm">{department?.name_ar}</p>
-          </div>
-          <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-            <span className="text-xl">{currentUser.nameAr.charAt(0)}</span>
-          </div>
-        </div>
-
-        <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
+      <DashboardHeader
+        gradientClassName="bg-gradient-to-l from-blue-600 to-blue-700"
+        title={currentUser.nameAr}
+        subtitle={department?.name_ar}
+        avatar={<span className="text-xl">{currentUser.nameAr.charAt(0)}</span>}
+        helperText={greeting}
+        footer={
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-blue-200" />
               <span className="text-sm text-blue-200">حالة اليوم</span>
             </div>
             {todayLog ? (
-              <span className={`px-3 py-1 rounded-full text-xs ${statusColor(todayLog.status)}`}>
+              <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(todayLog.status)}`}>
                 {getAttendanceStatusAr(todayLog.status)}
               </span>
             ) : (
@@ -144,14 +130,8 @@ export function EmployeeDashboard() {
               </span>
             )}
           </div>
-          {todayLog?.check_in_time && (
-            <div className="flex items-center gap-4 mt-2 text-sm text-blue-100">
-              <span>الحضور: {todayLog.check_in_time}</span>
-              {todayLog.check_out_time && <span>الانصراف: {todayLog.check_out_time}</span>}
-            </div>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* Monthly Statistics */}
       {stats && (
@@ -169,7 +149,11 @@ export function EmployeeDashboard() {
               label="أيام التأخر"
               value={stats.lateDays}
               color="bg-amber-50 border-amber-100"
-              warning={stats.lateDays >= 3}
+              warningIcon={
+                stats.lateDays >= 3 ? (
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                ) : null
+              }
             />
             <StatCard
               icon={<XCircle className="w-5 h-5 text-red-500" />}
@@ -250,35 +234,6 @@ export function EmployeeDashboard() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-  warning,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  color: string;
-  warning?: boolean;
-}) {
-  return (
-    <div className={`rounded-2xl p-4 border ${color} relative`}>
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="text-sm text-gray-600">{label}</span>
-      </div>
-      <p className="text-2xl text-gray-800">{value}</p>
-      {warning && (
-        <div className="absolute top-2 left-2">
-          <AlertTriangle className="w-4 h-4 text-amber-500" />
         </div>
       )}
     </div>

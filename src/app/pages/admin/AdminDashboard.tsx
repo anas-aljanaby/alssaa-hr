@@ -23,6 +23,8 @@ import {
   Activity,
   Shield,
 } from 'lucide-react';
+import { DashboardHeader } from '../../components/shared/DashboardHeader';
+import { StatCard } from '../../components/shared/StatCard';
 import { now } from '@/lib/time';
 import {
   BarChart,
@@ -236,40 +238,53 @@ export function AdminDashboard() {
     return <AdminDashboardSkeleton />;
   }
 
-  const statCards = [
-    { icon: Users, label: 'إجمالي الموظفين', value: overallStats.totalEmployees, color: 'bg-blue-50 text-blue-600', iconBg: 'bg-blue-100' },
-    { icon: Building2, label: 'الأقسام', value: overallStats.totalDepartments, color: 'bg-purple-50 text-purple-600', iconBg: 'bg-purple-100' },
-    { icon: CheckCircle2, label: 'حاضرون اليوم', value: overallStats.present, color: 'bg-emerald-50 text-emerald-600', iconBg: 'bg-emerald-100' },
-    { icon: Timer, label: 'متأخرون', value: overallStats.late, color: 'bg-amber-50 text-amber-600', iconBg: 'bg-amber-100' },
-    { icon: XCircle, label: 'غائبون', value: overallStats.absent, color: 'bg-red-50 text-red-600', iconBg: 'bg-red-100' },
-    { icon: FileText, label: 'طلبات معلقة', value: overallStats.pendingRequests, color: 'bg-indigo-50 text-indigo-600', iconBg: 'bg-indigo-100' },
-  ];
-
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
-      <div className="bg-gradient-to-l from-purple-700 to-indigo-800 rounded-2xl p-5 text-white">
-        <div className="flex items-center justify-between mb-1">
-          <div>
-            <p className="text-purple-200 text-sm">لوحة التحكم الرئيسية</p>
-            <h2 className="text-white">المدير العام</h2>
-          </div>
-          <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-            <Shield className="w-6 h-6" />
-          </div>
-        </div>
-        <p className="text-purple-200 text-sm">شبكة الساعة</p>
-      </div>
+      <DashboardHeader
+        gradientClassName="bg-gradient-to-l from-purple-700 to-indigo-800"
+        title="المدير العام"
+        helperText="لوحة التحكم الرئيسية"
+        subtitle="شبكة الساعة"
+        avatar={<Shield className="w-6 h-6" />}
+      />
 
       <div className="grid grid-cols-3 gap-3">
-        {statCards.map((card, idx) => (
-          <div key={idx} className={`rounded-2xl p-3 border border-gray-100 ${card.color}`}>
-            <div className={`w-8 h-8 ${card.iconBg} rounded-lg flex items-center justify-center mb-2`}>
-              <card.icon className="w-4 h-4" />
-            </div>
-            <p className="text-xl text-gray-800">{card.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-          </div>
-        ))}
+        <StatCard
+          icon={<Users className="w-4 h-4 text-blue-600" />}
+          label="إجمالي الموظفين"
+          value={overallStats.totalEmployees}
+          color="bg-blue-50 border-blue-100"
+        />
+        <StatCard
+          icon={<Building2 className="w-4 h-4 text-purple-600" />}
+          label="الأقسام"
+          value={overallStats.totalDepartments}
+          color="bg-purple-50 border-purple-100"
+        />
+        <StatCard
+          icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+          label="حاضرون اليوم"
+          value={overallStats.present}
+          color="bg-emerald-50 border-emerald-100"
+        />
+        <StatCard
+          icon={<Timer className="w-4 h-4 text-amber-600" />}
+          label="متأخرون"
+          value={overallStats.late}
+          color="bg-amber-50 border-amber-100"
+        />
+        <StatCard
+          icon={<XCircle className="w-4 h-4 text-red-600" />}
+          label="غائبون"
+          value={overallStats.absent}
+          color="bg-red-50 border-red-100"
+        />
+        <StatCard
+          icon={<FileText className="w-4 h-4 text-indigo-600" />}
+          label="طلبات معلقة"
+          value={overallStats.pendingRequests}
+          color="bg-indigo-50 border-indigo-100"
+        />
       </div>
 
       <PendingRequestsCard

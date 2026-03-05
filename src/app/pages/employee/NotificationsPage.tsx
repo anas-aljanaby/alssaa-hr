@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Info,
 } from 'lucide-react';
+import { getTimeAgoLabel } from '@/lib/ui-helpers';
 
 export function NotificationsPage() {
   const { currentUser } = useAuth();
@@ -90,17 +91,6 @@ export function NotificationsPage() {
     }
   };
 
-  const getTimeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 60) return `منذ ${minutes} دقيقة`;
-    if (hours < 24) return `منذ ${hours} ساعة`;
-    return `منذ ${days} يوم`;
-  };
-
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
       <div className="flex items-center justify-between">
@@ -165,7 +155,9 @@ export function NotificationsPage() {
                   <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
                     {notif.message_ar}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">{getTimeAgo(notif.created_at)}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {getTimeAgoLabel(notif.created_at)}
+                  </p>
                 </div>
               </div>
             </button>

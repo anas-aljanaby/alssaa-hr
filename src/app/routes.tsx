@@ -65,7 +65,7 @@ export const router = createBrowserRouter([
           { path: 'departments', element: <Lazy><RequireAdmin><DepartmentsPage /></RequireAdmin></Lazy> },
           { path: 'departments/:deptId', element: <Lazy><RequireAdmin><DepartmentDetailsPage /></RequireAdmin></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
-          { path: 'user-details/:userId', element: <Lazy><RequireAdmin><UserDetailsPage /></RequireAdmin></Lazy> },
+          { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
         ],
       },
       { path: '*', Component: NotFoundRedirect },

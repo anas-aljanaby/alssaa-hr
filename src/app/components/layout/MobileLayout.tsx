@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import * as notificationsService from '@/lib/services/notifications.service';
+import * as requestsService from '@/lib/services/requests.service';
 import {
   Home,
   Clock,
@@ -19,6 +20,7 @@ export function MobileLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -52,6 +54,32 @@ export function MobileLayout() {
       .catch((e) => console.warn('Failed to load unread count', e));
   }, [location.pathname, currentUser?.uid]);
 
+  useEffect(() => {
+    if (!currentUser) {
+      setPendingApprovals(0);
+      return;
+    }
+
+    async function loadPendingApprovals() {
+      try {
+        if (currentUser.role === 'admin') {
+          const reqs = await requestsService.getAllPendingRequests();
+          setPendingApprovals(reqs.length);
+        } else if (currentUser.role === 'manager' && currentUser.departmentId) {
+          const reqs = await requestsService.getPendingDepartmentRequests(currentUser.departmentId);
+          setPendingApprovals(reqs.length);
+        } else {
+          setPendingApprovals(0);
+        }
+      } catch (e) {
+        console.warn('Failed to load pending approvals count', e);
+        setPendingApprovals(0);
+      }
+    }
+
+    loadPendingApprovals();
+  }, [currentUser?.uid, currentUser?.role, currentUser?.departmentId, location.pathname]);
+
   if (!authReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -72,7 +100,7 @@ export function MobileLayout() {
   const managerNav = [
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/attendance', icon: Clock, label: 'الحضور' },
-    { path: '/approvals', icon: CheckSquare, label: 'الموافقات' },
+    { path: '/approvals', icon: CheckSquare, label: 'الموافقات', badge: pendingApprovals },
     { path: '/notifications', icon: Bell, label: 'الإشعارات', badge: unreadCount },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
@@ -80,9 +108,8 @@ export function MobileLayout() {
   const adminNav = [
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/users', icon: Users, label: 'المستخدمون' },
-    { path: '/approvals', icon: CheckSquare, label: 'الموافقات' },
-    { path: '/departments', icon: Building2, label: 'الأقسام' },
-    { path: '/reports', icon: BarChart3, label: 'التقارير' },
+    { path: '/approvals', icon: CheckSquare, label: 'الموافقات', badge: pendingApprovals },
+    { path: '/notifications', icon: Bell, label: 'الإشعارات', badge: unreadCount },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
 

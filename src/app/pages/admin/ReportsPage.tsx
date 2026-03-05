@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useAuth } from '../../contexts/AuthContext';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as attendanceService from '@/lib/services/attendance.service';
@@ -110,6 +111,9 @@ const AUDIT_PAGE_SIZE = 15;
 const REPORT_PAGE_SIZE = 20;
 
 export function ReportsPage() {
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin';
+  const isManager = currentUser?.role === 'manager';
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -117,37 +121,88 @@ export function ReportsPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [policy, setPolicy] = useState<AttendancePolicy | null>(null);
   const [activeTab, setActiveTab] = useState<'reports' | 'audit' | 'policy'>('reports');
+  const [showEditPolicy, setShowEditPolicy] = useState(false);
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [editPolicy, setEditPolicy] = useState<AttendancePolicy | null>(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentUser?.uid, currentUser?.role, currentUser?.departmentId]);
 
   async function loadData() {
+    if (!currentUser) return;
     try {
       setLoading(true);
       const n = now();
-      const [profs, depts, audit, pol] = await Promise.all([
-        profilesService.listUsers(),
-        departmentsService.listDepartments(),
-        auditService.getRecentAuditLogs(30),
-        policyService.getPolicy(),
-      ]);
-      setProfiles(profs);
-      setDepartments(depts);
-      setAuditLogs(audit);
-      setPolicy(pol);
 
-      const allMonthLogs: AttendanceLog[] = [];
-      const nonAdmins = profs.filter((p) => p.role !== 'admin');
-      for (const user of nonAdmins) {
-        const logs = await attendanceService.getMonthlyLogs(
-          user.id,
-          n.getFullYear(),
-          n.getMonth()
-        );
-        allMonthLogs.push(...logs);
+      if (isAdmin) {
+        const [profs, depts, audit, pol] = await Promise.all([
+          profilesService.listUsers(),
+          departmentsService.listDepartments(),
+          auditService.getRecentAuditLogs(30),
+          policyService.getPolicy(),
+        ]);
+        setProfiles(profs);
+        setDepartments(depts);
+        setAuditLogs(audit);
+        setPolicy(pol);
+
+        const allMonthLogs: AttendanceLog[] = [];
+        const nonAdmins = profs.filter((p) => p.role !== 'admin');
+        for (const user of nonAdmins) {
+          const logs = await attendanceService.getMonthlyLogs(
+            user.id,
+            n.getFullYear(),
+            n.getMonth()
+          );
+          allMonthLogs.push(...logs);
+        }
+        setMonthLogs(allMonthLogs);
+        return;
       }
-      setMonthLogs(allMonthLogs);
+
+      if (isManager) {
+        if (!currentUser.departmentId) {
+          toast.error('لم يتم تعيين قسم لك بعد');
+          setProfiles([]);
+          setDepartments([]);
+          setAuditLogs([]);
+          const pol = await policyService.getPolicy();
+          setPolicy(pol);
+          setMonthLogs([]);
+          return;
+        }
+
+        const [emps, dept, pol] = await Promise.all([
+          profilesService.getDepartmentEmployees(currentUser.departmentId),
+          departmentsService.getDepartmentById(currentUser.departmentId),
+          policyService.getPolicy(),
+        ]);
+        setProfiles(emps);
+        setDepartments([dept]);
+        setAuditLogs([]);
+        setPolicy(pol);
+
+        const allMonthLogs: AttendanceLog[] = [];
+        for (const user of emps) {
+          const logs = await attendanceService.getMonthlyLogs(
+            user.id,
+            n.getFullYear(),
+            n.getMonth()
+          );
+          allMonthLogs.push(...logs);
+        }
+        setMonthLogs(allMonthLogs);
+        return;
+      }
+
+      // Other roles: only load policy; no detailed reports/audit
+      const pol = await policyService.getPolicy();
+      setProfiles([]);
+      setDepartments([]);
+      setAuditLogs([]);
+      setPolicy(pol);
+      setMonthLogs([]);
     } catch {
       toast.error('فشل تحميل البيانات');
     } finally {
@@ -222,11 +277,17 @@ export function ReportsPage() {
     }
   }, [monthlyReport, deptReport]);
 
-  const tabs = [
-    { key: 'reports' as const, label: 'التقارير', icon: BarChart3 },
-    { key: 'audit' as const, label: 'سجل المراجعة', icon: Shield },
-    { key: 'policy' as const, label: 'سياسة الحضور', icon: Settings },
-  ];
+  const tabs =
+    isAdmin
+      ? ([
+          { key: 'reports' as const, label: 'التقارير', icon: BarChart3 },
+          { key: 'audit' as const, label: 'سجل المراجعة', icon: Shield },
+          { key: 'policy' as const, label: 'سياسة الحضور', icon: Settings },
+        ] as const)
+      : ([
+          { key: 'reports' as const, label: 'التقارير', icon: BarChart3 },
+          { key: 'policy' as const, label: 'سياسة الحضور', icon: Settings },
+        ] as const);
 
   const dayNames: Record<number, string> = {
     0: 'الأحد',
@@ -351,7 +412,7 @@ export function ReportsPage() {
         </>
       )}
 
-      {activeTab === 'audit' && (
+      {activeTab === 'audit' && isAdmin && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 bg-amber-50 p-3 rounded-xl border border-amber-200 mb-3">
             <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
@@ -406,9 +467,23 @@ export function ReportsPage() {
       {activeTab === 'policy' && policy && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="w-5 h-5 text-blue-500" />
-              <h3 className="text-gray-800">إعدادات الدوام</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-500" />
+                <h3 className="text-gray-800">إعدادات الدوام</h3>
+              </div>
+              {currentUser?.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditPolicy(policy);
+                    setShowEditPolicy(true);
+                  }}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+                >
+                  تعديل
+                </button>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -472,6 +547,216 @@ export function ReportsPage() {
         <div className="text-center py-8 text-gray-400">
           <Settings className="w-12 h-12 mx-auto mb-2 opacity-50" />
           <p>لم يتم تعيين سياسة الحضور بعد</p>
+        </div>
+      )}
+
+      {currentUser?.role === 'admin' && showEditPolicy && editPolicy && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            if (savingPolicy) return;
+            setShowEditPolicy(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-gray-800">تعديل سياسة الحضور</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  if (savingPolicy) return;
+                  setShowEditPolicy(false);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!editPolicy) return;
+                try {
+                  setSavingPolicy(true);
+                  const updated = await policyService.updatePolicy({
+                    work_start_time: editPolicy.work_start_time,
+                    work_end_time: editPolicy.work_end_time,
+                    grace_period_minutes: editPolicy.grace_period_minutes,
+                    absent_cutoff_time: editPolicy.absent_cutoff_time,
+                    weekly_off_days: editPolicy.weekly_off_days,
+                    max_late_days_before_warning: editPolicy.max_late_days_before_warning,
+                    annual_leave_per_year: editPolicy.annual_leave_per_year,
+                    sick_leave_per_year: editPolicy.sick_leave_per_year,
+                  });
+                  setPolicy(updated);
+                  toast.success('تم تحديث سياسة الحضور');
+                  setShowEditPolicy(false);
+                } catch {
+                  toast.error('فشل تحديث سياسة الحضور');
+                } finally {
+                  setSavingPolicy(false);
+                }
+              }}
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">وقت بدء العمل</label>
+                  <input
+                    type="time"
+                    value={editPolicy.work_start_time}
+                    onChange={(e) =>
+                      setEditPolicy((prev) => prev ? { ...prev, work_start_time: e.target.value } : prev)
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">وقت نهاية العمل</label>
+                  <input
+                    type="time"
+                    value={editPolicy.work_end_time}
+                    onChange={(e) =>
+                      setEditPolicy((prev) => prev ? { ...prev, work_end_time: e.target.value } : prev)
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">فترة السماح (دقيقة)</label>
+                  <input
+                    type="number"
+                    value={editPolicy.grace_period_minutes}
+                    onChange={(e) =>
+                      setEditPolicy((prev) =>
+                        prev ? { ...prev, grace_period_minutes: Number(e.target.value) || 0 } : prev
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">وقت قطع الغياب</label>
+                  <input
+                    type="time"
+                    value={editPolicy.absent_cutoff_time}
+                    onChange={(e) =>
+                      setEditPolicy((prev) => prev ? { ...prev, absent_cutoff_time: e.target.value } : prev)
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-600 mb-2">أيام الإجازة الأسبوعية</label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { d: 0, label: 'الأحد' },
+                    { d: 1, label: 'الاثنين' },
+                    { d: 2, label: 'الثلاثاء' },
+                    { d: 3, label: 'الأربعاء' },
+                    { d: 4, label: 'الخميس' },
+                    { d: 5, label: 'الجمعة' },
+                    { d: 6, label: 'السبت' },
+                  ].map(({ d, label }) => {
+                    const checked = editPolicy.weekly_off_days.includes(d);
+                    return (
+                      <label
+                        key={d}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                          checked ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setEditPolicy((prev) => {
+                              if (!prev) return prev;
+                              const exists = prev.weekly_off_days.includes(d);
+                              const next = exists
+                                ? prev.weekly_off_days.filter((x) => x !== d)
+                                : [...prev.weekly_off_days, d].sort((a, b) => a - b);
+                              return { ...prev, weekly_off_days: next };
+                            })
+                          }
+                          className="rounded border-gray-300"
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    الحد الأقصى للتأخر قبل التنبيه (أيام)
+                  </label>
+                  <input
+                    type="number"
+                    value={editPolicy.max_late_days_before_warning}
+                    onChange={(e) =>
+                      setEditPolicy((prev) =>
+                        prev ? { ...prev, max_late_days_before_warning: Number(e.target.value) || 0 } : prev
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">الإجازة السنوية (يوم)</label>
+                  <input
+                    type="number"
+                    value={editPolicy.annual_leave_per_year}
+                    onChange={(e) =>
+                      setEditPolicy((prev) =>
+                        prev ? { ...prev, annual_leave_per_year: Number(e.target.value) || 0 } : prev
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">الإجازة المرضية (يوم)</label>
+                  <input
+                    type="number"
+                    value={editPolicy.sick_leave_per_year}
+                    onChange={(e) =>
+                      setEditPolicy((prev) =>
+                        prev ? { ...prev, sick_leave_per_year: Number(e.target.value) || 0 } : prev
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingPolicy}
+                className="w-full py-3 mt-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors disabled:opacity-50"
+              >
+                {savingPolicy ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>
