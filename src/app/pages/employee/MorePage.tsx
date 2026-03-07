@@ -18,6 +18,7 @@ import {
   Building2,
   Calendar,
   BadgeCheck,
+  Clock,
 } from 'lucide-react';
 
 export function MorePage() {
@@ -81,7 +82,13 @@ export function MorePage() {
     {
       title: 'الدعم',
       items: [
-        { icon: HelpCircle, label: 'المساعدة والدعم', color: 'text-amber-500', bgColor: 'bg-amber-50' },
+        {
+          icon: HelpCircle,
+          label: 'المساعدة والدعم',
+          color: 'text-amber-500',
+          bgColor: 'bg-amber-50',
+          onClick: () => navigate('/help-support'),
+        },
         {
           icon: FileText,
           label: 'الشروط والأحكام',
@@ -102,6 +109,13 @@ export function MorePage() {
                 color: 'text-indigo-500',
                 bgColor: 'bg-indigo-50',
                 onClick: () => navigate('/departments'),
+              },
+              {
+                icon: Clock,
+                label: 'سياسة الحضور',
+                color: 'text-slate-600',
+                bgColor: 'bg-slate-50',
+                onClick: () => navigate('/attendance-policy'),
               },
               {
                 icon: Calendar,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { changePasswordSchema, type ChangePasswordFormData } from '@/lib/validations';
@@ -10,6 +11,7 @@ import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
 
 export function SecurityPrivacyPage() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -139,16 +141,28 @@ export function SecurityPrivacyPage() {
         </div>
         <div className="p-4 space-y-3 text-sm text-gray-600">
           <p>
-            نحمي بياناتك الشخصية وبيانات الحضور والطلبات. نستخدم تشفير الاتصال (HTTPS) وجلسات آمنة
-            لتسجيل الدخول.
+            نحمي بيانات الحساب والملف الوظيفي وسجلات الحضور والطلبات والمرفقات والإشعارات ضمن
+            ضوابط تقنية وتنظيمية معقولة، بما في ذلك تشفير الاتصال (HTTPS) وإدارة الجلسات الآمنة.
           </p>
           <p>
-            بياناتك تُستخدم فقط لأغراض إدارة الحضور والإجازات داخل المنظمة ولا تتم مشاركتها مع
-            أطراف خارجية دون موافقتك أو ما يقتضيه القانون.
+            تُستخدم هذه البيانات لتشغيل النظام وإدارة الحضور والانصراف والطلبات وسير الموافقات
+            والإشعارات والإجراءات الإدارية المرتبطة بها داخل المنظمة، ولا يتم الإفصاح عنها إلا ضمن
+            الصلاحيات المعتمدة أو المتطلبات النظامية والقانونية الواجبة.
           </p>
           <p className="text-gray-500 text-xs">
-            للاستفسار عن سياسة الخصوصية أو طلب نسخة من بياناتك، تواصل مع مدير النظام أو قسم تقنية
-            المعلومات.
+            للاستفسار عن هذه الممارسات أو طلب مراجعة حقوقك المتعلقة بالبيانات، تواصل مع مدير
+            النظام أو قسم تقنية المعلومات.
+          </p>
+          <p className="text-gray-500 text-xs">
+            لقراءة الإطار التنظيمي الكامل لاستخدام النظام، راجع صفحة{' '}
+            <button
+              type="button"
+              onClick={() => navigate('/terms-conditions')}
+              className="text-emerald-600 underline hover:text-emerald-700"
+            >
+              الشروط والأحكام
+            </button>
+            .
           </p>
         </div>
       </div>
