@@ -90,7 +90,6 @@ export function UserDetailsPage() {
       phone: '',
       role: 'employee',
       department_id: '',
-      status: 'active',
       work_days: undefined,
       work_start_time: '',
       work_end_time: '',
@@ -146,7 +145,6 @@ export function UserDetailsPage() {
       phone: profile.phone ?? '',
       role: profile.role,
       department_id: profile.department_id ?? '',
-      status: profile.status,
       work_days: profile.work_days ?? undefined,
       work_start_time: profile.work_start_time ?? '',
       work_end_time: profile.work_end_time ?? '',
@@ -307,7 +305,6 @@ export function UserDetailsPage() {
         phone: data.phone?.trim() || undefined,
         role: data.role,
         department_id: data.department_id,
-        status: data.status,
         work_days: hasWorkDays && workStart && workEnd ? data.work_days! : null,
         work_start_time: hasWorkDays && workStart && workEnd ? workStart : null,
         work_end_time: hasWorkDays && workStart && workEnd ? workEnd : null,
@@ -384,14 +381,6 @@ export function UserDetailsPage() {
                 {roleIcon(profile.role)}
                 {roleLabel(profile.role)}
               </span>
-              <div className="flex items-center gap-1">
-                <div
-                  className={`w-2 h-2 rounded-full ${profile.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
-                />
-                <span className="text-xs text-gray-500">
-                  {profile.status === 'active' ? 'نشط' : 'غير نشط'}
-                </span>
-              </div>
             </div>
             {profile.work_days && profile.work_days.length > 0 && profile.work_start_time && profile.work_end_time && (
               <p className="text-xs text-gray-500 mt-2" dir="rtl">
@@ -1040,16 +1029,6 @@ export function UserDetailsPage() {
                     <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.department_id.message}</p>
                   )}
                 </div>
-              </div>
-              <div>
-                <label className="block mb-1.5 text-gray-700">الحالة</label>
-                <select
-                  {...editProfileForm.register('status')}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                >
-                  <option value="active">نشط</option>
-                  <option value="inactive">غير نشط</option>
-                </select>
               </div>
 
               <div className="border-t border-gray-100 pt-4">

@@ -15,7 +15,6 @@ import {
   Plus,
   Search,
   Edit2,
-  Trash2,
   X,
   Shield,
   Users as UsersIcon,
@@ -530,44 +529,6 @@ export function UsersPage() {
         </div>
       )}
 
-      {userToDeactivate && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setUserToDeactivate(null)}
-          onKeyDown={handleModalKeyDown}
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="deactivate-user-title"
-        >
-          <div
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm rounded-2xl shadow-xl bg-white p-6"
-            dir="rtl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="deactivate-user-title" className="text-gray-800 mb-2">تعطيل المستخدم</h2>
-            <p className="text-gray-600 text-sm mb-6">
-              هل تريد تعطيل المستخدم &quot;{userToDeactivate.name_ar}&quot;؟ لن يتمكن من تسجيل الدخول.
-            </p>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setUserToDeactivate(null)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50"
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                onClick={onConfirmDeactivate}
-                disabled={deactivating}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl"
-              >
-                {deactivating ? 'جاري التعطيل...' : 'تعطيل'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
