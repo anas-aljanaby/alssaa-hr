@@ -61,57 +61,82 @@ interface AttendanceChartsProps {
   pieData: PieDataItem[];
   weeklyTrend: WeeklyTrendItem[];
   deptChartData?: DeptChartItem[];
+  /** When true, show only the pie chart and a "عرض التحليلات" link (for overview preview). */
+  compact?: boolean;
+  /** When compact, called when user clicks "عرض التحليلات" (e.g. switch to analytics tab). */
+  onViewAnalytics?: () => void;
 }
 
 export function AttendanceCharts({
   pieData,
   weeklyTrend,
   deptChartData,
+  compact = false,
+  onViewAnalytics,
 }: AttendanceChartsProps) {
+  const pieSection = (
+    <div
+      role={compact && onViewAnalytics ? 'button' : undefined}
+      tabIndex={compact && onViewAnalytics ? 0 : undefined}
+      onClick={compact && onViewAnalytics ? onViewAnalytics : undefined}
+      onKeyDown={
+        compact && onViewAnalytics
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') onViewAnalytics();
+            }
+          : undefined
+      }
+      className={`bg-white rounded-2xl p-4 border border-gray-100 shadow-sm ${compact && onViewAnalytics ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <Activity className="w-5 h-5 text-blue-500" />
+        <h3 className="text-gray-800">توزيع الحضور اليوم</h3>
+      </div>
+      <div className={compact ? 'h-40' : 'h-48'}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={pieData}
+              cx="50%"
+              cy="45%"
+              innerRadius={compact ? 32 : 38}
+              outerRadius={compact ? 52 : 62}
+              paddingAngle={3}
+              dataKey="value"
+            >
+              {pieData.map((entry, index) => (
+                <Cell key={index} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip />
+            <Legend
+              content={({ payload }) => (
+                <div className="flex justify-center gap-5 pt-3 flex-wrap">
+                  {payload?.map((entry) => (
+                    <div key={entry.value} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-sm shrink-0"
+                        style={{ backgroundColor: entry.color }}
+                      />
+                      <span className="text-xs text-gray-600">{entry.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+
+  if (compact) {
+    return <div className="space-y-4">{pieSection}</div>;
+  }
+
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Activity className="w-5 h-5 text-blue-500" />
-          <h3 className="text-gray-800">توزيع الحضور اليوم</h3>
-        </div>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="45%"
-                innerRadius={38}
-                outerRadius={62}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {pieData.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend
-                content={({ payload }) => (
-                  <div className="flex justify-center gap-5 pt-3 flex-wrap">
-                    {payload?.map((entry) => (
-                      <div key={entry.value} className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-sm shrink-0"
-                          style={{ backgroundColor: entry.color }}
-                        />
-                        <span className="text-xs text-gray-600">{entry.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
+      {pieSection}
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="w-5 h-5 text-emerald-500" />

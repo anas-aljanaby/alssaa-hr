@@ -21,7 +21,6 @@ import {
   Users as UsersIcon,
   User as UserIcon,
   Building2,
-  UserCheck,
 } from 'lucide-react';
 
 type UserRole = Profile['role'];
@@ -33,14 +32,10 @@ export function UsersPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
-  const [userToDeactivate, setUserToDeactivate] = useState<Profile | null>(null);
-  const [deactivating, setDeactivating] = useState(false);
-  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const addUserForm = useForm<AddUserFormData>({
@@ -50,7 +45,7 @@ export function UsersPage() {
 
   const editUserForm = useForm<UpdateProfileFormData>({
     resolver: zodResolver(updateProfileSchema),
-    defaultValues: { name_ar: '', phone: '', role: 'employee', department_id: '', status: 'active' },
+    defaultValues: { name_ar: '', phone: '', role: 'employee', department_id: '' },
   });
 
   useEffect(() => {
@@ -84,8 +79,7 @@ export function UsersPage() {
       (u.phone ?? '').includes(searchQuery) ||
       u.employee_id.includes(searchQuery);
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-    const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole;
   });
 
   const { paginatedItems, currentPage, totalItems, pageSize, setCurrentPage } =
@@ -97,7 +91,6 @@ export function UsersPage() {
       addUserForm.reset();
       setEditingUser(null);
       editUserForm.reset();
-      setUserToDeactivate(null);
     }
   }, [addUserForm, editUserForm]);
 
@@ -163,7 +156,6 @@ export function UsersPage() {
       phone: user.phone ?? '',
       role: user.role,
       department_id: user.department_id ?? '',
-      status: user.status,
     });
   };
 
@@ -176,7 +168,6 @@ export function UsersPage() {
         phone: data.phone?.trim() || undefined,
         role: data.role,
         department_id: data.department_id,
-        status: data.status,
       });
       toast.success('تم تحديث المستخدم');
       setEditingUser(null);
@@ -186,34 +177,6 @@ export function UsersPage() {
       toast.error(getProfileUpdateErrorMessage(err, 'فشل تحديث المستخدم'));
     } finally {
       setEditSubmitting(false);
-    }
-  };
-
-  const onConfirmDeactivate = async () => {
-    if (!userToDeactivate) return;
-    setDeactivating(true);
-    try {
-      await profilesService.updateUser(userToDeactivate.id, { status: 'inactive' });
-      toast.success('تم تعطيل المستخدم');
-      setUserToDeactivate(null);
-      await loadData();
-    } catch (err) {
-      toast.error(getProfileUpdateErrorMessage(err, 'فشل تعطيل المستخدم'));
-    } finally {
-      setDeactivating(false);
-    }
-  };
-
-  const onReactivate = async (user: Profile) => {
-    setReactivatingId(user.id);
-    try {
-      await profilesService.updateUser(user.id, { status: 'active' });
-      toast.success('تم تفعيل المستخدم');
-      await loadData();
-    } catch (err) {
-      toast.error(getProfileUpdateErrorMessage(err, 'فشل تفعيل المستخدم'));
-    } finally {
-      setReactivatingId(null);
     }
   };
 
@@ -253,21 +216,6 @@ export function UsersPage() {
             }`}
           >
             {role === 'all' ? 'الكل' : roleLabel(role)}
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {(['all', 'active', 'inactive'] as const).map((status) => (
-          <button
-            key={status}
-            onClick={() => { setStatusFilter(status); setCurrentPage(1); }}
-            className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
-              statusFilter === status
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            {status === 'all' ? 'الكل' : status === 'active' ? 'نشط' : 'غير نشط'}
           </button>
         ))}
       </div>
@@ -360,39 +308,10 @@ export function UsersPage() {
                     >
                       <Edit2 className="w-4 h-4 text-gray-400" />
                     </button>
-                    {user.status === 'active' ? (
-                      <button
-                        type="button"
-                        onClick={() => setUserToDeactivate(user)}
-                        className="p-2 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                        aria-label="تعطيل"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onReactivate(user)}
-                        disabled={reactivatingId === user.id}
-                        className="p-2 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                        aria-label="تفعيل"
-                        title="تفعيل"
-                      >
-                        <UserCheck className="w-4 h-4 text-emerald-600" />
-                      </button>
-                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
                   <span className="text-xs text-gray-400">{user.employee_id}</span>
-                  <div className="flex items-center gap-1">
-                    <div
-                      className={`w-2 h-2 rounded-full ${user.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
-                    />
-                    <span className="text-xs text-gray-400">
-                      {user.status === 'active' ? 'نشط' : 'غير نشط'}
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -598,16 +517,6 @@ export function UsersPage() {
                     <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.department_id.message}</p>
                   )}
                 </div>
-              </div>
-              <div>
-                <label className="block mb-1.5 text-gray-700">الحالة</label>
-                <select
-                  {...editUserForm.register('status')}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                >
-                  <option value="active">نشط</option>
-                  <option value="inactive">غير نشط</option>
-                </select>
               </div>
               <button
                 type="submit"

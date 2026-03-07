@@ -14,7 +14,6 @@ export interface User {
   phone: string;
   role: UserRole;
   departmentId: string;
-  status: 'active' | 'inactive';
   avatar?: string;
   joinDate: string;
 }
@@ -116,7 +115,6 @@ export const users: User[] = [
     phone: '+964 770 123 4567',
     role: 'admin',
     departmentId: 'dept-5',
-    status: 'active',
     joinDate: '2020-01-15',
   },
   {
@@ -128,7 +126,6 @@ export const users: User[] = [
     phone: '+964 770 234 5678',
     role: 'manager',
     departmentId: 'dept-1',
-    status: 'active',
     joinDate: '2020-03-20',
   },
   {
@@ -140,7 +137,6 @@ export const users: User[] = [
     phone: '+964 770 345 6789',
     role: 'employee',
     departmentId: 'dept-1',
-    status: 'active',
     joinDate: '2021-06-01',
   },
   {
@@ -152,7 +148,6 @@ export const users: User[] = [
     phone: '+964 770 456 7890',
     role: 'employee',
     departmentId: 'dept-1',
-    status: 'active',
     joinDate: '2021-09-15',
   },
   {
@@ -164,7 +159,6 @@ export const users: User[] = [
     phone: '+964 770 567 8901',
     role: 'manager',
     departmentId: 'dept-2',
-    status: 'active',
     joinDate: '2020-02-10',
   },
   {
@@ -176,7 +170,6 @@ export const users: User[] = [
     phone: '+964 770 678 9012',
     role: 'manager',
     departmentId: 'dept-3',
-    status: 'active',
     joinDate: '2020-05-01',
   },
   {
@@ -188,7 +181,6 @@ export const users: User[] = [
     phone: '+964 770 789 0123',
     role: 'manager',
     departmentId: 'dept-4',
-    status: 'active',
     joinDate: '2020-04-15',
   },
   {
@@ -200,7 +192,6 @@ export const users: User[] = [
     phone: '+964 770 890 1234',
     role: 'manager',
     departmentId: 'dept-5',
-    status: 'active',
     joinDate: '2020-01-20',
   },
   {
@@ -212,7 +203,6 @@ export const users: User[] = [
     phone: '+964 770 901 2345',
     role: 'employee',
     departmentId: 'dept-2',
-    status: 'active',
     joinDate: '2022-01-10',
   },
   {
@@ -224,7 +214,6 @@ export const users: User[] = [
     phone: '+964 770 012 3456',
     role: 'employee',
     departmentId: 'dept-3',
-    status: 'active',
     joinDate: '2022-03-01',
   },
   {
@@ -236,7 +225,6 @@ export const users: User[] = [
     phone: '+964 770 111 2222',
     role: 'employee',
     departmentId: 'dept-2',
-    status: 'active',
     joinDate: '2022-06-15',
   },
   {
@@ -248,7 +236,6 @@ export const users: User[] = [
     phone: '+964 770 333 4444',
     role: 'employee',
     departmentId: 'dept-4',
-    status: 'active',
     joinDate: '2023-01-10',
   },
 ];

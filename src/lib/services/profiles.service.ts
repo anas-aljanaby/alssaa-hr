@@ -74,21 +74,6 @@ export async function updateUser(
   return data;
 }
 
-export async function countUsersByStatus(): Promise<{ active: number; inactive: number }> {
-  const { count: active, error: e1 } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'active');
-
-  const { count: inactive, error: e2 } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'inactive');
-
-  if (e1 || e2) throw e1 ?? e2;
-  return { active: active ?? 0, inactive: inactive ?? 0 };
-}
-
 export interface InviteUserPayload {
   email: string;
   name: string;

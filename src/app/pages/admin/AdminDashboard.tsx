@@ -13,7 +13,7 @@ import { AdminDashboardSkeleton } from '../../components/skeletons';
 import { PendingRequestsCard } from '../../components/PendingRequestsCard';
 import {
   EmployeeStatusList,
-  MonthlyStatsCard,
+  EmployeeListUnified,
   AttendanceCharts,
   type EmployeeWithTodayStatus,
 } from '../../components/dashboard';
@@ -293,18 +293,27 @@ export function AdminDashboard() {
             pendingRequests={pendingRequests}
             profilesMap={profilesMap}
           />
+          <EmployeeStatusList
+            employees={todayEmployeeStatus}
+            limit={5}
+            onViewAll={() => setActiveTab('employees')}
+          />
+          <AttendanceCharts
+            pieData={pieData}
+            weeklyTrend={weeklyTrend}
+            deptChartData={deptChartData}
+            compact
+            onViewAnalytics={() => setActiveTab('analytics')}
+          />
         </>
       )}
 
       {activeTab === 'employees' && (
-        <>
-          <EmployeeStatusList employees={todayEmployeeStatus} />
-          <MonthlyStatsCard
-            employees={allNonAdmin}
-            lateCounts={monthlyStats.lateCounts}
-            absentCounts={monthlyStats.absentCounts}
-          />
-        </>
+        <EmployeeListUnified
+          employees={todayEmployeeStatus}
+          lateCounts={monthlyStats.lateCounts}
+          absentCounts={monthlyStats.absentCounts}
+        />
       )}
 
       {activeTab === 'analytics' && (

@@ -19,7 +19,6 @@ export function profileToUser(profile: Tables<'profiles'>, email: string): User 
     phone: profile.phone ?? '',
     role: profile.role as UserRole,
     departmentId: profile.department_id ?? '',
-    status: profile.status as 'active' | 'inactive',
     avatar: profile.avatar_url ?? undefined,
     joinDate: profile.join_date,
   };

@@ -52,7 +52,6 @@ export interface Database {
           phone: string;
           role: 'employee' | 'manager' | 'admin';
           department_id: string | null;
-          status: 'active' | 'inactive';
           avatar_url: string | null;
           join_date: string;
           work_days: number[] | null;
@@ -68,7 +67,6 @@ export interface Database {
           phone?: string;
           role?: 'employee' | 'manager' | 'admin';
           department_id?: string | null;
-          status?: 'active' | 'inactive';
           avatar_url?: string | null;
           join_date?: string;
           work_days?: number[] | null;
@@ -84,7 +82,6 @@ export interface Database {
           phone?: string;
           role?: 'employee' | 'manager' | 'admin';
           department_id?: string | null;
-          status?: 'active' | 'inactive';
           avatar_url?: string | null;
           join_date?: string;
           work_days?: number[] | null;

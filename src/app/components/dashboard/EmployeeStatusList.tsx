@@ -12,33 +12,73 @@ export type EmployeeWithTodayStatus = Profile & {
   autoPunchOut: boolean;
 };
 
+const STATUS_ORDER: Record<EmployeeWithTodayStatus['todayStatus'], number> = {
+  late: 0,
+  absent: 1,
+  on_leave: 2,
+  present: 3,
+};
+
 interface EmployeeStatusListProps {
   employees: EmployeeWithTodayStatus[];
   title?: string;
+  /** Show only first N employees (e.g. for overview preview). */
+  limit?: number;
+  /** When set, the whole card is clickable and calls this (e.g. switch to employees tab). Row clicks still go to user details. */
+  onViewAll?: () => void;
 }
 
 export function EmployeeStatusList({
   employees,
   title = 'حالة الموظفين اليوم',
+  limit,
+  onViewAll,
 }: EmployeeStatusListProps) {
   const navigate = useNavigate();
 
+  const sorted = [...employees].sort(
+    (a, b) => STATUS_ORDER[a.todayStatus] - STATUS_ORDER[b.todayStatus]
+  );
+  const displayList = limit != null ? sorted.slice(0, limit) : sorted;
+  const hasMore = limit != null && sorted.length > limit;
+
+  const handleCardClick = hasMore && onViewAll ? onViewAll : undefined;
+  const handleRowClick = (e: React.MouseEvent, userId: string) => {
+    e.stopPropagation();
+    navigate(`/user-details/${userId}`);
+  };
+
   return (
-    <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+    <div
+      role={handleCardClick ? 'button' : undefined}
+      tabIndex={handleCardClick ? 0 : undefined}
+      onClick={handleCardClick}
+      onKeyDown={
+        handleCardClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') onViewAll?.();
+            }
+          : undefined
+      }
+      className={`bg-white rounded-2xl p-4 border border-gray-100 shadow-sm ${handleCardClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+    >
       <div className="flex items-center gap-2 mb-3">
         <BarChart3 className="w-5 h-5 text-blue-500" />
         <h3 className="text-gray-800">{title}</h3>
       </div>
       <div className="space-y-2">
-        {employees.map((emp) => (
+        {displayList.map((emp) => (
           <div
             key={emp.id}
             className="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100"
-            onClick={() => navigate(`/user-details/${emp.id}`)}
+            onClick={(e) => handleRowClick(e, emp.id)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') navigate(`/user-details/${emp.id}`);
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                navigate(`/user-details/${emp.id}`);
+              }
             }}
           >
             <div className="flex items-center gap-3">
