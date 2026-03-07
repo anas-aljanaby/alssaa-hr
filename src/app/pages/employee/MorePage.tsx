@@ -12,8 +12,6 @@ import {
   LogOut,
   ChevronLeft,
   Bell,
-  Moon,
-  Globe,
   FileText,
   Phone,
   Mail,
@@ -60,7 +58,13 @@ export function MorePage() {
           bgColor: 'bg-purple-50',
           onClick: () => navigate('/notifications'),
         },
-        { icon: Shield, label: 'الأمان والخصوصية', color: 'text-emerald-500', bgColor: 'bg-emerald-50' },
+        {
+          icon: Shield,
+          label: 'الأمان والخصوصية',
+          color: 'text-emerald-500',
+          bgColor: 'bg-emerald-50',
+          onClick: () => navigate('/security-privacy'),
+        },
         ...(currentUser.role === 'manager'
           ? [
               {
@@ -75,17 +79,16 @@ export function MorePage() {
       ],
     },
     {
-      title: 'التفضيلات',
-      items: [
-        { icon: Globe, label: 'اللغة', subtitle: 'العربية', color: 'text-indigo-500', bgColor: 'bg-indigo-50' },
-        { icon: Moon, label: 'الوضع الداكن', subtitle: 'مغلق', color: 'text-gray-500', bgColor: 'bg-gray-100' },
-      ],
-    },
-    {
       title: 'الدعم',
       items: [
         { icon: HelpCircle, label: 'المساعدة والدعم', color: 'text-amber-500', bgColor: 'bg-amber-50' },
-        { icon: FileText, label: 'الشروط والأحكام', color: 'text-gray-500', bgColor: 'bg-gray-100' },
+        {
+          icon: FileText,
+          label: 'الشروط والأحكام',
+          color: 'text-gray-500',
+          bgColor: 'bg-gray-100',
+          onClick: () => navigate('/terms-conditions'),
+        },
       ],
     },
     ...(currentUser.role === 'admin'

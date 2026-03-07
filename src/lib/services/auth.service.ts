@@ -82,6 +82,39 @@ export async function logout(): Promise<void> {
   await supabase.auth.signOut();
 }
 
+/**
+ * Updates the user's password. Requires current password to re-authenticate first,
+ * so a stolen session cannot be used to change the password.
+ */
+export async function updatePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<AuthResult> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user?.email) {
+    return { ok: false, error: 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.' };
+  }
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword,
+  });
+  if (reauthError) {
+    const message =
+      reauthError.message === 'Invalid login credentials'
+        ? 'كلمة المرور الحالية غير صحيحة'
+        : reauthError.message;
+    return { ok: false, error: message };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export function onAuthStateChange(
   callback: (user: User | null) => void
 ): () => void {

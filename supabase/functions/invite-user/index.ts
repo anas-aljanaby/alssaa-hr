@@ -17,11 +17,12 @@ interface InviteBody {
   department_id: string;
 }
 
+/** Generates a cryptographically secure random password (24 chars, no ambiguous chars). */
 function randomPassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let s = '';
-  for (let i = 0; i < 24; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
-  return s;
+  const random = new Uint8Array(24);
+  crypto.getRandomValues(random);
+  return Array.from(random, (b) => chars.charAt(b % chars.length)).join('');
 }
 
 Deno.serve(async (req) => {

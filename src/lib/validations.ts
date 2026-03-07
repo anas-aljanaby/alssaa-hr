@@ -1,13 +1,25 @@
 import { z } from 'zod';
 
+// Shared password rules: 8–128 chars, at least one uppercase, one lowercase, one digit
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 128;
+const passwordStrengthRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).*$/;
+
+const strongPassword = z
+  .string()
+  .min(PASSWORD_MIN, `كلمة المرور يجب أن تكون ${PASSWORD_MIN} أحرف على الأقل`)
+  .max(PASSWORD_MAX, `كلمة المرور يجب ألا تتجاوز ${PASSWORD_MAX} حرفاً`)
+  .regex(
+    passwordStrengthRegex,
+    'كلمة المرور يجب أن تحتوي على حرف كبير وحرف صغير ورقم واحد على الأقل'
+  );
+
 export const loginSchema = z.object({
   email: z
     .string()
     .min(1, 'البريد الإلكتروني مطلوب')
     .email('البريد الإلكتروني غير صالح'),
-  password: z
-    .string()
-    .min(1, 'كلمة المرور مطلوبة'),
+  password: z.string().min(1, 'كلمة المرور مطلوبة'),
 });
 export type LoginFormData = z.infer<typeof loginSchema>;
 
@@ -20,11 +32,21 @@ export const signUpSchema = z.object({
     .string()
     .min(1, 'البريد الإلكتروني مطلوب')
     .email('البريد الإلكتروني غير صالح'),
-  password: z
-    .string()
-    .min(6, 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'),
+  password: strongPassword,
 });
 export type SignUpFormData = z.infer<typeof signUpSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'كلمة المرور الحالية مطلوبة'),
+    newPassword: strongPassword,
+    confirmPassword: z.string().min(1, 'تأكيد كلمة المرور مطلوب'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'كلمة المرور وتأكيدها غير متطابقتين',
+    path: ['confirmPassword'],
+  });
+export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
 export const leaveRequestSchema = z
   .object({

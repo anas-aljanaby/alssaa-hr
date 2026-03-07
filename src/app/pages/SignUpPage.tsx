@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { signUpSchema, type SignUpFormData } from '@/lib/validations';
 import { useAuth } from '../contexts/AuthContext';
+import { PasswordChecklist } from '../components/PasswordChecklist';
 import { Eye, EyeOff, Building2, UserPlus } from 'lucide-react';
 
 export function SignUpPage() {
@@ -15,6 +16,7 @@ export function SignUpPage() {
 
   const {
     register,
+    watch,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<SignUpFormData>({
@@ -103,11 +105,10 @@ export function SignUpPage() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              {errors.password ? (
+              {errors.password && (
                 <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
-              ) : (
-                <p className="text-gray-500 text-sm mt-1">6 أحرف على الأقل</p>
               )}
+              <PasswordChecklist password={watch('password') ?? ''} />
             </div>
 
             {serverError && (
