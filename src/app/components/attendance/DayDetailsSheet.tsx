@@ -42,7 +42,7 @@ function formatTime(t: string): string {
   return t.slice(0, 5);
 }
 
-function PunchRow({ punch, isLast }: { punch: PunchEntry; isLast: boolean }) {
+function PunchRow({ punch, isLast, isAutoPunchOut }: { punch: PunchEntry; isLast: boolean; isAutoPunchOut?: boolean }) {
   const isIn = punch.type === 'clock_in';
   return (
     <div className="flex items-start gap-3 relative">
@@ -66,6 +66,11 @@ function PunchRow({ punch, isLast }: { punch: PunchEntry; isLast: boolean }) {
             <span className="text-xs text-gray-500">
               {isIn ? '← تسجيل حضور' : '→ تسجيل انصراف'}
             </span>
+            {!isIn && isAutoPunchOut && (
+              <span className="px-1.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                انصراف تلقائي
+              </span>
+            )}
           </div>
           {punch.isOvertime && (
             <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">
@@ -148,6 +153,7 @@ export function DayDetailsSheet({ userId, date, onClose }: Props) {
                       key={punch.id}
                       punch={punch}
                       isLast={i === record.punches.length - 1}
+                      isAutoPunchOut={punch.type === 'clock_out' ? record.log?.auto_punch_out : undefined}
                     />
                   ))}
                 </div>

@@ -166,6 +166,7 @@ export interface Database {
           check_out_lng: number | null;
           status: 'present' | 'late' | 'absent' | 'on_leave';
           is_dev: boolean;
+          auto_punch_out: boolean;
         };
         Insert: {
           id?: string;
@@ -180,6 +181,7 @@ export interface Database {
           check_out_lng?: number | null;
           status?: 'present' | 'late' | 'absent' | 'on_leave';
           is_dev?: boolean;
+          auto_punch_out?: boolean;
         };
         Update: {
           id?: string;
@@ -194,6 +196,7 @@ export interface Database {
           check_out_lng?: number | null;
           status?: 'present' | 'late' | 'absent' | 'on_leave';
           is_dev?: boolean;
+          auto_punch_out?: boolean;
         };
         Relationships: [
           {
@@ -452,6 +455,7 @@ export interface Database {
           absent_cutoff_time: string;
           annual_leave_per_year: number;
           sick_leave_per_year: number;
+          auto_punch_out_buffer_minutes: number;
         };
         Insert: {
           id?: string;
@@ -464,6 +468,7 @@ export interface Database {
           absent_cutoff_time?: string;
           annual_leave_per_year?: number;
           sick_leave_per_year?: number;
+          auto_punch_out_buffer_minutes?: number;
         };
         Update: {
           id?: string;
@@ -476,6 +481,7 @@ export interface Database {
           absent_cutoff_time?: string;
           annual_leave_per_year?: number;
           sick_leave_per_year?: number;
+          auto_punch_out_buffer_minutes?: number;
         };
         Relationships: [
           {

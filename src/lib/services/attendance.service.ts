@@ -19,6 +19,8 @@ export interface ShiftInfo {
   workStartTime: string;
   workEndTime: string;
   gracePeriodMinutes: number;
+  /** Minutes after shift end during which manual punch-out is allowed; after this the auto punch-out job runs. */
+  bufferMinutesAfterShift: number;
   /** JavaScript getDay() values that are off (e.g. [5, 6] = Fri, Sat). Default [5, 6]. */
   weeklyOffDays: number[];
 }
@@ -52,34 +54,41 @@ function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_o
 
   const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
   const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
-  const outsideWorkingHours = (minutes: number) =>
+  const bufferMinutes = shift?.bufferMinutesAfterShift ?? 30;
+
+  // Punch-in: overtime only when after shift end (early punch-in is on-time, no tag)
+  const inOvertime = (inMin: number) =>
     shiftStartMinutes !== null &&
     shiftEndMinutes !== null &&
-    (minutes < shiftStartMinutes || minutes > shiftEndMinutes);
+    inMin > shiftEndMinutes;
+
+  // Punch-out: not overtime if within buffer after shift end
+  const outOvertime = (outMin: number) =>
+    shiftStartMinutes !== null &&
+    shiftEndMinutes !== null &&
+    (outMin < shiftStartMinutes || outMin > shiftEndMinutes + bufferMinutes);
 
   const punches: PunchEntry[] = [];
 
   const inTime = log.check_in_time;
   const inMinutes = toMinutes(inTime);
-  const inOvertime = outsideWorkingHours(inMinutes);
 
   punches.push({
     id: `${log.id}-in`,
     timestamp: inTime,
     type: 'clock_in',
-    isOvertime: inOvertime,
+    isOvertime: inOvertime(inMinutes),
   });
 
   if (log.check_out_time) {
     const outTime = log.check_out_time;
     const outMinutes = toMinutes(outTime);
-    const outOvertime = outsideWorkingHours(outMinutes);
 
     punches.push({
       id: `${log.id}-out`,
       timestamp: outTime,
       type: 'clock_out',
-      isOvertime: outOvertime,
+      isOvertime: outOvertime(outMinutes),
     });
   }
 
@@ -114,7 +123,7 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
   if (hasCustomSchedule) {
     const { data: policy } = await supabase
       .from('attendance_policy')
-      .select('grace_period_minutes')
+      .select('grace_period_minutes, auto_punch_out_buffer_minutes')
       .eq('org_id', profile.org_id)
       .limit(1)
       .maybeSingle();
@@ -124,13 +133,14 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
       workStartTime: profile.work_start_time!,
       workEndTime: profile.work_end_time!,
       gracePeriodMinutes: policy?.grace_period_minutes ?? 15,
+      bufferMinutesAfterShift: policy?.auto_punch_out_buffer_minutes ?? 30,
       weeklyOffDays,
     };
   }
 
   const { data: policy } = await supabase
     .from('attendance_policy')
-    .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days')
+    .select('work_start_time, work_end_time, grace_period_minutes, auto_punch_out_buffer_minutes, weekly_off_days')
     .eq('org_id', profile.org_id)
     .limit(1)
     .maybeSingle();
@@ -140,6 +150,7 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
     workStartTime: policy.work_start_time,
     workEndTime: policy.work_end_time,
     gracePeriodMinutes: policy.grace_period_minutes,
+    bufferMinutesAfterShift: policy.auto_punch_out_buffer_minutes ?? 30,
     weeklyOffDays: policy.weekly_off_days ?? [5, 6],
   };
 }
@@ -308,6 +319,7 @@ export async function checkOut(userId: string, checkoutTime?: string): Promise<A
     .from('attendance_logs')
     .update({
       check_out_time: time,
+      auto_punch_out: false,
     })
     .eq('id', existing.id)
     .select()

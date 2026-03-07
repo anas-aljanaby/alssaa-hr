@@ -10,7 +10,7 @@ type LeaveRequestInsert = requestsService.LeaveRequestInsert;
 
 interface AppContextType {
   checkIn: (userId: string) => Promise<AttendanceLog>;
-  checkOut: (userId: string) => Promise<AttendanceLog>;
+  checkOut: (userId: string, checkoutTime?: string) => Promise<AttendanceLog>;
   submitRequest: (request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>) => Promise<LeaveRequest>;
   updateRequestStatus: (requestId: string, status: 'approved' | 'rejected', approverId: string, note: string) => Promise<LeaveRequest>;
   markNotificationRead: (notifId: string) => Promise<void>;
@@ -32,9 +32,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const checkOut = async (userId: string): Promise<AttendanceLog> => {
+  const checkOut = async (userId: string, checkoutTime?: string): Promise<AttendanceLog> => {
     try {
-      const result = await attendanceService.checkOut(userId);
+      const result = await attendanceService.checkOut(userId, checkoutTime);
       toast.success('تم تسجيل الانصراف بنجاح');
       return result;
     } catch (err: unknown) {

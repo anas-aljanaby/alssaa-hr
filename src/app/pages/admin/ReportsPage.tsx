@@ -24,6 +24,7 @@ import {
   Clock,
   Shield,
   Settings,
+  X,
   Calendar,
   Activity,
   AlertCircle,
@@ -493,6 +494,10 @@ export function ReportsPage() {
                   label="فترة السماح (دقيقة)"
                   value={`${policy.grace_period_minutes} دقيقة`}
                 />
+                <PolicyRow
+                  label="مهلة الانصراف التلقائي (دقيقة)"
+                  value={`${policy.auto_punch_out_buffer_minutes ?? 30} دقيقة`}
+                />
                 <PolicyRow label="وقت قطع الغياب" value={policy.absent_cutoff_time} />
                 <PolicyRow
                   label="أيام الإجازة الأسبوعية"
@@ -589,6 +594,7 @@ export function ReportsPage() {
                     work_start_time: editPolicy.work_start_time,
                     work_end_time: editPolicy.work_end_time,
                     grace_period_minutes: editPolicy.grace_period_minutes,
+                    auto_punch_out_buffer_minutes: editPolicy.auto_punch_out_buffer_minutes ?? 30,
                     absent_cutoff_time: editPolicy.absent_cutoff_time,
                     weekly_off_days: editPolicy.weekly_off_days,
                     max_late_days_before_warning: editPolicy.max_late_days_before_warning,
@@ -641,6 +647,19 @@ export function ReportsPage() {
                     onChange={(e) =>
                       setEditPolicy((prev) =>
                         prev ? { ...prev, grace_period_minutes: Number(e.target.value) || 0 } : prev
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">مهلة الانصراف التلقائي (دقيقة)</label>
+                  <input
+                    type="number"
+                    value={editPolicy.auto_punch_out_buffer_minutes ?? 30}
+                    onChange={(e) =>
+                      setEditPolicy((prev) =>
+                        prev ? { ...prev, auto_punch_out_buffer_minutes: Number(e.target.value) || 0 } : prev
                       )
                     }
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"

@@ -158,6 +158,7 @@ export function ManagerDashboard() {
         todayStatus: log?.status || ('absent' as const),
         checkIn: log?.check_in_time || null,
         checkOut: log?.check_out_time || null,
+        autoPunchOut: log?.auto_punch_out ?? false,
       };
     });
   }, [employees, todayLogs]);
@@ -272,9 +273,16 @@ export function ManagerDashboard() {
                       </p>
                     </div>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full text-xs ${getStatusColor(emp.todayStatus)}`}>
-                    {getAttendanceStatusAr(emp.todayStatus)}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {emp.autoPunchOut && (
+                      <span className="px-1.5 py-0.5 text-amber-600 bg-amber-100 rounded text-[10px] border border-amber-200">
+                        انصراف تلقائي
+                      </span>
+                    )}
+                    <span className={`px-2.5 py-1 rounded-full text-xs ${getStatusColor(emp.todayStatus)}`}>
+                      {getAttendanceStatusAr(emp.todayStatus)}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

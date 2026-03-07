@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { LogIn, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LogIn, LogOut, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { TodayRecord } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 
@@ -8,7 +8,7 @@ interface Props {
   actionLoading: boolean;
   cooldownSecondsLeft: number;
   onCheckIn: () => void;
-  onCheckOut: (checkoutTime?: string) => void; // kept for compatibility, but no manual checkout in UI
+  onCheckOut: (checkoutTime?: string) => void;
 }
 
 function toMinutes(t: string): number {
@@ -40,26 +40,48 @@ function todayArabicDate(): string {
 export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onCheckIn, onCheckOut }: Props) {
   const { log, shift } = today;
 
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Workday elapsed: 0 until shift start, then time from shift start to min(now, shift end). For progress bar only.
+  const [workdayElapsedSeconds, setWorkdayElapsedSeconds] = useState(0);
+  // Hours worked: actual time since punch-in (where late arrival shows up).
+  const [punchInElapsedSeconds, setPunchInElapsedSeconds] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<'overtime' | 'early_checkout' | null>(null);
-  const autoCheckoutTriggeredRef = useRef(false);
 
   const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
   const isCompleted = !!(log?.check_in_time && log?.check_out_time);
 
   useEffect(() => {
-    if (!isCheckedIn || !log?.check_in_time) {
-      setElapsedSeconds(0);
+    if (!isCheckedIn || !shift) {
+      setWorkdayElapsedSeconds(0);
       return;
     }
-    const computeElapsed = () => {
+    const startM = toMinutes(shift.workStartTime);
+    const endM = toMinutes(shift.workEndTime);
+    const computeWorkdayElapsed = () => {
+      const current = now();
+      const currentMinutes = current.getHours() * 60 + current.getMinutes();
+      const currentSeconds = current.getSeconds();
+      if (currentMinutes < startM) return 0;
+      if (currentMinutes >= endM) return (endM - startM) * 60;
+      return (currentMinutes - startM) * 60 + currentSeconds;
+    };
+    setWorkdayElapsedSeconds(computeWorkdayElapsed());
+    const id = setInterval(() => setWorkdayElapsedSeconds(computeWorkdayElapsed()), 1000);
+    return () => clearInterval(id);
+  }, [isCheckedIn, shift]);
+
+  useEffect(() => {
+    if (!isCheckedIn || !log?.check_in_time) {
+      setPunchInElapsedSeconds(0);
+      return;
+    }
+    const computePunchInElapsed = () => {
       const [h, m] = log.check_in_time!.split(':').map(Number);
       const currentDate = now();
       const inMs = new Date(currentDate).setHours(h, m, 0, 0);
       return Math.max(0, Math.floor((currentDate.getTime() - inMs) / 1000));
     };
-    setElapsedSeconds(computeElapsed());
-    const id = setInterval(() => setElapsedSeconds(computeElapsed()), 1000);
+    setPunchInElapsedSeconds(computePunchInElapsed());
+    const id = setInterval(() => setPunchInElapsedSeconds(computePunchInElapsed()), 1000);
     return () => clearInterval(id);
   }, [isCheckedIn, log?.check_in_time]);
 
@@ -81,41 +103,43 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     ? shiftEndMinutes - shiftStartMinutes
     : null;
 
-  // When checked in, cap elapsed time at shift end time if it has been reached
-  let displayElapsedSeconds = elapsedSeconds;
-  if (isCheckedIn && shiftEndMinutes !== null && shiftStartMinutes !== null) {
-    const maxElapsedSeconds = (shiftEndMinutes - shiftStartMinutes) * 60;
-    displayElapsedSeconds = Math.min(elapsedSeconds, maxElapsedSeconds);
-  }
+  // Timer: workday elapsed (0 until shift start)
+  const displayElapsedSeconds = isCheckedIn && shift ? workdayElapsedSeconds : 0;
 
-  const workedMinutes = isCheckedIn
-    ? Math.floor(displayElapsedSeconds / 60)
-    : isCompleted && log?.check_in_time && log?.check_out_time
-      ? toMinutes(log.check_out_time) - toMinutes(log.check_in_time)
-      : 0;
-
-  const progressPercent = shiftDuration && shiftDuration > 0
-    ? Math.min(100, Math.round((workedMinutes / shiftDuration) * 100))
+  // Progress bar: time-based only, 100% at shift end. progress = (currentTime - shiftStart) / (shiftEnd - shiftStart) * 100
+  const progressPercent = shiftDuration != null && shiftDuration > 0
+    ? Math.min(100, (workdayElapsedSeconds / (shiftDuration * 60)) * 100)
     : 0;
 
+  // Hours worked: actual time since punch-in (late arrival shows up here). When completed = check_out - check_in.
+  const hoursWorkedSeconds = isCheckedIn
+    ? punchInElapsedSeconds
+    : isCompleted && log?.check_in_time && log?.check_out_time
+      ? (toMinutes(log.check_out_time) - toMinutes(log.check_in_time)) * 60
+      : 0;
+  const workedMinutes = Math.floor(hoursWorkedSeconds / 60);
+
+  const bufferMinutes = shift?.bufferMinutesAfterShift ?? 30;
   const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
   const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
-  // Overtime only when: (1) not a scheduled working day) OR (2) working day but outside shift hours
-  // Allow up to 30 minutes before shift start without counting as overtime
-  const earlyLoginThresholdMinutes = shiftStartMinutes !== null ? shiftStartMinutes - 30 : null;
+  // Punch In allowed from 1 hour before shift start. Overtime: outside [shiftStart-60, shiftEnd+buffer].
+  const earlyLoginThresholdMinutes = shiftStartMinutes !== null ? shiftStartMinutes - 60 : null;
   const outsideShiftHours =
     shiftStartMinutes !== null &&
     shiftEndMinutes !== null &&
-    (currentMinutes < (earlyLoginThresholdMinutes ?? shiftStartMinutes) || currentMinutes > shiftEndMinutes);
+    (currentMinutes < (earlyLoginThresholdMinutes ?? shiftStartMinutes) || currentMinutes > shiftEndMinutes + bufferMinutes);
   const isOvertime = !isWorkingDay || (isWorkingDay && outsideShiftHours);
 
+  // Punch In button disabled until 1 hour before shift (or always if no shift, e.g. overtime day)
+  const canPunchIn = !shift || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
   const firstPunchIsLate =
     log?.check_in_time && shift
       ? toMinutes(log.check_in_time) > shiftStartMinutes! + shift.gracePeriodMinutes
       : false;
+  // Only show overtime tag when punch-in was after shift end; early punch-in is on-time
   const firstPunchIsOvertime =
     log?.check_in_time && shiftStartMinutes !== null && shiftEndMinutes !== null
-      ? (toMinutes(log.check_in_time) < (earlyLoginThresholdMinutes ?? shiftStartMinutes) || toMinutes(log.check_in_time) > shiftEndMinutes)
+      ? toMinutes(log.check_in_time) > shiftEndMinutes + bufferMinutes
       : false;
 
   const handleCheckInClick = () => {
@@ -126,35 +150,11 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     }
   };
 
-  // Manual checkout disabled: no handler needed in UI.
-
   const handleConfirm = () => {
     setConfirmDialog(null);
     if (confirmDialog === 'overtime') onCheckIn();
     else onCheckOut();
   };
-
-  // Always auto-checkout at shift end time (e.g. 16:00), regardless of hours worked.
-  // If the user was late they may have only worked 80% — we still checkout because the day is over.
-  // Depends on elapsedSeconds so it re-evaluates every tick at high dev speeds.
-  useEffect(() => {
-    if (
-      isCheckedIn &&
-      !log?.check_out_time &&
-      shiftEndMinutes !== null &&
-      currentMinutes >= shiftEndMinutes &&
-      !autoCheckoutTriggeredRef.current &&
-      shift
-    ) {
-      autoCheckoutTriggeredRef.current = true;
-      // Pass shift end time to cap the checkout time at shift end, not at current time
-      onCheckOut(shift.workEndTime);
-    }
-
-    if (!isCheckedIn || log?.check_out_time) {
-      autoCheckoutTriggeredRef.current = false;
-    }
-  }, [isCheckedIn, log?.check_out_time, shiftEndMinutes, currentMinutes, elapsedSeconds, onCheckOut, shift]);
 
   const buttonDisabled = actionLoading || cooldownSecondsLeft > 0;
 
@@ -227,12 +227,12 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           </div>
         )}
 
-        {/* Progress bar when clocked in */}
-        {isCheckedIn && shiftDuration && shiftDuration > 0 && (
+        {/* Progress bar: workday completion only (time-based, 100% at shift end) */}
+        {isCheckedIn && shiftDuration != null && shiftDuration > 0 && (
           <div className="mb-4">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>{Math.floor(workedMinutes / 60)}س {workedMinutes % 60}د مكتملة</span>
-              <span>{progressPercent}%</span>
+              <span>{Math.floor(workdayElapsedSeconds / 3600)}س {Math.floor((workdayElapsedSeconds % 3600) / 60)}د من الدوام</span>
+              <span>{Math.round(progressPercent)}%</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
@@ -240,6 +240,15 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Hours worked: actual time since punch-in (late arrival shows here) */}
+        {isCheckedIn && (
+          <div className="text-center mb-4">
+            <span className="text-sm text-gray-600">
+              ساعات العمل: <span className="font-semibold text-gray-800">{formatElapsed(punchInElapsedSeconds)}</span>
+            </span>
           </div>
         )}
 
@@ -272,16 +281,26 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           </div>
         )}
 
-        {/* Action button */}
+        {/* Action buttons */}
         <div className="space-y-2">
           {!log?.check_in_time && (
             <button
               onClick={handleCheckInClick}
-              disabled={buttonDisabled}
+              disabled={buttonDisabled || !canPunchIn}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
             >
               <LogIn className="w-5 h-5" />
-              {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الحضور'}
+              {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : !canPunchIn ? 'يمكنك التسجيل قبل ساعة من بدء الدوام' : 'تسجيل الحضور'}
+            </button>
+          )}
+          {isCheckedIn && (
+            <button
+              onClick={() => onCheckOut()}
+              disabled={buttonDisabled}
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الانصراف'}
             </button>
           )}
           {isCompleted && (

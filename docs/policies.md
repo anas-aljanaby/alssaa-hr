@@ -13,17 +13,19 @@ Very brief explanation of how the Punching In page works and how time is treated
 
 - **Punch In rule**  
   - The employee should **punch in before or within the grace period** to be considered on time.  
-  - Once the employee punches in, the **Punch In button is disabled** and they **cannot punch out manually**.
-
-- **Work timer behavior**  
-  - After punching in, a **work timer runs** for the rest of the day.  
-  - At the **end of the workday**, the system **automatically stops the timer and punches the employee out** (no action required from the employee).
+  - The **Punch In button is disabled** until **1 hour before** the workday start time.  
+  - **Early arrival** (punching in up to 1 hour before shift start) is allowed and **does not count as overtime**.
 
 - **Punch Out / End of Day**  
-  - **Manual punch out is not available.**  
-  - The system **automatically records the punch out time** at the end of the scheduled workday.
+  - **Manual punch out is required.** The employee must punch out themselves.  
+  - Punch out is allowed from shift start through **shift end + configurable buffer** (e.g. 30 minutes after shift end).  
+  - **Auto punch-out** is only a **safety net**: if the employee has not punched out by **shift end + buffer**, the system records a punch-out at **shift end** (not current time), marks the record as **auto-completed / missing punch**, sends the employee a notification, and flags the day in the manager dashboard for review.  
+  - Auto punch-out records are always flagged so HR and managers know the employee did not confirm the punch-out.
+
+- **Work timer behavior**  
+  - After punching in, a **work timer runs** until the employee punches out (manually or by the safety net).
 
 - **Overtime punches**  
-  - After the scheduled workday ends and the system auto–punches out, the **Punch In button becomes available again**.  
-  - If the employee punches in **outside their scheduled work hours**, this time is recorded as **overtime** (subject to company overtime approval rules).
-
+  - Punching in **more than 1 hour before** shift start or **after** shift end is recorded as **overtime**.  
+  - Punching out **after** the buffer period following shift end is recorded as **overtime**.  
+  - If the employee punches out (manually or via safety net), the **Punch In button becomes available again** for overtime entry (subject to company overtime approval rules).

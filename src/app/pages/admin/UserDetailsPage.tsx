@@ -697,6 +697,11 @@ export function UserDetailsPage() {
                           <span className="text-gray-700 mr-2" dir="ltr">
                             {log.check_out_time || '—'}
                           </span>
+                          {log.auto_punch_out && (
+                            <span className="mr-1 px-1.5 py-0.5 text-amber-600 bg-amber-100 rounded text-[10px] border border-amber-200">
+                              انصراف تلقائي
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
