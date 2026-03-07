@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import * as departmentsService from '@/lib/services/departments.service';
@@ -87,7 +87,14 @@ export function MorePage() {
           label: 'المساعدة والدعم',
           color: 'text-amber-500',
           bgColor: 'bg-amber-50',
-          onClick: () => navigate('/help-support'),
+          href: '/help-support',
+        },
+        {
+          icon: Clock,
+          label: 'سياسة الحضور',
+          color: 'text-slate-600',
+          bgColor: 'bg-slate-50',
+          onClick: () => navigate('/attendance-policy'),
         },
         {
           icon: FileText,
@@ -210,28 +217,45 @@ export function MorePage() {
           <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
             <span className="text-xs text-gray-500">{section.title}</span>
           </div>
-          {section.items.map((item, idx) => (
-            <button
-              key={idx}
-              onClick={item.onClick}
-              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.bgColor}`}
-                >
-                  <item.icon className={`w-4.5 h-4.5 ${item.color}`} />
+          {section.items.map((item, idx) => {
+            const href = 'href' in item ? (item as { href?: string }).href : undefined;
+            const content = (
+              <>
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.bgColor}`}
+                  >
+                    <item.icon className={`w-4.5 h-4.5 ${item.color}`} />
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm text-gray-800">{item.label}</span>
+                    {'subtitle' in item && item.subtitle && (
+                      <p className="text-xs text-gray-400">{item.subtitle}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm text-gray-800">{item.label}</span>
-                  {'subtitle' in item && item.subtitle && (
-                    <p className="text-xs text-gray-400">{item.subtitle}</p>
-                  )}
-                </div>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-gray-300" />
-            </button>
-          ))}
+                <ChevronLeft className="w-4 h-4 text-gray-300" />
+              </>
+            );
+            return href ? (
+              <Link
+                key={idx}
+                to={href}
+                className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+              >
+                {content}
+              </Link>
+            ) : (
+              <button
+                key={idx}
+                type="button"
+                onClick={item.onClick}
+                className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+              >
+                {content}
+              </button>
+            );
+          })}
         </div>
       ))}
 

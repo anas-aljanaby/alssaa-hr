@@ -57,6 +57,7 @@ export const router = createBrowserRouter([
         element: <Lazy><AuthCallbackPage /></Lazy>,
       },
       {
+        path: '*',
         Component: MobileLayout,
         children: [
           { index: true, element: <Lazy><DashboardRouter /></Lazy> },
@@ -74,9 +75,9 @@ export const router = createBrowserRouter([
           { path: 'departments/:deptId', element: <Lazy><RequireAdmin><DepartmentDetailsPage /></RequireAdmin></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
+          { path: '*', element: <Navigate to="/" replace /> },
         ],
       },
-      { path: '*', Component: NotFoundRedirect },
     ],
   },
 ]);
