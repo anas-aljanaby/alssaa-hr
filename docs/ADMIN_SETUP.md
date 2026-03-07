@@ -542,7 +542,7 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/auto-punch-out" \
 
 Optional body for **local/dev** only (non-production): `{"devOverrideTime": "2025-03-07T18:00:00"}` to simulate “now” for testing.
 
-**3. Run it on a schedule (recommended)** so it runs every 15 minutes without manual calls:
+**3. Run it on a schedule (recommended)** so it runs periodically without manual calls. Example below: **every 5 minutes**. You can run more frequently (e.g. every minute: `* * * * *`) or less (e.g. every 15 minutes: `*/15 * * * *`).
 
 - Enable **pg_cron** and **pg_net** in the Supabase Dashboard (Database → Extensions) if not already enabled.
 - Store the project URL and a key in Vault (Dashboard → SQL Editor), then schedule the job:
@@ -552,10 +552,10 @@ Optional body for **local/dev** only (non-production): `{"devOverrideTime": "202
 select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
 select vault.create_secret('YOUR_SERVICE_ROLE_OR_ANON_KEY', 'publishable_key');
 
--- Schedule auto-punch-out every 15 minutes
+-- Schedule auto-punch-out every 5 minutes (cron: minute hour day month dow)
 select cron.schedule(
-  'auto-punch-out-every-15min',
-  '*/15 * * * *',
+  'auto-punch-out-periodic',
+  '*/5 * * * *',
   $$
   select net.http_post(
     url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/auto-punch-out',
@@ -569,7 +569,7 @@ select cron.schedule(
 );
 ```
 
-If the job already exists, unschedule first: `select cron.unschedule('auto-punch-out-every-15min');` then run the `cron.schedule` again.
+If the job already exists, unschedule first: `select cron.unschedule('auto-punch-out-periodic');` then run the `cron.schedule` again.
 
 ### 7.4 Seeding Demo Data
 
