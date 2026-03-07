@@ -45,8 +45,6 @@ create table public.profiles (
   role          text not null default 'employee'
                   check (role in ('employee', 'manager', 'admin')),
   department_id uuid references public.departments (id) on delete set null,
-  status        text not null default 'active'
-                  check (status in ('active', 'inactive')),
   avatar_url    text,
   join_date     date not null default current_date,
   work_days       int[] default null,
@@ -91,8 +89,12 @@ create table public.attendance_logs (
   status          text not null default 'present'
                     check (status in ('present', 'late', 'absent', 'on_leave')),
   is_dev          boolean not null default false,
+  auto_punch_out  boolean not null default false,
   unique (user_id, date)
 );
+
+comment on column public.attendance_logs.auto_punch_out is
+  'True when check_out_time was set by the auto punch-out job (safety net), not by the employee.';
 
 -- ============================================================
 -- 4. LEAVE REQUESTS
@@ -175,8 +177,12 @@ create table public.attendance_policy (
   absent_cutoff_time           time not null default '12:00',
   annual_leave_per_year        int  not null default 21,
   sick_leave_per_year          int  not null default 10,
+  auto_punch_out_buffer_minutes int  not null default 30,
   constraint attendance_policy_org_unique unique (org_id)
 );
+
+comment on column public.attendance_policy.auto_punch_out_buffer_minutes is
+  'Minutes after work_end_time after which the auto punch-out safety net runs (e.g. 30).';
 
 -- Default policy for the real org
 insert into public.attendance_policy (org_id)
@@ -191,7 +197,6 @@ create index idx_departments_org        on public.departments    (org_id);
 create index idx_profiles_org           on public.profiles       (org_id);
 create index idx_profiles_department    on public.profiles       (department_id);
 create index idx_profiles_role          on public.profiles       (role);
-create index idx_profiles_status        on public.profiles       (status);
 
 create index idx_attendance_org         on public.attendance_logs (org_id);
 create index idx_attendance_user_date   on public.attendance_logs (user_id, date desc);

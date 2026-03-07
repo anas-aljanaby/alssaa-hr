@@ -13,7 +13,6 @@ import type { Department } from '@/lib/services/departments.service';
 import { DashboardSkeleton } from '../../components/skeletons';
 import { PendingRequestsCard } from '../../components/PendingRequestsCard';
 import {
-  EmployeeStatusList,
   EmployeeListUnified,
   AttendanceCharts,
   type EmployeeWithTodayStatus,
@@ -34,7 +33,7 @@ function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-type ManagerTab = 'overview' | 'employees' | 'analytics';
+type ManagerTab = 'overview' | 'analytics';
 
 export function ManagerDashboard() {
   const { currentUser } = useAuth();
@@ -242,15 +241,14 @@ export function ManagerDashboard() {
       />
 
       <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">
-        <div className="grid grid-cols-3 gap-1">
-          {(['overview', 'employees', 'analytics'] as const).map((tab) => (
+        <div className="grid grid-cols-2 gap-1">
+          {(['overview', 'analytics'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={tabClass(tab)}
             >
               {tab === 'overview' && 'نظرة عامة'}
-              {tab === 'employees' && 'الموظفون'}
               {tab === 'analytics' && 'التحليلات'}
             </button>
           ))}
@@ -292,26 +290,14 @@ export function ManagerDashboard() {
             pendingRequests={pendingRequests}
             profilesMap={profilesMap}
           />
-          <EmployeeStatusList
+          <EmployeeListUnified
             employees={todayEmployeeStatus}
+            lateCounts={monthlyStats.lateCounts}
+            absentCounts={monthlyStats.absentCounts}
             limit={5}
-            onViewAll={() => setActiveTab('employees')}
-          />
-          <AttendanceCharts
-            pieData={pieData}
-            weeklyTrend={weeklyTrend}
-            compact
-            onViewAnalytics={() => setActiveTab('analytics')}
+            to="/users"
           />
         </>
-      )}
-
-      {activeTab === 'employees' && (
-        <EmployeeListUnified
-          employees={todayEmployeeStatus}
-          lateCounts={monthlyStats.lateCounts}
-          absentCounts={monthlyStats.absentCounts}
-        />
       )}
 
       {activeTab === 'analytics' && (

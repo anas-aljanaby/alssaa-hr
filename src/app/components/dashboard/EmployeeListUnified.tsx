@@ -12,6 +12,10 @@ interface EmployeeListUnifiedProps {
   lateCounts: Record<string, number>;
   absentCounts: Record<string, number>;
   title?: string;
+  /** When set, show only this many employees (no search, no "show more"). */
+  limit?: number;
+  /** When set, the whole card is clickable and navigates here (row clicks still go to user details). */
+  to?: string;
 }
 
 export function EmployeeListUnified({
@@ -19,6 +23,8 @@ export function EmployeeListUnified({
   lateCounts,
   absentCounts,
   title = 'الموظفون',
+  limit,
+  to,
 }: EmployeeListUnifiedProps) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -30,27 +36,45 @@ export function EmployeeListUnified({
     return employees.filter((e) => e.name_ar.toLowerCase().includes(q));
   }, [employees, search]);
 
-  const visible = expanded ? filtered : filtered.slice(0, INITIAL_SHOW);
-  const hasMore = filtered.length > INITIAL_SHOW && !expanded;
+  const visible = limit != null ? filtered.slice(0, limit) : (expanded ? filtered : filtered.slice(0, INITIAL_SHOW));
+  const hasMore = limit == null && filtered.length > INITIAL_SHOW && !expanded;
+  const showSearch = limit == null;
+
+  const handleCardClick = () => {
+    if (to) navigate(to);
+  };
+
+  const handleRowClick = (e: React.MouseEvent, userId: string) => {
+    if (to) e.stopPropagation();
+    navigate(`/user-details/${userId}`);
+  };
 
   return (
-    <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+    <div
+      className={`bg-white rounded-2xl p-4 border border-gray-100 shadow-sm ${to ? 'cursor-pointer hover:bg-gray-50/50 transition-colors' : ''}`}
+      onClick={to ? handleCardClick : undefined}
+      role={to ? 'button' : undefined}
+      tabIndex={to ? 0 : undefined}
+      onKeyDown={to ? (e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(); } : undefined}
+    >
       <div className="flex items-center gap-2 mb-3">
         <Users className="w-5 h-5 text-blue-500" />
         <h3 className="text-gray-800">{title}</h3>
       </div>
 
-      <div className="relative mb-3">
-        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="بحث بالاسم..."
-          className="w-full pr-9 pl-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-200 outline-none transition-colors"
-          aria-label="بحث عن موظف"
-        />
-      </div>
+      {showSearch && (
+        <div className="relative mb-3">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث بالاسم..."
+            className="w-full pr-9 pl-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-200 outline-none transition-colors"
+            aria-label="بحث عن موظف"
+          />
+        </div>
+      )}
 
       <div className="space-y-2">
         {visible.map((emp) => {
@@ -60,12 +84,11 @@ export function EmployeeListUnified({
             <div
               key={emp.id}
               className="flex items-center justify-between gap-2 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100"
-              onClick={() => navigate(`/user-details/${emp.id}`)}
+              onClick={(e) => handleRowClick(e, emp.id)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ')
-                  navigate(`/user-details/${emp.id}`);
+                if (e.key === 'Enter' || e.key === ' ') navigate(`/user-details/${emp.id}`);
               }}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
