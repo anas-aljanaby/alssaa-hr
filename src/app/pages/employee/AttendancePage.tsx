@@ -122,12 +122,11 @@ export function AttendancePage() {
   };
 
   const handleCheckOut = async (checkoutTime?: string) => {
-    if (!currentUser || actionLoading || cooldownLeft > 0) return;
+    if (!currentUser || actionLoading) return;
     setActionLoading(true);
     try {
       const result = await checkOut(currentUser.uid, checkoutTime);
       if (navigator.vibrate) navigator.vibrate(100);
-      startCooldown();
       // Always update UI with checkout result so completed (green) state shows immediately.
       // If getAttendanceToday fails (e.g. network), we still show the completed day.
       setToday((prev) => ({ ...prev, log: result }));

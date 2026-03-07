@@ -296,11 +296,11 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           {isCheckedIn && (
             <button
               onClick={() => onCheckOut()}
-              disabled={buttonDisabled}
+              disabled={actionLoading}
               className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
             >
               <LogOut className="w-5 h-5" />
-              {actionLoading ? 'جاري التسجيل...' : cooldownSecondsLeft > 0 ? `انتظر ${cooldownSecondsLeft}ث` : 'تسجيل الانصراف'}
+              {actionLoading ? 'جاري التسجيل...' : 'تسجيل الانصراف'}
             </button>
           )}
           {isCompleted && (

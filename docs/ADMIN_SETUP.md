@@ -511,6 +511,7 @@ supabase functions deploy dev-seed-attendance
 | -------- | ------- |
 | **invite-user** | Invite new users (admin). |
 | **dev-seed-attendance** | Seed one month of attendance for the current user (dev only; returns 403 in production). |
+| **auto-punch-out** | Safety net: auto punch-out employees who didn’t punch out by shift end + buffer (run on a schedule). |
 
 For **production**, set the `ENVIRONMENT` secret so dev-only Edge Functions are disabled:
 
@@ -519,6 +520,56 @@ supabase secrets set ENVIRONMENT=production
 ```
 
 Supabase injects `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` automatically; no extra env vars are required for basic behavior.
+
+### 7.3.1 Auto punch-out (safety net)
+
+The **auto-punch-out** Edge Function closes open attendance logs (checked in but not out) when the current time is past **shift end + buffer** (see `attendance_policy.auto_punch_out_buffer_minutes`, default 30). It must be **deployed** and then either **run on a schedule** or invoked manually.
+
+**1. Deploy the function** (included in `pnpm run deploy:functions`):
+
+```bash
+supabase functions deploy auto-punch-out
+```
+
+**2. Run it manually** (e.g. for testing). Use your project URL and the **service role key** (Dashboard → Project Settings → API):
+
+```bash
+curl -X POST "https://<project-ref>.supabase.co/functions/v1/auto-punch-out" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Optional body for **local/dev** only (non-production): `{"devOverrideTime": "2025-03-07T18:00:00"}` to simulate “now” for testing.
+
+**3. Run it on a schedule (recommended)** so it runs every 15 minutes without manual calls:
+
+- Enable **pg_cron** and **pg_net** in the Supabase Dashboard (Database → Extensions) if not already enabled.
+- Store the project URL and a key in Vault (Dashboard → SQL Editor), then schedule the job:
+
+```sql
+-- One-time: store secrets in Vault (use your project URL and anon or service_role key)
+select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
+select vault.create_secret('YOUR_SERVICE_ROLE_OR_ANON_KEY', 'publishable_key');
+
+-- Schedule auto-punch-out every 15 minutes
+select cron.schedule(
+  'auto-punch-out-every-15min',
+  '*/15 * * * *',
+  $$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/auto-punch-out',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'publishable_key')
+    ),
+    body := '{}'::jsonb
+  ) as request_id;
+  $$
+);
+```
+
+If the job already exists, unschedule first: `select cron.unschedule('auto-punch-out-every-15min');` then run the `cron.schedule` again.
 
 ### 7.4 Seeding Demo Data
 
