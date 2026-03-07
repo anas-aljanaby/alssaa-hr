@@ -8,10 +8,20 @@ export function DashboardSkeleton() {
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
       <S className="h-40 rounded-2xl" />
-      <div className="grid grid-cols-2 gap-3">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <S key={i} className="h-24 rounded-2xl" />
-        ))}
+      <div className="bg-white rounded-2xl p-1 border border-gray-100">
+        <div className="grid grid-cols-3 gap-1">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <S key={i} className="h-10 rounded-xl" />
+          ))}
+        </div>
+      </div>
+      <div>
+        <S className="h-5 w-24 mb-3" />
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <S key={i} className="h-24 rounded-2xl" />
+          ))}
+        </div>
       </div>
       <S className="h-32 rounded-2xl" />
     </div>
@@ -22,13 +32,22 @@ export function AdminDashboardSkeleton() {
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
       <S className="h-28 rounded-2xl" />
-      <div className="grid grid-cols-3 gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <S key={i} className="h-24 rounded-2xl" />
-        ))}
+      <div className="bg-white rounded-2xl p-1 border border-gray-100">
+        <div className="grid grid-cols-3 gap-1">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <S key={i} className="h-10 rounded-xl" />
+          ))}
+        </div>
       </div>
-      <S className="h-52 rounded-2xl" />
-      <S className="h-52 rounded-2xl" />
+      <div>
+        <S className="h-5 w-24 mb-3" />
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <S key={i} className="h-24 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+      <S className="h-32 rounded-2xl" />
     </div>
   );
 }

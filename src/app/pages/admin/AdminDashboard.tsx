@@ -12,81 +12,27 @@ import type { LeaveRequest } from '@/lib/services/requests.service';
 import { AdminDashboardSkeleton } from '../../components/skeletons';
 import { PendingRequestsCard } from '../../components/PendingRequestsCard';
 import {
-  Users,
-  Building2,
+  EmployeeStatusList,
+  MonthlyStatsCard,
+  AttendanceCharts,
+  type EmployeeWithTodayStatus,
+} from '../../components/dashboard';
+import {
   CheckCircle2,
   Timer,
   XCircle,
-  TrendingUp,
-  FileText,
-  BarChart3,
-  Activity,
+  Coffee,
   Shield,
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { StatCard } from '../../components/shared/StatCard';
 import { now } from '@/lib/time';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  Rectangle,
-} from 'recharts';
-
-const STACK_KEYS = ['حاضر', 'متأخر', 'غائب'] as const;
-const SEG_GAP = 5; // px gap between segments
-
-type GappedShapeProps = {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  payload?: Record<string, unknown>;
-  fill?: string;
-};
-
-function makeGappedShape(dataKey: (typeof STACK_KEYS)[number]) {
-  return function GappedShape(props: unknown): React.ReactElement {
-    const { x = 0, y = 0, width = 0, height = 0, payload, fill } = (props || {}) as GappedShapeProps;
-
-    if (!width || width <= 0 || !height || height <= 0) return <g />;
-
-    const vals = STACK_KEYS.map((k) => Number((payload as Record<string, number>)?.[k] ?? 0));
-    const i = STACK_KEYS.indexOf(dataKey);
-
-    if (!vals[i]) return <g />;
-
-    const hasPrev = vals.slice(0, i).some((v) => v > 0);
-
-    const nx = hasPrev ? x + SEG_GAP : x;
-    const nw = hasPrev ? Math.max(0, width - SEG_GAP) : width;
-
-    const r = Math.min(8, height / 2, nw / 2);
-
-    return (
-      <Rectangle
-        x={nx}
-        y={y}
-        width={nw}
-        height={height}
-        fill={fill}
-        radius={r}
-      />
-    );
-  };
-}
 
 function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+type AdminTab = 'overview' | 'employees' | 'analytics';
 
 export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -95,6 +41,8 @@ export function AdminDashboard() {
   const [todayLogs, setTodayLogs] = useState<AttendanceLog[]>([]);
   const [pendingRequests, setPendingRequests] = useState<LeaveRequest[]>([]);
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
+  const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
 
   useEffect(() => {
     loadData();
@@ -167,6 +115,18 @@ export function AdminDashboard() {
         });
       }
       setWeekLogs(weekData);
+
+      const allNonAdmin = profs.filter((p) => p.role !== 'admin');
+      const allMonthLogs: AttendanceLog[] = [];
+      for (const emp of allNonAdmin) {
+        const empLogs = await attendanceService.getMonthlyLogs(
+          emp.id,
+          base.getFullYear(),
+          base.getMonth()
+        );
+        allMonthLogs.push(...empLogs);
+      }
+      setMonthLogs(allMonthLogs);
     } catch {
       toast.error('فشل تحميل البيانات');
     } finally {
@@ -191,14 +151,37 @@ export function AdminDashboard() {
       late,
       absent: allNonAdmin.length - checkedIn,
       onLeave,
-      pendingRequests: pendingRequests.length,
     };
-  }, [todayLogs, allNonAdmin, departments, pendingRequests.length]);
+  }, [todayLogs, allNonAdmin, departments]);
 
   const profilesMap = useMemo(
     () => new Map(profiles.map((p) => [p.id, p])),
     [profiles]
   );
+
+  const todayEmployeeStatus = useMemo((): EmployeeWithTodayStatus[] => {
+    const logsMap = new Map(todayLogs.map((l) => [l.user_id, l]));
+    return allNonAdmin.map((emp) => {
+      const log = logsMap.get(emp.id);
+      return {
+        ...emp,
+        todayStatus: log?.status || ('absent' as const),
+        checkIn: log?.check_in_time || null,
+        checkOut: log?.check_out_time || null,
+        autoPunchOut: log?.auto_punch_out ?? false,
+      };
+    });
+  }, [allNonAdmin, todayLogs]);
+
+  const monthlyStats = useMemo(() => {
+    const lateCounts: Record<string, number> = {};
+    const absentCounts: Record<string, number> = {};
+    monthLogs.forEach((l) => {
+      if (l.status === 'late') lateCounts[l.user_id] = (lateCounts[l.user_id] || 0) + 1;
+      if (l.status === 'absent') absentCounts[l.user_id] = (absentCounts[l.user_id] || 0) + 1;
+    });
+    return { lateCounts, absentCounts };
+  }, [monthLogs]);
 
   const deptChartData = useMemo(() => {
     return departments.map((dept) => {
@@ -238,6 +221,11 @@ export function AdminDashboard() {
     return <AdminDashboardSkeleton />;
   }
 
+  const tabClass = (tab: AdminTab) =>
+    `px-3 py-2 rounded-xl text-sm transition-colors ${
+      activeTab === tab ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-50'
+    }`;
+
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
       <DashboardHeader
@@ -246,198 +234,86 @@ export function AdminDashboard() {
         helperText="لوحة التحكم الرئيسية"
         subtitle="شبكة الساعة"
         avatar={<Shield className="w-6 h-6" />}
+        footer={
+          <div className="flex items-center justify-between text-sm">
+            <span className="opacity-90">{overallStats.totalEmployees} موظف</span>
+            <span className="opacity-90">{overallStats.totalDepartments} قسم</span>
+          </div>
+        }
       />
 
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard
-          icon={<Users className="w-4 h-4 text-blue-600" />}
-          label="إجمالي الموظفين"
-          value={overallStats.totalEmployees}
-          color="bg-blue-50 border-blue-100"
-        />
-        <StatCard
-          icon={<Building2 className="w-4 h-4 text-purple-600" />}
-          label="الأقسام"
-          value={overallStats.totalDepartments}
-          color="bg-purple-50 border-purple-100"
-        />
-        <StatCard
-          icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-          label="حاضرون اليوم"
-          value={overallStats.present}
-          color="bg-emerald-50 border-emerald-100"
-        />
-        <StatCard
-          icon={<Timer className="w-4 h-4 text-amber-600" />}
-          label="متأخرون"
-          value={overallStats.late}
-          color="bg-amber-50 border-amber-100"
-        />
-        <StatCard
-          icon={<XCircle className="w-4 h-4 text-red-600" />}
-          label="غائبون"
-          value={overallStats.absent}
-          color="bg-red-50 border-red-100"
-        />
-        <StatCard
-          icon={<FileText className="w-4 h-4 text-indigo-600" />}
-          label="طلبات معلقة"
-          value={overallStats.pendingRequests}
-          color="bg-indigo-50 border-indigo-100"
-        />
-      </div>
-
-      <PendingRequestsCard
-        pendingRequests={pendingRequests}
-        profilesMap={profilesMap}
-      />
-
-      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Activity className="w-5 h-5 text-blue-500" />
-          <h3 className="text-gray-800">توزيع الحضور اليوم</h3>
-        </div>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="45%"
-                innerRadius={38}
-                outerRadius={62}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {pieData.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend
-                content={({ payload }) => (
-                  <div className="flex justify-center gap-5 pt-3 flex-wrap">
-                    {payload?.map((entry) => (
-                      <div key={entry.value} className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-sm shrink-0"
-                          style={{ backgroundColor: entry.color }}
-                        />
-                        <span className="text-xs text-gray-600">{entry.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-5 h-5 text-emerald-500" />
-          <h3 className="text-gray-800">اتجاهات الأسبوع</h3>
-        </div>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={weeklyTrend}
-              margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
-              barSize={20}
+      <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">
+        <div className="grid grid-cols-3 gap-1">
+          {(['overview', 'employees', 'analytics'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={tabClass(tab)}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} tickMargin={6} />
-              <YAxis tick={{ fontSize: 11 }} width={28} tickMargin={4} axisLine={false} tickLine={false} />
-              <Tooltip />
-              <Bar dataKey="حضور" fill="#059669" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="تأخر" fill="#d97706" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+              {tab === 'overview' && 'نظرة عامة'}
+              {tab === 'employees' && 'الموظفون'}
+              {tab === 'analytics' && 'التحليلات'}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-2 mb-5">
-          <BarChart3 className="w-5 h-5 text-indigo-500" />
-          <h3 className="text-gray-800 font-medium">أداء الأقسام</h3>
-        </div>
-        <div className="h-60 min-h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={deptChartData}
-              layout="vertical"
-              margin={{ top: 8, right: 16, left: 16, bottom: 8 }}
-              barCategoryGap="12%"
-              barSize={20}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#e5e7eb"
-                vertical={false}
+      {activeTab === 'overview' && (
+        <>
+          <div>
+            <h3 className="mb-3 text-gray-800">ملخص اليوم</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard
+                icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                label="حاضرون"
+                value={overallStats.present}
+                color="bg-emerald-50 border-emerald-100"
               />
-              <XAxis
-                type="number"
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                tickMargin={8}
-                axisLine={{ stroke: '#e5e7eb' }}
-                tickLine={false}
+              <StatCard
+                icon={<Timer className="w-5 h-5 text-amber-500" />}
+                label="متأخرون"
+                value={overallStats.late}
+                color="bg-amber-50 border-amber-100"
               />
-              <YAxis
-                dataKey="name"
-                type="category"
-                orientation="right"
-                width={80}
-                tick={{ fontSize: 12, fill: '#374151' }}
-                tickMargin={8}
-                axisLine={false}
-                tickLine={false}
-                interval={0}
+              <StatCard
+                icon={<XCircle className="w-5 h-5 text-red-500" />}
+                label="غائبون"
+                value={overallStats.absent}
+                color="bg-red-50 border-red-100"
               />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: '8px',
-                  border: '1px solid #e5e7eb',
-                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                }}
+              <StatCard
+                icon={<Coffee className="w-5 h-5 text-blue-500" />}
+                label="في إجازة"
+                value={overallStats.onLeave}
+                color="bg-blue-50 border-blue-100"
               />
-              <Legend
-                content={({ payload }) => (
-                  <div className="flex justify-center gap-6 pt-4 flex-wrap">
-                    {payload?.map((entry) => (
-                      <div key={entry.value} className="flex items-center gap-2">
-                        <div
-                          className="w-3.5 h-3.5 rounded-md shrink-0"
-                          style={{ backgroundColor: entry.color }}
-                        />
-                        <span className="text-sm text-gray-600">{entry.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              />
-              <Bar
-                dataKey="حاضر"
-                fill="#059669"
-                stackId="a"
-                shape={makeGappedShape('حاضر')}
-              />
-              <Bar
-                dataKey="متأخر"
-                fill="#d97706"
-                stackId="a"
-                shape={makeGappedShape('متأخر')}
-              />
-              <Bar
-                dataKey="غائب"
-                fill="#dc2626"
-                stackId="a"
-                shape={makeGappedShape('غائب')}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+            </div>
+          </div>
+          <PendingRequestsCard
+            pendingRequests={pendingRequests}
+            profilesMap={profilesMap}
+          />
+        </>
+      )}
+
+      {activeTab === 'employees' && (
+        <>
+          <EmployeeStatusList employees={todayEmployeeStatus} />
+          <MonthlyStatsCard
+            employees={allNonAdmin}
+            lateCounts={monthlyStats.lateCounts}
+            absentCounts={monthlyStats.absentCounts}
+          />
+        </>
+      )}
+
+      {activeTab === 'analytics' && (
+        <AttendanceCharts
+          pieData={pieData}
+          weeklyTrend={weeklyTrend}
+          deptChartData={deptChartData}
+        />
+      )}
     </div>
   );
 }

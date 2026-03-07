@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import * as departmentsService from '@/lib/services/departments.service';
@@ -7,13 +6,18 @@ import * as profilesService from '@/lib/services/profiles.service';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
-import { getAttendanceStatusAr } from '../../data/mockData';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { Department } from '@/lib/services/departments.service';
 import { DashboardSkeleton } from '../../components/skeletons';
 import { PendingRequestsCard } from '../../components/PendingRequestsCard';
+import {
+  EmployeeStatusList,
+  MonthlyStatsCard,
+  AttendanceCharts,
+  type EmployeeWithTodayStatus,
+} from '../../components/dashboard';
 import { todayStr } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 import {
@@ -22,23 +26,26 @@ import {
   Timer,
   XCircle,
   Coffee,
-  AlertTriangle,
-  BarChart3,
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { StatCard } from '../../components/shared/StatCard';
-import { getStatusColor } from '@/lib/ui-helpers';
+
+function dateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+type ManagerTab = 'overview' | 'employees' | 'analytics';
 
 export function ManagerDashboard() {
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [department, setDepartment] = useState<Department | null>(null);
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [todayLogs, setTodayLogs] = useState<AttendanceLog[]>([]);
   const [pendingRequests, setPendingRequests] = useState<LeaveRequest[]>([]);
   const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'team'>('overview');
+  const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
+  const [activeTab, setActiveTab] = useState<ManagerTab>('overview');
 
   const employeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
 
@@ -97,6 +104,7 @@ export function ManagerDashboard() {
     try {
       setLoading(true);
       const today = todayStr();
+      const base = now();
       const [dept, emps, logs, reqs] = await Promise.all([
         departmentsService.getDepartmentById(currentUser.departmentId),
         profilesService.getDepartmentEmployees(currentUser.departmentId),
@@ -112,12 +120,29 @@ export function ManagerDashboard() {
       for (const emp of emps) {
         const empLogs = await attendanceService.getMonthlyLogs(
           emp.id,
-          now().getFullYear(),
-          now().getMonth()
+          base.getFullYear(),
+          base.getMonth()
         );
         allMonthLogs.push(...empLogs);
       }
       setMonthLogs(allMonthLogs);
+
+      const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+      const weekData: { day: string; logs: AttendanceLog[] }[] = [];
+      for (let i = 4; i >= 0; i--) {
+        const d = new Date(base);
+        d.setDate(d.getDate() - i);
+        const ds = dateStr(d);
+        const dayLogs = await attendanceService.getDepartmentLogsForDate(
+          currentUser.departmentId,
+          ds
+        );
+        weekData.push({
+          day: days[d.getDay()] || d.toLocaleDateString('ar-IQ', { weekday: 'short' }),
+          logs: dayLogs,
+        });
+      }
+      setWeekLogs(weekData);
     } catch {
       toast.error('فشل تحميل البيانات');
     } finally {
@@ -149,7 +174,7 @@ export function ManagerDashboard() {
     return { lateCounts, absentCounts };
   }, [monthLogs]);
 
-  const todayEmployeeStatus = useMemo(() => {
+  const todayEmployeeStatus = useMemo((): EmployeeWithTodayStatus[] => {
     const logsMap = new Map(todayLogs.map((l) => [l.user_id, l]));
     return employees.map((emp) => {
       const log = logsMap.get(emp.id);
@@ -168,11 +193,37 @@ export function ManagerDashboard() {
     [employees]
   );
 
+  const pieData = useMemo(
+    () =>
+      [
+        { name: 'حاضر', value: todayStats.present, color: '#059669' },
+        { name: 'متأخر', value: todayStats.late, color: '#d97706' },
+        { name: 'غائب', value: todayStats.absent, color: '#dc2626' },
+        { name: 'إجازة', value: todayStats.onLeave, color: '#2563eb' },
+      ].filter((d) => d.value > 0),
+    [todayStats]
+  );
+
+  const weeklyTrend = useMemo(
+    () =>
+      weekLogs.map((w) => ({
+        day: w.day,
+        حضور: w.logs.filter((l) => l.status === 'present').length,
+        تأخر: w.logs.filter((l) => l.status === 'late').length,
+      })),
+    [weekLogs]
+  );
+
   if (!currentUser) return null;
 
   if (loading) {
     return <DashboardSkeleton />;
   }
+
+  const tabClass = (tab: ManagerTab) =>
+    `px-3 py-2 rounded-xl text-sm transition-colors ${
+      activeTab === tab ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-50'
+    }`;
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
@@ -191,16 +242,16 @@ export function ManagerDashboard() {
       />
 
       <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">
-        <div className="grid grid-cols-2 gap-1">
-          {(['overview', 'team'] as const).map((tab) => (
+        <div className="grid grid-cols-3 gap-1">
+          {(['overview', 'employees', 'analytics'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-3 py-2 rounded-xl text-sm transition-colors ${
-                activeTab === tab ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className={tabClass(tab)}
             >
-              {tab === 'overview' ? 'نظرة عامة' : 'فريق العمل'}
+              {tab === 'overview' && 'نظرة عامة'}
+              {tab === 'employees' && 'الموظفون'}
+              {tab === 'analytics' && 'التحليلات'}
             </button>
           ))}
         </div>
@@ -237,103 +288,29 @@ export function ManagerDashboard() {
               />
             </div>
           </div>
-
-          {pendingRequests.length > 0 && (
-            <PendingRequestsCard
-              pendingRequests={pendingRequests}
-              profilesMap={profilesMap}
-            />
-          )}
-
-          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <BarChart3 className="w-5 h-5 text-blue-500" />
-              <h3 className="text-gray-800">حالة الموظفين اليوم</h3>
-            </div>
-            <div className="space-y-2">
-              {todayEmployeeStatus.map((emp) => (
-                <div
-                  key={emp.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100"
-                  onClick={() => navigate(`/user-details/${emp.id}`)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') navigate(`/user-details/${emp.id}`);
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-sm text-blue-600">{emp.name_ar.charAt(0)}</span>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-800">{emp.name_ar}</p>
-                      <p className="text-xs text-gray-400">
-                        {emp.checkIn ? `الحضور: ${emp.checkIn}` : 'لم يسجل بعد'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {emp.autoPunchOut && (
-                      <span className="px-1.5 py-0.5 text-amber-600 bg-amber-100 rounded text-[10px] border border-amber-200">
-                        انصراف تلقائي
-                      </span>
-                    )}
-                    <span className={`px-2.5 py-1 rounded-full text-xs ${getStatusColor(emp.todayStatus)}`}>
-                      {getAttendanceStatusAr(emp.todayStatus)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {pendingRequests.length === 0 && (
-            <PendingRequestsCard
-              pendingRequests={pendingRequests}
-              profilesMap={profilesMap}
-            />
-          )}
+          <PendingRequestsCard
+            pendingRequests={pendingRequests}
+            profilesMap={profilesMap}
+          />
         </>
       )}
 
-      {activeTab === 'team' && (
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h3 className="text-gray-800">إحصائيات التأخر الشهرية</h3>
-          </div>
-          <div className="space-y-2">
-            {employees.map((emp) => {
-              const lateCount = monthlyStats.lateCounts[emp.id] || 0;
-              const absentCount = monthlyStats.absentCounts[emp.id] || 0;
-              return (
-                <div
-                  key={emp.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100"
-                  onClick={() => navigate(`/user-details/${emp.id}`)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') navigate(`/user-details/${emp.id}`);
-                  }}
-                >
-                  <span className="text-sm text-gray-800">{emp.name_ar}</span>
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${lateCount >= 3 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}
-                    >
-                      تأخر: {lateCount}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600">
-                      غياب: {absentCount}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {activeTab === 'employees' && (
+        <>
+          <EmployeeStatusList employees={todayEmployeeStatus} />
+          <MonthlyStatsCard
+            employees={employees}
+            lateCounts={monthlyStats.lateCounts}
+            absentCounts={monthlyStats.absentCounts}
+          />
+        </>
+      )}
+
+      {activeTab === 'analytics' && (
+        <AttendanceCharts
+          pieData={pieData}
+          weeklyTrend={weeklyTrend}
+        />
       )}
     </div>
   );
