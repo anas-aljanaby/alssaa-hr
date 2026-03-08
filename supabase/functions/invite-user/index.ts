@@ -13,7 +13,7 @@ interface InviteBody {
   email: string;
   name: string;
   phone?: string;
-  role: 'employee' | 'manager' | 'admin';
+  role: 'employee' | 'manager';
   department_id: string;
 }
 
@@ -31,13 +31,32 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    // Normalize Authorization header formats:
+    // - "Bearer <token>"
+    // - "bearer <token>"
+    // - "<token>" (raw JWT)
+    const rawAuthHeader = req.headers.get('Authorization') ?? req.headers.get('authorization');
+    const bearerMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
+    const tokenFromBearer = bearerMatch?.[1]?.trim();
+
+    // Heuristic: JWT-like strings usually contain 2 dots.
+    const tokenFromRaw = rawAuthHeader && !bearerMatch
+      ? rawAuthHeader.trim()
+      : undefined;
+
+    const token =
+      (tokenFromBearer && tokenFromBearer.includes('.') && tokenFromBearer.length > 20
+        ? tokenFromBearer
+        : undefined) ??
+      (tokenFromRaw && tokenFromRaw.includes('.') && tokenFromRaw.length > 20 ? tokenFromRaw : undefined);
+
+    if (!token) {
       return new Response(
         JSON.stringify({ error: 'غير مصرح', code: 'UNAUTHORIZED' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    const authHeader = `Bearer ${token}`;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -79,6 +98,8 @@ Deno.serve(async (req) => {
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
     const role = body?.role;
     const department_id = typeof body?.department_id === 'string' ? body.department_id.trim() : '';
+    const phone = typeof body?.phone === 'string' ? body.phone.trim() : undefined;
+    const allowedRoles = ['employee', 'manager'] as const;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return new Response(
@@ -92,7 +113,7 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    if (!['employee', 'manager', 'admin'].includes(role)) {
+    if (!role || !allowedRoles.includes(role)) {
       return new Response(
         JSON.stringify({ error: 'الدور مطلوب', code: 'INVALID_ROLE' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -105,14 +126,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const user_metadata: Record<string, string> = {
+    const user_metadata: Record<string, unknown> = {
       name,
       name_ar: name,
-      phone: typeof body.phone === 'string' ? body.phone.trim() : '',
       role,
       org_id: profile.org_id,
       department_id,
     };
+    // Keep phone truly optional: if missing/blank, omit it from metadata.
+    if (phone) user_metadata.phone = phone;
 
     const { data: newUser, error } = await admin.auth.admin.createUser({
       email,

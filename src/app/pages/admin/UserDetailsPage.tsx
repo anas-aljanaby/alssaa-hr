@@ -1006,9 +1006,9 @@ export function UserDetailsPage() {
                     {...editProfileForm.register('role')}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   >
-                    <option value="employee">موظف</option>
-                    <option value="manager">مدير قسم</option>
-                    <option value="admin">مدير عام</option>
+                    <option value={profile.role}>
+                      {roleLabel(profile.role)}
+                    </option>
                   </select>
                 </div>
                 <div>

@@ -48,12 +48,6 @@ export async function getDepartmentById(id: string): Promise<Department | null> 
 }
 
 export async function createDepartment(dept: DepartmentInsert): Promise<Department> {
-  if (dept.manager_uid) {
-    const profile = await profilesService.getUserById(dept.manager_uid);
-    if (profile && profile.role !== 'manager') {
-      await profilesService.updateUser(dept.manager_uid, { role: 'manager' });
-    }
-  }
   const { data, error } = await supabase
     .from('departments')
     .insert(dept)
@@ -68,12 +62,6 @@ export async function updateDepartment(
   id: string,
   updates: DepartmentUpdate
 ): Promise<Department> {
-  if (updates.manager_uid) {
-    const profile = await profilesService.getUserById(updates.manager_uid);
-    if (profile && profile.role !== 'manager') {
-      await profilesService.updateUser(updates.manager_uid, { role: 'manager' });
-    }
-  }
   const { data, error } = await supabase
     .from('departments')
     .update(updates)

@@ -72,6 +72,17 @@ export function UsersPage() {
     [departments]
   );
 
+  const isITDepartment = (d: Department) => {
+    const nameAr = (d.name_ar ?? '').toLowerCase();
+    const nameEn = (d.name ?? '').toLowerCase();
+    return nameAr.includes('تقني') || nameEn.includes('technical');
+  };
+
+  const departmentsForAdd = useMemo(
+    () => departments.filter((d) => !isITDepartment(d)),
+    [departments]
+  );
+
   const filteredUsers = profiles.filter((u) => {
     const matchesSearch =
       u.name_ar.includes(searchQuery) ||
@@ -398,8 +409,6 @@ export function UsersPage() {
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   >
                     <option value="employee">موظف</option>
-                    <option value="manager">مدير قسم</option>
-                    <option value="admin">مدير عام</option>
                   </select>
                 </div>
                 <div>
@@ -411,7 +420,7 @@ export function UsersPage() {
                     }`}
                   >
                     <option value="">اختر القسم</option>
-                    {departments.map((d) => (
+                    {departmentsForAdd.map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.name_ar}
                       </option>
@@ -492,9 +501,9 @@ export function UsersPage() {
                     {...editUserForm.register('role')}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   >
-                    <option value="employee">موظف</option>
-                    <option value="manager">مدير قسم</option>
-                    <option value="admin">مدير عام</option>
+                    <option value={editingUser?.role ?? 'employee'}>
+                      {roleLabel(editingUser?.role ?? 'employee')}
+                    </option>
                   </select>
                 </div>
                 <div>

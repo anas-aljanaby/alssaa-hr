@@ -93,3 +93,27 @@ export function getProfileUpdateErrorMessage(err: unknown, fallback = 'فشل ت
   if (msg && /foreign key|violates/i.test(msg)) return PROFILE_UPDATE_MESSAGES['23503'];
   return fallback;
 }
+
+const GM_TRANSFER_MESSAGES: Record<string, string> = {
+  P0001: 'ملف المدير العام غير موجود',
+  P0002: 'المدير العام ليس ضمن نفس المؤسسة',
+  P0003: 'يجب أن يكون المدير العام بدور مدير عام (admin)',
+  P0004: 'غير مصرح',
+  P0005: 'لم يتم العثور على الملف الشخصي',
+  P0006: 'ليس لديك صلاحية تنفيذ هذه العملية',
+  P0007: 'المؤسسة لا تطابق',
+  P0008: 'المرشح غير صالح لتعيين المدير العام',
+};
+
+export function getGeneralManagerTransferErrorMessage(
+  err: unknown,
+  fallback = 'فشل تغيير المدير العام'
+): string {
+  const code = getErrorCode(err);
+  if (code && GM_TRANSFER_MESSAGES[code]) return GM_TRANSFER_MESSAGES[code];
+
+  const msg = getErrorMessage(err);
+  if (msg && /NOT_AUTHORIZED|permission|denied|policy|RLS/i.test(msg)) return GM_TRANSFER_MESSAGES.P0006;
+  if (msg && /GENERAL_MANAGER_CANDIDATE_INVALID/i.test(msg)) return GM_TRANSFER_MESSAGES.P0008;
+  return fallback;
+}
