@@ -6,6 +6,7 @@ import { changePasswordSchema, type ChangePasswordFormData } from '@/lib/validat
 import { useAuth } from '../../contexts/AuthContext';
 import * as authService from '@/lib/services/auth.service';
 import { PasswordChecklist } from '../../components/PasswordChecklist';
+import { PageLayout } from '../../components/layout/PageLayout';
 import { toast } from 'sonner';
 import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
 
@@ -40,8 +41,8 @@ export function SecurityPrivacyPage() {
   if (!currentUser) return null;
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-6 pb-20">
-      <h1 className="text-gray-800">الأمان والخصوصية</h1>
+    <PageLayout title="الأمان والخصوصية" backPath="/more">
+      <div className="space-y-6 pb-20">
 
       {/* تغيير كلمة المرور */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -166,6 +167,7 @@ export function SecurityPrivacyPage() {
           </p>
         </div>
       </div>
-    </div>
+      </div>
+    </PageLayout>
   );
 }

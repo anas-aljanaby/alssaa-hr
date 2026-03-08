@@ -227,8 +227,8 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           </div>
         )}
 
-        {/* Progress bar: workday completion only (time-based, 100% at shift end) */}
-        {isCheckedIn && shiftDuration != null && shiftDuration > 0 && (
+        {/* Progress bar: workday completion only (time-based, 100% at shift end). Hidden during pure overtime work. */}
+        {isCheckedIn && !isOvertime && shiftDuration != null && shiftDuration > 0 && (
           <div className="mb-4">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
               <span>{Math.floor(workdayElapsedSeconds / 3600)}س {Math.floor((workdayElapsedSeconds % 3600) / 60)}د من الدوام</span>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
+import { PageLayout } from '../../components/layout/PageLayout';
 import {
   BadgeAlert,
   Bot,
@@ -136,7 +137,8 @@ export function TermsPage() {
   ];
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-6 pb-20">
+    <PageLayout title="الشروط والأحكام" backPath="/more">
+      <div className="space-y-6 pb-20">
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-5 space-y-4 bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 text-white">
           <div className="inline-flex items-center gap-2 self-start px-3 py-1 rounded-full bg-white/10 text-xs">
@@ -237,6 +239,7 @@ export function TermsPage() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </PageLayout>
   );
 }

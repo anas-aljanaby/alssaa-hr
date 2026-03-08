@@ -10,6 +10,7 @@ import { createDepartmentSchema, updateDepartmentSchema } from '@/lib/validation
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { Pagination, usePagination } from '@/app/components/Pagination';
+import { PageLayout } from '@/app/components/layout/PageLayout';
 import {
   Building2,
   Plus,
@@ -325,19 +326,21 @@ export function DepartmentsPage() {
 
   if (loading) {
     return (
-      <div className="p-4 max-w-lg mx-auto space-y-4">
+      <PageLayout title="إدارة الأقسام" backPath="/more">
+      <div className="space-y-4">
         <div className="bg-gray-100 rounded-2xl h-16 animate-pulse" />
         {[...Array(4)].map((_, i) => (
           <div key={i} className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
         ))}
       </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-gray-800">إدارة الأقسام</h1>
+    <PageLayout title="إدارة الأقسام" backPath="/more">
+    <div className="space-y-4">
+      <div className="flex items-center justify-end">
         <button
           onClick={() => setShowForm(true)}
           className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
@@ -810,5 +813,6 @@ export function DepartmentsPage() {
         </div>
       )}
     </div>
+    </PageLayout>
   );
 }

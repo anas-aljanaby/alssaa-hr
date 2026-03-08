@@ -21,7 +21,6 @@ import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
 import { now } from '@/lib/time';
 import {
-  ArrowRight,
   Mail,
   Phone,
   MessageCircle,
@@ -96,19 +95,18 @@ export function UserDetailsPage() {
     },
   });
 
-  const handleBack = useCallback(() => {
-    if (!currentUser) {
-      navigate('/');
-      return;
-    }
+  const backPath = useMemo(() => {
+    if (!currentUser) return '/';
     if (currentUser.role === 'admin') {
-      navigate('/users');
-    } else if (currentUser.role === 'manager') {
-      navigate('/approvals');
-    } else {
-      navigate('/more');
+      return currentUser.uid === userId ? '/more' : '/users';
     }
-  }, [currentUser, navigate]);
+    if (currentUser.role === 'manager') return '/approvals';
+    return '/more';
+  }, [currentUser, userId]);
+
+  const handleBack = useCallback(() => {
+    navigate(backPath);
+  }, [backPath, navigate]);
 
   const canAccess = useMemo(() => {
     if (!currentUser || !userId) return false;
@@ -326,9 +324,12 @@ export function UserDetailsPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleBack}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50"
           >
-            <ArrowRight className="w-5 h-5 text-gray-600" />
+            <span className="sr-only">رجوع</span>
+            <span aria-hidden="true" className="text-lg leading-none">
+              ‹
+            </span>
           </button>
           <h1 className="text-gray-800">تفاصيل الموظف</h1>
         </div>

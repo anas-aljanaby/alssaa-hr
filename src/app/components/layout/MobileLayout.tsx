@@ -120,10 +120,37 @@ export function MobileLayout() {
         ? managerNav
         : employeeNav;
 
+  const currentPath = location.pathname;
+  const currentPathSegments = currentPath.split('/');
+  const currentPathUserId = currentPathSegments[2];
+
+  const isMoreRelatedPath = () => {
+    if (currentPath === '/more') return true;
+
+    const moreRoutes = [
+      '/attendance-policy',
+      '/security-privacy',
+      '/terms-conditions',
+      '/help-support',
+      '/reports',
+      '/departments',
+    ];
+
+    if (moreRoutes.some((route) => currentPath.startsWith(route))) return true;
+
+    // Treat self profile as part of "More" for a consistent return path.
+    if (currentPath.startsWith('/user-details') && currentPathUserId === currentUser.uid) return true;
+
+    return false;
+  };
+
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    if (path === '/users' && location.pathname.startsWith('/user-details')) return true;
-    return location.pathname.startsWith(path);
+    if (path === '/') return currentPath === '/';
+    if (path === '/more') return isMoreRelatedPath();
+    if (path === '/users' && currentPath.startsWith('/user-details')) {
+      return currentPathUserId !== currentUser.uid;
+    }
+    return currentPath.startsWith(path);
   };
 
   return (
