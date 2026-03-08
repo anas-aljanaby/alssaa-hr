@@ -4,10 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="x-apple-disable-message-reformatting" />
-    <!-- Dark-mode hint (not fully honored by Gmail, but helps elsewhere) -->
     <meta name="color-scheme" content="light" />
     <meta name="supported-color-schemes" content="light" />
-    <title>تأكيد إنشاء الحساب</title>
+    <title>دعوة للانضمام إلى تطبيق الموارد البشرية</title>
   </head>
 
   <body
@@ -33,7 +32,7 @@
         mso-hide:all;
       "
     >
-      أكمل إنشاء حسابك في تطبيق الموارد البشرية الخاص بـ ALSSAA.
+      لديك دعوة للانضمام إلى تطبيق الموارد البشرية الخاص بـ ALSSAA.
     </div>
 
     <table
@@ -182,10 +181,11 @@
                     margin:0 0 16px 0;
                   "
                 >
-                  تم إنشاء طلب تسجيل حسابك في
+                  تم إرسال دعوة لك للانضمام إلى
                   <strong style="color:#101828;">تطبيق الموارد البشرية</strong>
                   الخاص بـ <strong style="color:#101828;">ALSSAA</strong>.
-                  لإكمال التسجيل وتفعيل حسابك، يرجى الضغط على زر التأكيد أدناه.
+                  للمتابعة وإنشاء كلمة المرور وتفعيل حسابك، يرجى الضغط على زر قبول
+                  الدعوة أدناه.
                 </div>
 
                 <!-- Bulletproof button (bgcolor + table) -->
@@ -226,7 +226,7 @@
                           border-radius:12px;
                           border:1px solid rgba(255,255,255,0.18);
                         "
-                        >تأكيد الحساب</a
+                        >قبول الدعوة</a
                       >
                     </td>
                   </tr>
@@ -241,7 +241,7 @@
                     margin:12px 0 0 0;
                   "
                 >
-                  إذا لم تقم بطلب إنشاء هذا الحساب، يمكنك تجاهل هذه الرسالة بأمان.
+                  إذا لم تكن تتوقع هذه الدعوة، يمكنك تجاهل هذه الرسالة بأمان.
                 </div>
 
                 <div style="height:1px; background-color:#eaecf0; margin:18px 0;">
@@ -315,7 +315,7 @@
                         "
                       >
                         <strong style="color:#101828;">ملاحظة:</strong>
-                        لأسباب أمنية، لا تشارك رابط التأكيد مع أي شخص.
+                        لأسباب أمنية، لا تشارك رابط الدعوة مع أي شخص.
                       </div>
                     </td>
                   </tr>

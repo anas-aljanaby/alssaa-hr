@@ -92,10 +92,20 @@ Deno.serve(async (req) => {
     const department_id = typeof body?.department_id === 'string' ? body.department_id.trim() : '';
     const phone = typeof body?.phone === 'string' ? body.phone.trim() : undefined;
     const allowedRoles = ['employee', 'manager'] as const;
-    const origin = req.headers.get('origin')?.trim();
-    const redirectTo = origin
-      ? `${origin.replace(/\/+$/, '')}/auth/callback?next=/set-password`
-      : undefined;
+    // When calling this Edge Function from the browser, `Origin` should exist.
+    // However, some environments may omit it, so we fall back to `Referer`.
+    const originHeader = req.headers.get('origin')?.trim();
+    const refererHeader = req.headers.get('referer')?.trim() ?? req.headers.get('referrer')?.trim();
+    const originFromReferer = refererHeader ? (() => {
+      try {
+        return new URL(refererHeader).origin;
+      } catch {
+        return undefined;
+      }
+    })() : undefined;
+    const origin = originHeader || originFromReferer;
+    // Important: redirect invited users to our local password setup screen.
+    const redirectTo = origin ? `${origin.replace(/\/+$/, '')}/set-password` : undefined;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return new Response(
