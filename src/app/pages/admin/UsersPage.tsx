@@ -144,7 +144,7 @@ export function UsersPage() {
         role: data.role,
         department_id: data.department_id,
       });
-      toast.success('تم إضافة المستخدم');
+      toast.success('تم إرسال دعوة المستخدم عبر البريد الإلكتروني');
       setShowForm(false);
       addUserForm.reset();
       await loadData();

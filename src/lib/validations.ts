@@ -36,6 +36,17 @@ export const signUpSchema = z.object({
 });
 export type SignUpFormData = z.infer<typeof signUpSchema>;
 
+export const setPasswordSchema = z
+  .object({
+    password: strongPassword,
+    confirmPassword: z.string().min(1, 'تأكيد كلمة المرور مطلوب'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'كلمة المرور وتأكيدها غير متطابقتين',
+    path: ['confirmPassword'],
+  });
+export type SetPasswordFormData = z.infer<typeof setPasswordSchema>;
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'كلمة المرور الحالية مطلوبة'),

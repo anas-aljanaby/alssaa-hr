@@ -134,6 +134,7 @@ export function MobileLayout() {
       '/help-support',
       '/reports',
       '/departments',
+      '/transfer-general-manager',
     ];
 
     if (moreRoutes.some((route) => currentPath.startsWith(route))) return true;

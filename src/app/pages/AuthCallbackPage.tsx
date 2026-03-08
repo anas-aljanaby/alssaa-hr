@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { supabase } from '@/lib/supabase';
+import type { EmailOtpType } from '@supabase/supabase-js';
 
 /**
  * Handles the redirect from Supabase email confirmation (PKCE flow).
@@ -12,15 +13,32 @@ export function AuthCallbackPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
+    const tokenHash = params.get('token_hash');
+    const type = params.get('type') as EmailOtpType | null;
+    const next = params.get('next');
+    const safeNext = next && next.startsWith('/') ? next : '/';
 
     if (code) {
-      supabase.auth
-        .exchangeCodeForSession(code)
-        .then(() => navigate('/', { replace: true }))
+      supabase.auth.exchangeCodeForSession(code)
+        .then(() => navigate(safeNext, { replace: true }))
         .catch(() => navigate('/login', { replace: true }));
-    } else {
-      navigate('/', { replace: true });
+      return;
     }
+
+    if (tokenHash && type) {
+      supabase.auth.verifyOtp({ type, token_hash: tokenHash })
+        .then(({ error }) => {
+          if (error) {
+            navigate('/login', { replace: true });
+            return;
+          }
+          navigate(safeNext, { replace: true });
+        })
+        .catch(() => navigate('/login', { replace: true }));
+      return;
+    }
+
+    navigate(safeNext, { replace: true });
   }, [navigate]);
 
   return (

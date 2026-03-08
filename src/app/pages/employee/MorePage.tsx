@@ -117,6 +117,13 @@ export function MorePage() {
                 bgColor: 'bg-indigo-50',
                 onClick: () => navigate('/departments'),
               },
+                  {
+                    icon: Shield,
+                    label: 'تغيير المدير العام',
+                    color: 'text-purple-500',
+                    bgColor: 'bg-purple-50',
+                    onClick: () => navigate('/transfer-general-manager'),
+                  },
               {
                 icon: Clock,
                 label: 'سياسة الحضور',

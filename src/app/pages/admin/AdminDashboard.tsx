@@ -4,8 +4,6 @@ import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as requestsService from '@/lib/services/requests.service';
-import * as organizationsService from '@/lib/services/organizations.service';
-import { getGeneralManagerTransferErrorMessage } from '@/lib/errorMessages';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
@@ -44,9 +42,6 @@ export function AdminDashboard() {
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
   const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
-  const [org, setOrg] = useState<{ id: string; general_manager_id: string | null } | null>(null);
-  const [gmTransferTargetId, setGmTransferTargetId] = useState('');
-  const [gmTransferSubmitting, setGmTransferSubmitting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -94,18 +89,16 @@ export function AdminDashboard() {
     try {
       setLoading(true);
       const today = dateStr(now());
-      const [profs, depts, logs, pendingReqs, organization] = await Promise.all([
+      const [profs, depts, logs, pendingReqs] = await Promise.all([
         profilesService.listUsers(),
         departmentsService.listDepartments(),
         attendanceService.getAllLogsForDate(today),
         requestsService.getAllPendingRequests(),
-        organizationsService.getMyOrganization(),
       ]);
       setProfiles(profs);
       setDepartments(depts);
       setTodayLogs(logs);
       setPendingRequests(pendingReqs);
-      setOrg(organization);
 
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
       const weekData: { day: string; logs: AttendanceLog[] }[] = [];
@@ -164,34 +157,6 @@ export function AdminDashboard() {
     () => new Map(profiles.map((p) => [p.id, p])),
     [profiles]
   );
-
-  const generalManagerProfile = useMemo(() => {
-    if (!org?.general_manager_id) return null;
-    return profiles.find((p) => p.id === org.general_manager_id) ?? null;
-  }, [org?.general_manager_id, profiles]);
-
-  const gmCandidates = useMemo(() => {
-    const currentId = org?.general_manager_id ?? null;
-    return profiles.filter((p) => (currentId ? p.id !== currentId : true));
-  }, [org?.general_manager_id, profiles]);
-
-  const handleTransferGeneralManager = async () => {
-    if (!gmTransferTargetId) return;
-    const currentId = org?.general_manager_id ?? null;
-    if (gmTransferTargetId === currentId) return;
-
-    setGmTransferSubmitting(true);
-    try {
-      await organizationsService.transferGeneralManager(gmTransferTargetId);
-      toast.success('تم تغيير المدير العام');
-      setGmTransferTargetId('');
-      await loadData();
-    } catch (err) {
-      toast.error(getGeneralManagerTransferErrorMessage(err, 'فشل تغيير المدير العام'));
-    } finally {
-      setGmTransferSubmitting(false);
-    }
-  };
 
   const todayEmployeeStatus = useMemo((): EmployeeWithTodayStatus[] => {
     const logsMap = new Map(todayLogs.map((l) => [l.user_id, l]));
@@ -293,44 +258,6 @@ export function AdminDashboard() {
 
       {activeTab === 'overview' && (
         <>
-          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-            <h3 className="text-gray-800 mb-2">تغيير المدير العام</h3>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <p className="text-xs text-gray-500">المدير العام الحالي</p>
-                <p className="text-sm font-medium text-gray-800">
-                  {generalManagerProfile?.name_ar ?? 'غير محدد'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={gmTransferTargetId}
-                  onChange={(e) => setGmTransferTargetId(e.target.value)}
-                  className="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-gray-700"
-                  aria-label="اختيار المدير العام الجديد"
-                >
-                  <option value="">-- اختيار --</option>
-                  {gmCandidates.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name_ar}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={
-                    gmTransferSubmitting ||
-                    !gmTransferTargetId ||
-                    gmTransferTargetId === (org?.general_manager_id ?? null)
-                  }
-                  onClick={handleTransferGeneralManager}
-                  className="px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl transition-colors"
-                >
-                  {gmTransferSubmitting ? 'جاري التغيير...' : 'تأكيد'}
-                </button>
-              </div>
-            </div>
-          </div>
           <div>
             <h3 className="mb-3 text-gray-800">ملخص اليوم</h3>
             <div className="grid grid-cols-2 gap-3">

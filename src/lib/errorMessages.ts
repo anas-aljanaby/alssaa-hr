@@ -75,6 +75,42 @@ export function getAddUserErrorMessage(
   return fallback;
 }
 
+/** Error codes returned by the delete-user Edge Function. */
+const DELETE_USER_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: 'غير مصرح',
+  PGRST301: 'انتهت الجلسة أو لا تملك الصلاحية',
+  NO_PROFILE: 'لم يتم العثور على الملف الشخصي',
+  '42501': 'ليس لديك صلاحية تنفيذ هذه العملية',
+  INVALID_USER_ID: 'معرّف المستخدم مطلوب',
+  USER_NOT_FOUND: 'المستخدم غير موجود',
+  ORG_MISMATCH: 'لا يمكنك حذف مستخدم من مؤسسة أخرى',
+  CANNOT_DELETE_SELF: 'لا يمكنك حذف حسابك',
+  CANNOT_DELETE_ADMIN: 'لا يمكن حذف المدير العام من هنا',
+  DELETE_USER_FAILED: 'فشل حذف المستخدم',
+  INTERNAL: 'خطأ في الخادم',
+};
+
+/**
+ * Returns a user-friendly Arabic message for Delete User errors.
+ */
+export function getDeleteUserErrorMessage(
+  err: unknown,
+  response?: { error?: string; code?: string } | null,
+  fallback = 'فشل حذف المستخدم'
+): string {
+  if (response?.error && typeof response.error === 'string') {
+    const code = response.code && DELETE_USER_MESSAGES[response.code] ? response.code : undefined;
+    if (code) return DELETE_USER_MESSAGES[code];
+    return response.error;
+  }
+  const code = err && typeof err === 'object' && 'code' in err ? (err as { code: string }).code : undefined;
+  if (typeof code === 'string' && DELETE_USER_MESSAGES[code]) return DELETE_USER_MESSAGES[code];
+  const msg = getErrorMessage(err);
+  if (msg && /not found/i.test(msg)) return DELETE_USER_MESSAGES.USER_NOT_FOUND;
+  if (msg && /permission|denied|policy|RLS/i.test(msg)) return DELETE_USER_MESSAGES['42501'];
+  return fallback;
+}
+
 /** Arabic messages for profile update / deactivate errors (RLS, FK, etc.). */
 const PROFILE_UPDATE_MESSAGES: Record<string, string> = {
   '23503': 'البيانات المرتبطة تمنع تنفيذ العملية',

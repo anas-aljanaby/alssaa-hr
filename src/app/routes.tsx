@@ -9,6 +9,7 @@ import { RequireAdmin } from './components/RequireAdmin';
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const SignUpPage = React.lazy(() => import('./pages/SignUpPage').then(m => ({ default: m.SignUpPage })));
 const AuthCallbackPage = React.lazy(() => import('./pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
+const SetPasswordPage = React.lazy(() => import('./pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
 const DashboardRouter = React.lazy(() => import('./pages/DashboardRouter').then(m => ({ default: m.DashboardRouter })));
 const AttendancePage = React.lazy(() => import('./pages/employee/AttendancePage').then(m => ({ default: m.AttendancePage })));
 const RequestsPage = React.lazy(() => import('./pages/employee/RequestsPage').then(m => ({ default: m.RequestsPage })));
@@ -19,6 +20,7 @@ const UsersPage = React.lazy(() => import('./pages/admin/UsersPage').then(m => (
 const DepartmentsPage = React.lazy(() => import('./pages/admin/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
 const DepartmentDetailsPage = React.lazy(() => import('./pages/admin/DepartmentDetailsPage').then(m => ({ default: m.DepartmentDetailsPage })));
 const ReportsPage = React.lazy(() => import('./pages/admin/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const TransferGeneralManagerPage = React.lazy(() => import('./pages/admin/TransferGeneralManagerPage').then(m => ({ default: m.TransferGeneralManagerPage })));
 const UserDetailsPage = React.lazy(() => import('./pages/admin/UserDetailsPage').then(m => ({ default: m.UserDetailsPage })));
 const SecurityPrivacyPage = React.lazy(() => import('./pages/employee/SecurityPrivacyPage').then(m => ({ default: m.SecurityPrivacyPage })));
 const TermsPage = React.lazy(() => import('./pages/employee/TermsPage').then(m => ({ default: m.TermsPage })));
@@ -57,6 +59,10 @@ export const router = createBrowserRouter([
         element: <Lazy><AuthCallbackPage /></Lazy>,
       },
       {
+        path: 'set-password',
+        element: <Lazy><SetPasswordPage /></Lazy>,
+      },
+      {
         path: '*',
         Component: MobileLayout,
         children: [
@@ -74,6 +80,7 @@ export const router = createBrowserRouter([
           { path: 'departments', element: <Lazy><RequireAdmin><DepartmentsPage /></RequireAdmin></Lazy> },
           { path: 'departments/:deptId', element: <Lazy><RequireAdmin><DepartmentDetailsPage /></RequireAdmin></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
+          { path: 'transfer-general-manager', element: <Lazy><RequireAdmin><TransferGeneralManagerPage /></RequireAdmin></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
           { path: '*', element: <Navigate to="/" replace /> },
         ],

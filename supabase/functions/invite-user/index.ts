@@ -17,14 +17,6 @@ interface InviteBody {
   department_id: string;
 }
 
-/** Generates a cryptographically secure random password (24 chars, no ambiguous chars). */
-function randomPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  const random = new Uint8Array(24);
-  crypto.getRandomValues(random);
-  return Array.from(random, (b) => chars.charAt(b % chars.length)).join('');
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -100,6 +92,10 @@ Deno.serve(async (req) => {
     const department_id = typeof body?.department_id === 'string' ? body.department_id.trim() : '';
     const phone = typeof body?.phone === 'string' ? body.phone.trim() : undefined;
     const allowedRoles = ['employee', 'manager'] as const;
+    const origin = req.headers.get('origin')?.trim();
+    const redirectTo = origin
+      ? `${origin.replace(/\/+$/, '')}/auth/callback?next=/set-password`
+      : undefined;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return new Response(
@@ -136,11 +132,9 @@ Deno.serve(async (req) => {
     // Keep phone truly optional: if missing/blank, omit it from metadata.
     if (phone) user_metadata.phone = phone;
 
-    const { data: newUser, error } = await admin.auth.admin.createUser({
-      email,
-      password: randomPassword(),
-      email_confirm: true,
-      user_metadata,
+    const { data: invitedUser, error } = await admin.auth.admin.inviteUserByEmail(email, {
+      data: user_metadata,
+      ...(redirectTo ? { redirectTo } : {}),
     });
 
     if (error) {
@@ -164,7 +158,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, user_id: newUser?.user?.id }),
+      JSON.stringify({ success: true, user_id: invitedUser?.user?.id }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

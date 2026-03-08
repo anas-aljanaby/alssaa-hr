@@ -503,7 +503,7 @@ Demo account emails and password are listed in **`docs/DEMO_CREDENTIALS.md`**. T
 supabase link --project-ref <your-project-ref>
 pnpm run deploy:functions
 # Or manually:
-supabase functions deploy invite-user
+supabase functions deploy invite-user --no-verify-jwt
 supabase functions deploy dev-seed-attendance
 ```
 

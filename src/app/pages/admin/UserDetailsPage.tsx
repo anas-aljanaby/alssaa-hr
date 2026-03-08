@@ -7,12 +7,18 @@ import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import { updateProfileSchema, type UpdateProfileFormData } from '@/lib/validations';
-import { getProfileUpdateErrorMessage } from '@/lib/errorMessages';
+import { getDeleteUserErrorMessage, getProfileUpdateErrorMessage } from '@/lib/errorMessages';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as auditService from '@/lib/services/audit.service';
 import { getRequestTypeAr, getStatusAr, getAttendanceStatusAr } from '../../data/mockData';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog, MonthlyStats } from '@/lib/services/attendance.service';
@@ -37,6 +43,7 @@ import {
   MoreVertical,
   FileText,
   History,
+  Trash2,
   X,
 } from 'lucide-react';
 
@@ -80,6 +87,8 @@ export function UserDetailsPage() {
   });
   const [showEditModal, setShowEditModal] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(false);
   const [departments, setDepartments] = useState<Awaited<ReturnType<typeof departmentsService.listDepartments>>>([]);
 
   const editProfileForm = useForm<UpdateProfileFormData>({
@@ -155,6 +164,12 @@ export function UserDetailsPage() {
       editProfileForm.reset();
     }
   }, [editProfileForm]);
+
+  const handleDeleteModalKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && !deletingUser) {
+      setShowDeleteConfirm(false);
+    }
+  }, [deletingUser]);
 
   async function loadData() {
     if (!userId) return;
@@ -318,6 +333,26 @@ export function UserDetailsPage() {
     }
   };
 
+  const canDeleteUser = currentUser.role === 'admin' && currentUser.uid !== profile.id && profile.role !== 'admin';
+
+  const handleDeleteUser = async () => {
+    setDeletingUser(true);
+    try {
+      await profilesService.deleteUser({ user_id: profile.id });
+      toast.success('تم حذف المستخدم');
+      setShowDeleteConfirm(false);
+      navigate('/users');
+    } catch (err) {
+      const msg = getDeleteUserErrorMessage(
+        err,
+        (err as { response?: { error?: string; code?: string } })?.response
+      );
+      toast.error(msg);
+    } finally {
+      setDeletingUser(false);
+    }
+  };
+
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4 pb-20">
       <div className="flex items-center justify-between">
@@ -349,9 +384,28 @@ export function UserDetailsPage() {
             >
               <Edit2 className="w-5 h-5 text-gray-600" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <MoreVertical className="w-5 h-5 text-gray-600" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="خيارات إضافية"
+                >
+                  <MoreVertical className="w-5 h-5 text-gray-600" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!canDeleteUser || deletingUser}
+                  variant="destructive"
+                  onSelect={() => setShowDeleteConfirm(true)}
+                  className="cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  حذف المستخدم
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
@@ -942,6 +996,47 @@ export function UserDetailsPage() {
               ) : (
                 <p className="text-sm text-gray-500 text-center py-4">لا توجد سجلات</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && currentUser.role === 'admin' && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => !deletingUser && setShowDeleteConfirm(false)}
+          onKeyDown={handleDeleteModalKeyDown}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-user-title"
+          aria-describedby="delete-user-description"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-sm mx-auto p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-user-title" className="text-gray-800 mb-2">حذف المستخدم</h2>
+            <p id="delete-user-description" className="text-gray-600 text-sm mb-4">
+              هل أنت متأكد من حذف المستخدم &quot;{profile.name_ar}&quot;؟ سيتم حذف حسابه نهائياً.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deletingUser}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteUser}
+                disabled={deletingUser}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl"
+              >
+                {deletingUser ? 'جاري الحذف...' : 'حذف'}
+              </button>
             </div>
           </div>
         </div>
