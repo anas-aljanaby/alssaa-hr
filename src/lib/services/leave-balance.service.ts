@@ -15,6 +15,7 @@ export async function getUserBalance(userId: string): Promise<LeaveBalance | nul
   return data;
 }
 
+//TODO: rework the leave balance logic
 export async function updateBalance(
   userId: string,
   updates: LeaveBalanceUpdate
