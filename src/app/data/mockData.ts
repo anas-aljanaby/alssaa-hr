@@ -583,6 +583,7 @@ export function getRequestTypeAr(type: RequestType): string {
     sick_leave: 'إجازة مرضية',
     hourly_permission: 'إذن ساعي',
     time_adjustment: 'تعديل وقت',
+    overtime: 'عمل إضافي',
   };
   return map[type];
 }

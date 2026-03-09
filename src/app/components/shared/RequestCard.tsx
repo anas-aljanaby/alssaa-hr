@@ -109,11 +109,6 @@ export function RequestCard({
                   hour: '2-digit',
                   minute: '2-digit',
                 })}
-                {' → '}
-                {new Date(request.to_date_time).toLocaleTimeString('ar-IQ', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
               </span>
             </div>
           ) : (

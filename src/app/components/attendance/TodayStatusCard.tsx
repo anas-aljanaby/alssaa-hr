@@ -271,13 +271,13 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
         {!log?.check_in_time && isOvertime && (
           <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-amber-500">
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span>سيتم احتساب هذا كعمل إضافي</span>
+            <span>سيتم احتساب هذا كعمل إضافي وإنشاء طلب تلقائياً</span>
           </div>
         )}
         {isCompleted && firstPunchIsOvertime && (
           <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-amber-500">
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span>سيتم احتساب هذا كعمل إضافي</span>
+            <span>تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة</span>
           </div>
         )}
 
@@ -328,7 +328,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
             <h3 className="text-gray-800 font-semibold mb-2">تأكيد</h3>
             <p className="text-sm text-gray-500 mb-5">
               {confirmDialog === 'overtime'
-                ? 'أنت خارج ساعات الدوام. سيتم تسجيل هذا كعمل إضافي. هل تريد المتابعة؟'
+                ? 'أنت خارج ساعات الدوام. سيتم تسجيل هذا كعمل إضافي وإنشاء طلب عمل إضافي تلقائياً بانتظار موافقة المدير. هل تريد المتابعة؟'
                 : 'أنت تغادر قبل نهاية الدوام بأكثر من ساعة. هل تريد المتابعة؟'}
             </p>
             <div className="flex gap-3">

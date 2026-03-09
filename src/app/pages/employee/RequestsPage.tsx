@@ -45,7 +45,6 @@ export function RequestsPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [workStartTime, setWorkStartTime] = useState<string>('08:00');
-  const [workEndTime, setWorkEndTime] = useState<string>('16:00');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<LeaveRequestFormData>({
@@ -70,14 +69,9 @@ export function RequestsPage() {
     policyService.getPolicy().then((p) => {
       if (p?.work_start_time) {
         setWorkStartTime(p.work_start_time);
-        form.setValue('fromTime', p.work_start_time);
-      }
-      if (p?.work_end_time) {
-        setWorkEndTime(p.work_end_time);
-        form.setValue('toTime', p.work_end_time);
       }
     });
-  }, [isTimeAdjustment]);
+  }, [form, isTimeAdjustment]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -146,12 +140,10 @@ export function RequestsPage() {
           fromDateTime = `${data.fromDate}T00:00:00`;
           toDateTime = `${data.toDate}T23:59:59`;
         } else if (data.type === 'time_adjustment') {
-          const startTime = data.fromTime?.trim() || workStartTime;
-          const endTime = data.toTime?.trim() || workEndTime;
+          const startTime = workStartTime.trim() || '08:00';
           const start = startTime.split(':').length === 3 ? startTime : `${startTime}:00`;
-          const end = endTime.split(':').length === 3 ? endTime : `${endTime}:00`;
           fromDateTime = `${data.fromDate}T${start}`;
-          toDateTime = `${data.fromDate}T${end}`;
+          toDateTime = fromDateTime;
         } else {
           fromDateTime = `${data.fromDate}T${data.fromTime}:00`;
           toDateTime = `${data.toDate}T${data.toTime}:00`;
@@ -327,7 +319,7 @@ export function RequestsPage() {
                   </div>
 
                   {/* Time Fields */}
-                  {(isTimeAdjustment || isHourlyPermission) && (
+                  {isHourlyPermission && (
                     <div className="grid grid-cols-2 gap-4 mt-4">
                       <div className="space-y-2">
                         <label className="text-sm text-gray-600">
@@ -391,8 +383,8 @@ export function RequestsPage() {
                 {/* Subtle helper note */}
                 {isTimeAdjustment && (
                   <p className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
-                    الوقت الافتراضي هو وقت الدوام الرسمي. قم بتعديله إذا
-                    تأخرت أو انصرفت مبكراً.
+                    هذا الطلب مخصص لتثبيت الحضور على وقت بداية دوامك الرسمي
+                    عند نسيان تسجيل البصمة.
                   </p>
                 )}
               </div>

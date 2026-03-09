@@ -218,7 +218,7 @@ export interface Database {
           id: string;
           org_id: string;
           user_id: string;
-          type: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment';
+          type: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment' | 'overtime';
           from_date_time: string;
           to_date_time: string;
           note: string;
@@ -232,7 +232,7 @@ export interface Database {
           id?: string;
           org_id?: string;
           user_id: string;
-          type: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment';
+          type: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment' | 'overtime';
           from_date_time: string;
           to_date_time: string;
           note: string;
@@ -246,7 +246,7 @@ export interface Database {
           id?: string;
           org_id?: string;
           user_id?: string;
-          type?: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment';
+          type?: 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment' | 'overtime';
           from_date_time?: string;
           to_date_time?: string;
           note?: string;

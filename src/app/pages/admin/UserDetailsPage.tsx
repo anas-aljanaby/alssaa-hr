@@ -89,6 +89,10 @@ export function UserDetailsPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
+  const [showLeaveBalanceModal, setShowLeaveBalanceModal] = useState(false);
+  const [updatingLeaveBalance, setUpdatingLeaveBalance] = useState(false);
+  const [editAnnualTotal, setEditAnnualTotal] = useState('');
+  const [editSickTotal, setEditSickTotal] = useState('');
   const [departments, setDepartments] = useState<Awaited<ReturnType<typeof departmentsService.listDepartments>>>([]);
 
   const editProfileForm = useForm<UpdateProfileFormData>({
@@ -170,6 +174,53 @@ export function UserDetailsPage() {
       setShowDeleteConfirm(false);
     }
   }, [deletingUser]);
+
+  const openLeaveBalanceModal = useCallback(() => {
+    if (!leaveBalance) return;
+    setEditAnnualTotal(String(leaveBalance.total_annual));
+    setEditSickTotal(String(leaveBalance.total_sick));
+    setShowLeaveBalanceModal(true);
+  }, [leaveBalance]);
+
+  const closeLeaveBalanceModal = useCallback(() => {
+    if (updatingLeaveBalance) return;
+    setShowLeaveBalanceModal(false);
+  }, [updatingLeaveBalance]);
+
+  const handleLeaveBalanceUpdate = useCallback(async () => {
+    if (!profile || !leaveBalance) return;
+    const nextAnnualTotal = Number(editAnnualTotal);
+    const nextSickTotal = Number(editSickTotal);
+
+    if (!Number.isFinite(nextAnnualTotal) || !Number.isFinite(nextSickTotal)) {
+      toast.error('يرجى إدخال أرقام صحيحة');
+      return;
+    }
+    if (nextAnnualTotal < 0 || nextSickTotal < 0) {
+      toast.error('لا يمكن أن تكون القيم سالبة');
+      return;
+    }
+
+    const usedAnnual = leaveBalance.used_annual;
+    const usedSick = leaveBalance.used_sick;
+
+    try {
+      setUpdatingLeaveBalance(true);
+      const updated = await leaveBalanceService.updateBalance(profile.id, {
+        total_annual: nextAnnualTotal,
+        remaining_annual: Math.max(nextAnnualTotal - usedAnnual, 0),
+        total_sick: nextSickTotal,
+        remaining_sick: Math.max(nextSickTotal - usedSick, 0),
+      });
+      setLeaveBalance(updated);
+      toast.success('تم تحديث رصيد الإجازات للموظف');
+      setShowLeaveBalanceModal(false);
+    } catch {
+      toast.error('فشل تحديث رصيد الإجازات');
+    } finally {
+      setUpdatingLeaveBalance(false);
+    }
+  }, [profile, leaveBalance, editAnnualTotal, editSickTotal]);
 
   async function loadData() {
     if (!userId) return;
@@ -863,7 +914,12 @@ export function UserDetailsPage() {
           </div>
 
           {currentUser.role === 'admin' && (
-            <button className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors">
+            <button
+              type="button"
+              onClick={openLeaveBalanceModal}
+              disabled={!leaveBalance}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+            >
               تعديل رصيد الإجازات
             </button>
           )}
@@ -956,6 +1012,85 @@ export function UserDetailsPage() {
                 <p className="text-sm text-gray-500">لا توجد طلبات</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Audit Log Modal */}
+      {showLeaveBalanceModal && currentUser.role === 'admin' && leaveBalance && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={closeLeaveBalanceModal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-leave-balance-title"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md mx-auto p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="edit-leave-balance-title" className="text-gray-800">تعديل رصيد الإجازات</h2>
+              <button
+                type="button"
+                onClick={closeLeaveBalanceModal}
+                disabled={updatingLeaveBalance}
+                className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                  <p className="text-gray-500 mb-1">المستخدم سنوي</p>
+                  <p className="text-gray-700">{leaveBalance.used_annual} يوم</p>
+                </div>
+                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                  <p className="text-gray-500 mb-1">المستخدم مرضي</p>
+                  <p className="text-gray-700">{leaveBalance.used_sick} يوم</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">إجمالي السنوي</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editAnnualTotal}
+                    onChange={(e) => setEditAnnualTotal(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">إجمالي المرضي</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editSickTotal}
+                    onChange={(e) => setEditSickTotal(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                سيتم تعديل هذا الموظف فقط ولن تتأثر سياسة الإجازات العامة.
+              </p>
+
+              <button
+                type="button"
+                onClick={handleLeaveBalanceUpdate}
+                disabled={updatingLeaveBalance}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
+                {updatingLeaveBalance ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+              </button>
+            </div>
           </div>
         </div>
       )}

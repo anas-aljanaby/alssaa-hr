@@ -1,6 +1,8 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables } from '../database.types';
 import { now } from '../time';
+import { submitRequest } from './requests.service';
+import type { LeaveRequest } from './requests.service';
 
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
@@ -237,7 +239,25 @@ export async function getTodayLog(userId: string): Promise<AttendanceLog | null>
   return data;
 }
 
-export async function checkIn(userId: string): Promise<AttendanceLog> {
+export interface CheckInResult {
+  log: AttendanceLog;
+  overtimeRequest: LeaveRequest | null;
+}
+
+function isOvertimeCheckIn(time: string, shift: ShiftInfo): boolean {
+  const toMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const nowMin = toMin(time);
+  const startMin = toMin(shift.workStartTime);
+  const endMin = toMin(shift.workEndTime);
+  const buffer = shift.bufferMinutesAfterShift;
+  // Overtime: more than 1 hour before shift start OR after shift end + buffer
+  return nowMin < startMin - 60 || nowMin > endMin + buffer;
+}
+
+export async function checkIn(userId: string): Promise<CheckInResult> {
   const today = todayStr();
   const time = nowTimeStr();
 
@@ -265,6 +285,8 @@ export async function checkIn(userId: string): Promise<AttendanceLog> {
     if (nowMinutes > startMinutes) status = 'late';
   }
 
+  let log: AttendanceLog;
+
   if (existing) {
     const { data, error } = await supabase
       .from('attendance_logs')
@@ -278,22 +300,53 @@ export async function checkIn(userId: string): Promise<AttendanceLog> {
       .single();
 
     if (error) throw error;
-    return data;
+    log = data;
+  } else {
+    const { data, error } = await supabase
+      .from('attendance_logs')
+      .insert({
+        user_id: userId,
+        date: today,
+        check_in_time: time,
+        status,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    log = data;
   }
 
-  const { data, error } = await supabase
-    .from('attendance_logs')
-    .insert({
-      user_id: userId,
-      date: today,
-      check_in_time: time,
-      status,
-    })
-    .select()
-    .single();
+  // Auto-create an overtime request when punching in outside normal shift hours
+  // or on a non-working day (no shift configured also qualifies as overtime context).
+  let overtimeRequest: LeaveRequest | null = null;
+  const todayDate = now();
+  const dayOfWeek = todayDate.getDay();
+  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
+  const isOvertimePunch = !shift || !isWorkingDay || (shift && isOvertimeCheckIn(time, shift));
 
-  if (error) throw error;
-  return data;
+  if (isOvertimePunch) {
+    try {
+      // Use current date as both start and end (time-based overtime, same day)
+      const datePrefix = today;
+      const fromDateTime = `${datePrefix}T${time}:00`;
+      // Default to end-of-shift time; if no shift, use current time as placeholder
+      const endTime = shift ? shift.workEndTime : time;
+      const toDateTime = `${datePrefix}T${endTime}:00`;
+
+      overtimeRequest = await submitRequest({
+        user_id: userId,
+        type: 'overtime',
+        from_date_time: fromDateTime,
+        to_date_time: toDateTime,
+        note: 'طلب عمل إضافي تم إنشاؤه تلقائياً',
+      });
+    } catch {
+      // Non-blocking: punch-in succeeds even if request creation fails
+    }
+  }
+
+  return { log, overtimeRequest };
 }
 
 export async function checkOut(userId: string, checkoutTime?: string): Promise<AttendanceLog> {

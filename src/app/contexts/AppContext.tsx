@@ -5,11 +5,12 @@ import * as requestsService from '@/lib/services/requests.service';
 import * as notificationsService from '@/lib/services/notifications.service';
 
 type AttendanceLog = attendanceService.AttendanceLog;
+type CheckInResult = attendanceService.CheckInResult;
 type LeaveRequest = requestsService.LeaveRequest;
 type LeaveRequestInsert = requestsService.LeaveRequestInsert;
 
 interface AppContextType {
-  checkIn: (userId: string) => Promise<AttendanceLog>;
+  checkIn: (userId: string) => Promise<CheckInResult>;
   checkOut: (userId: string, checkoutTime?: string) => Promise<AttendanceLog>;
   submitRequest: (request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>) => Promise<LeaveRequest>;
   updateRequestStatus: (requestId: string, status: 'approved' | 'rejected', approverId: string, note: string) => Promise<LeaveRequest>;
@@ -20,10 +21,14 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const checkIn = async (userId: string): Promise<AttendanceLog> => {
+  const checkIn = async (userId: string): Promise<CheckInResult> => {
     try {
       const result = await attendanceService.checkIn(userId);
-      toast.success('تم تسجيل الحضور بنجاح');
+      if (result.overtimeRequest) {
+        toast.success('تم تسجيل الحضور — تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة');
+      } else {
+        toast.success('تم تسجيل الحضور بنجاح');
+      }
       return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'فشل تسجيل الحضور';

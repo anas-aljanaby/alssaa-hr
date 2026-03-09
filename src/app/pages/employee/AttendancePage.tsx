@@ -108,11 +108,11 @@ export function AttendancePage() {
     if (!currentUser || actionLoading || cooldownLeft > 0) return;
     setActionLoading(true);
     try {
-      const result = await checkIn(currentUser.uid);
+      const { log } = await checkIn(currentUser.uid);
       if (navigator.vibrate) navigator.vibrate(100);
       startCooldown();
       const updated = await attendanceService.getAttendanceToday(currentUser.uid);
-      setToday({ ...updated, log: result });
+      setToday({ ...updated, log });
       loadMonthly();
     } catch {
       // toast handled by context
