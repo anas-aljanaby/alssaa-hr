@@ -104,7 +104,7 @@ create table public.leave_requests (
   org_id          uuid not null references public.organizations (id) on delete cascade,
   user_id         uuid not null references public.profiles (id) on delete cascade,
   type            text not null
-                    check (type in ('annual_leave', 'sick_leave', 'hourly_permission', 'time_adjustment')),
+                    check (type in ('annual_leave', 'sick_leave', 'hourly_permission', 'time_adjustment', 'overtime')),
   from_date_time  timestamptz not null,
   to_date_time    timestamptz not null,
   note            text not null default '',
@@ -112,12 +112,26 @@ create table public.leave_requests (
                     check (status in ('pending', 'approved', 'rejected')),
   approver_id     uuid references public.profiles (id) on delete set null,
   decision_note   text,
+  decided_at      timestamptz,
   attachment_url  text,
   created_at      timestamptz not null default now()
 );
 
 -- ============================================================
--- 5. LEAVE BALANCES
+-- 5. APPROVAL LOGS
+-- ============================================================
+create table public.approval_logs (
+  id         uuid primary key default gen_random_uuid(),
+  org_id     uuid not null references public.organizations (id) on delete cascade,
+  request_id uuid not null references public.leave_requests (id) on delete cascade,
+  actor_id   uuid not null references public.profiles (id) on delete cascade,
+  action     text not null check (action in ('approved', 'rejected')),
+  comment    text,
+  created_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- 6. LEAVE BALANCES
 -- ============================================================
 create table public.leave_balances (
   id               uuid primary key default gen_random_uuid(),
@@ -132,7 +146,7 @@ create table public.leave_balances (
 );
 
 -- ============================================================
--- 6. NOTIFICATIONS
+-- 7. NOTIFICATIONS
 -- ============================================================
 create table public.notifications (
   id          uuid primary key default gen_random_uuid(),
@@ -149,7 +163,7 @@ create table public.notifications (
 );
 
 -- ============================================================
--- 7. AUDIT LOGS
+-- 8. AUDIT LOGS
 -- ============================================================
 create table public.audit_logs (
   id          uuid primary key default gen_random_uuid(),
@@ -164,7 +178,7 @@ create table public.audit_logs (
 );
 
 -- ============================================================
--- 8. ATTENDANCE POLICY  (one row per org)
+-- 9. ATTENDANCE POLICY  (one row per org)
 -- ============================================================
 create table public.attendance_policy (
   id                           uuid primary key default gen_random_uuid(),
@@ -209,6 +223,9 @@ create index idx_leave_req_user         on public.leave_requests (user_id);
 create index idx_leave_req_status       on public.leave_requests (status);
 create index idx_leave_req_approver     on public.leave_requests (approver_id);
 create index idx_leave_req_created      on public.leave_requests (created_at desc);
+create index idx_approval_logs_org      on public.approval_logs  (org_id);
+create index idx_approval_logs_request  on public.approval_logs  (request_id, created_at desc);
+create index idx_approval_logs_actor    on public.approval_logs  (actor_id);
 
 create index idx_leave_bal_org          on public.leave_balances (org_id);
 
@@ -452,6 +469,68 @@ create policy "Admins can update any org request"
   )
   with check (org_id = public.current_user_org_id());
 
+-- ---------- approval_logs ----------
+alter table public.approval_logs enable row level security;
+
+create policy "Users can read own request approval logs"
+  on public.approval_logs for select
+  to authenticated
+  using (
+    request_id in (
+      select lr.id
+      from public.leave_requests lr
+      where lr.user_id = auth.uid()
+    )
+  );
+
+create policy "Managers can read department approval logs"
+  on public.approval_logs for select
+  to authenticated
+  using (
+    public.current_user_role() = 'manager'
+    and org_id = public.current_user_org_id()
+    and request_id in (
+      select lr.id
+      from public.leave_requests lr
+      join public.profiles p on p.id = lr.user_id
+      where p.department_id = public.current_user_department()
+        and p.org_id = public.current_user_org_id()
+    )
+  );
+
+create policy "Admins can read org approval logs"
+  on public.approval_logs for select
+  to authenticated
+  using (
+    public.current_user_role() = 'admin'
+    and org_id = public.current_user_org_id()
+  );
+
+create policy "Managers can insert department approval logs"
+  on public.approval_logs for insert
+  to authenticated
+  with check (
+    actor_id = auth.uid()
+    and public.current_user_role() = 'manager'
+    and org_id = public.current_user_org_id()
+    and request_id in (
+      select lr.id
+      from public.leave_requests lr
+      join public.profiles p on p.id = lr.user_id
+      where p.department_id = public.current_user_department()
+        and p.org_id = public.current_user_org_id()
+    )
+  );
+
+create policy "Admins can insert org approval logs"
+  on public.approval_logs for insert
+  to authenticated
+  with check (
+    actor_id = auth.uid()
+    and public.current_user_role() = 'admin'
+    and org_id = public.current_user_org_id()
+  );
+
 -- ---------- leave_balances ----------
 alter table public.leave_balances enable row level security;
 
@@ -604,7 +683,191 @@ create trigger on_auth_user_created
   execute function public.handle_new_user();
 
 -- ---------------------------------------------------------
--- T2: Notify requester when leave_request status changes
+-- T2: Validate organizations.general_manager_id integrity
+-- ---------------------------------------------------------
+create or replace function public.validate_general_manager_on_org_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _gm_org_id uuid;
+  _gm_role   text;
+begin
+  if new.general_manager_id is null then
+    return new;
+  end if;
+
+  select p.org_id, p.role
+    into _gm_org_id, _gm_role
+  from public.profiles p
+  where p.id = new.general_manager_id;
+
+  if _gm_org_id is null then
+    raise exception 'GENERAL_MANAGER_PROFILE_NOT_FOUND'
+      using errcode = 'P0001';
+  end if;
+
+  if _gm_org_id <> new.id then
+    raise exception 'GENERAL_MANAGER_PROFILE_NOT_IN_ORG'
+      using errcode = 'P0002';
+  end if;
+
+  if _gm_role <> 'admin' then
+    raise exception 'GENERAL_MANAGER_PROFILE_MUST_BE_ADMIN'
+      using errcode = 'P0003';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger validate_general_manager_on_org_change
+  before insert or update of general_manager_id on public.organizations
+  for each row
+  execute function public.validate_general_manager_on_org_change();
+
+-- ---------------------------------------------------------
+-- T3: Transfer General Manager between profiles
+-- ---------------------------------------------------------
+create or replace function public.transfer_general_manager(
+  p_org_id uuid,
+  p_new_gm_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _caller_role text;
+  _caller_org_id uuid;
+  _old_gm_id uuid;
+  _old_gm_manages_any boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'UNAUTHORIZED'
+      using errcode = 'P0004';
+  end if;
+
+  select pr.role, pr.org_id
+    into _caller_role, _caller_org_id
+  from public.profiles pr
+  where pr.id = auth.uid();
+
+  if _caller_role is null then
+    raise exception 'NO_PROFILE'
+      using errcode = 'P0005';
+  end if;
+
+  if _caller_role <> 'admin' then
+    raise exception 'NOT_AUTHORIZED'
+      using errcode = 'P0006';
+  end if;
+
+  if _caller_org_id <> p_org_id then
+    raise exception 'ORG_MISMATCH'
+      using errcode = 'P0007';
+  end if;
+
+  if not exists (
+    select 1 from public.profiles pr
+    where pr.id = p_new_gm_id
+      and pr.org_id = p_org_id
+  ) then
+    raise exception 'GENERAL_MANAGER_CANDIDATE_INVALID'
+      using errcode = 'P0008';
+  end if;
+
+  if exists (
+    select 1 from public.organizations o
+    where o.id = p_org_id
+      and o.general_manager_id = p_new_gm_id
+  ) then
+    return;
+  end if;
+
+  select o.general_manager_id into _old_gm_id
+  from public.organizations o
+  where o.id = p_org_id;
+
+  update public.profiles
+  set role = 'admin'
+  where id = p_new_gm_id
+    and org_id = p_org_id;
+
+  update public.organizations
+  set general_manager_id = p_new_gm_id
+  where id = p_org_id;
+
+  if _old_gm_id is not null and _old_gm_id <> p_new_gm_id then
+    select exists (
+      select 1
+      from public.departments d
+      where d.org_id = p_org_id
+        and d.manager_uid = _old_gm_id
+    ) into _old_gm_manages_any;
+
+    if _old_gm_manages_any then
+      update public.profiles
+      set role = 'manager'
+      where id = _old_gm_id
+        and org_id = p_org_id;
+    else
+      update public.profiles
+      set role = 'employee'
+      where id = _old_gm_id
+        and org_id = p_org_id;
+    end if;
+  end if;
+end;
+$$;
+
+grant execute on function public.transfer_general_manager(uuid, uuid) to authenticated;
+
+-- Backfill safety: if an org has no GM yet, use latest admin profile.
+update public.organizations o
+set general_manager_id = sub.admin_id
+from (
+  select distinct on (org_id)
+    org_id,
+    id as admin_id
+  from public.profiles
+  where role = 'admin'
+  order by org_id, created_at desc
+) sub
+where o.id = sub.org_id
+  and o.general_manager_id is null;
+
+-- ---------------------------------------------------------
+-- T4: Stamp decision time on status transitions
+-- ---------------------------------------------------------
+create or replace function public.set_request_decided_at()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if old.status <> new.status then
+    if new.status in ('approved', 'rejected') then
+      new.decided_at := coalesce(new.decided_at, now());
+    else
+      new.decided_at := null;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger on_request_set_decided_at
+  before update of status on public.leave_requests
+  for each row
+  when (old.status is distinct from new.status)
+  execute function public.set_request_decided_at();
+
+-- ---------------------------------------------------------
+-- T5: Notify requester + write approval logs on decision
 -- ---------------------------------------------------------
 create or replace function public.handle_request_status_change()
 returns trigger
@@ -612,6 +875,11 @@ language plpgsql security definer set search_path = ''
 as $$
 begin
   if old.status = 'pending' and new.status in ('approved', 'rejected') then
+    if new.approver_id is not null then
+      insert into public.approval_logs (org_id, request_id, actor_id, action, comment, created_at)
+      values (new.org_id, new.id, new.approver_id, new.status, new.decision_note, coalesce(new.decided_at, now()));
+    end if;
+
     insert into public.notifications (
       user_id, org_id, title, title_ar, message, message_ar, type
     ) values (
@@ -642,7 +910,7 @@ create trigger on_request_status_change
   execute function public.handle_request_status_change();
 
 -- ---------------------------------------------------------
--- T3: Auto-update leave_balances when request is approved
+-- T6: Auto-update leave_balances when request is approved
 -- ---------------------------------------------------------
 create or replace function public.handle_request_approved()
 returns trigger
@@ -791,6 +1059,10 @@ create trigger enforce_org_audit_logs
   before insert on public.audit_logs
   for each row execute function public.enforce_org_id_from_actor();
 
+create trigger enforce_org_approval_logs
+  before insert on public.approval_logs
+  for each row execute function public.enforce_org_id_from_actor();
+
 -- Auto-set org_id for org-owned tables (departments, attendance_policy)
 -- that have no user_id column. Derives org from the authenticated user.
 create or replace function public.enforce_org_id_from_current_user()
@@ -862,6 +1134,83 @@ $$;
  create trigger protect_profile_fields
   before update on public.profiles
   for each row execute function public.protect_profile_fields();
+
+-- ---------------------------------------------------------
+-- T7: Keep manager roles in sync with department assignments
+-- ---------------------------------------------------------
+create or replace function public.sync_department_manager_roles()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_org_id uuid;
+  v_old_manager_uid uuid;
+  v_new_manager_uid uuid;
+begin
+  v_org_id := coalesce(new.org_id, old.org_id);
+
+  if tg_op = 'INSERT' then
+    v_old_manager_uid := null;
+    v_new_manager_uid := new.manager_uid;
+  elsif tg_op = 'UPDATE' then
+    v_old_manager_uid := old.manager_uid;
+    v_new_manager_uid := new.manager_uid;
+  elsif tg_op = 'DELETE' then
+    v_old_manager_uid := old.manager_uid;
+    v_new_manager_uid := null;
+  else
+    return null;
+  end if;
+
+  if v_new_manager_uid is not null then
+    update public.profiles
+    set role = 'manager'
+    where id = v_new_manager_uid
+      and org_id = v_org_id
+      and role = 'employee';
+  end if;
+
+  if v_old_manager_uid is not null and v_old_manager_uid <> v_new_manager_uid then
+    if not exists (
+      select 1
+      from public.departments d
+      where d.org_id = v_org_id
+        and d.manager_uid = v_old_manager_uid
+    ) then
+      update public.profiles
+      set role = 'employee'
+      where id = v_old_manager_uid
+        and org_id = v_org_id
+        and role = 'manager';
+    end if;
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger sync_department_manager_roles_insert
+  after insert
+  on public.departments
+  for each row
+  execute function public.sync_department_manager_roles();
+
+create trigger sync_department_manager_roles_update
+  after update of manager_uid
+  on public.departments
+  for each row
+  execute function public.sync_department_manager_roles();
+
+create trigger sync_department_manager_roles_delete
+  after delete
+  on public.departments
+  for each row
+  execute function public.sync_department_manager_roles();
 
 -- ---------------------------------------------------------
 -- PUNCH: check-in / check-out via SQL RPC with overtime support

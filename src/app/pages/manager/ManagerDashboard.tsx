@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import * as departmentsService from '@/lib/services/departments.service';
@@ -28,6 +29,8 @@ import {
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { StatCard } from '../../components/shared/StatCard';
+import { QuickPunchCard } from '../../components/attendance/QuickPunchCard';
+import { useQuickPunch } from '../../hooks/useQuickPunch';
 
 function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -37,6 +40,7 @@ type ManagerTab = 'overview' | 'analytics';
 
 export function ManagerDashboard() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [department, setDepartment] = useState<Department | null>(null);
   const [employees, setEmployees] = useState<Profile[]>([]);
@@ -45,6 +49,9 @@ export function ManagerDashboard() {
   const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
   const [activeTab, setActiveTab] = useState<ManagerTab>('overview');
+  const quickPunch = useQuickPunch({
+    userId: currentUser?.uid,
+  });
 
   const employeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
 
@@ -238,6 +245,16 @@ export function ManagerDashboard() {
             <span className="text-xl">{todayStats.total}</span>
           </div>
         }
+      />
+
+      <QuickPunchCard
+        today={quickPunch.today}
+        loading={quickPunch.loading}
+        actionLoading={quickPunch.actionLoading}
+        cooldownSecondsLeft={quickPunch.cooldownSecondsLeft}
+        onCheckIn={quickPunch.handleCheckIn}
+        onCheckOut={quickPunch.handleCheckOut}
+        onOpenAttendance={() => navigate('/attendance')}
       />
 
       <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">

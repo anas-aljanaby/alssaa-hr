@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../../contexts/AuthContext';
@@ -24,7 +24,7 @@ import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog, MonthlyStats } from '@/lib/services/attendance.service';
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
-import type { LeaveRequest } from '@/lib/services/requests.service';
+import type { LeaveRequest, LeaveRequestWithApprover } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
 import { now } from '@/lib/time';
 import {
@@ -46,8 +46,35 @@ import {
   Trash2,
   X,
   Download,
+  UserCheck,
 } from 'lucide-react';
 
+/** Calendar day YYYY-MM-DD in local time (matches leave form date pickers). */
+function calendarDayKeyFromIso(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function findApprovedLeaveForLogDate(
+  logDate: string,
+  requests: LeaveRequest[]
+): LeaveRequestWithApprover | null {
+  const day = logDate.slice(0, 10);
+  const candidates = (requests as LeaveRequestWithApprover[]).filter(
+    (r) =>
+      (r.type === 'annual_leave' || r.type === 'sick_leave') &&
+      r.status === 'approved' &&
+      day >= calendarDayKeyFromIso(r.from_date_time) &&
+      day <= calendarDayKeyFromIso(r.to_date_time)
+  );
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => {
+    const ta = new Date(a.decided_at ?? a.created_at).getTime();
+    const tb = new Date(b.decided_at ?? b.created_at).getTime();
+    return tb - ta;
+  });
+  return candidates[0]!;
+}
 
 function calculateLateMinutes(
   checkInTime: string,
@@ -64,6 +91,7 @@ function calculateLateMinutes(
 export function UserDetailsPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -143,6 +171,25 @@ export function UserDetailsPage() {
       .then(setAttendanceLogs)
       .catch(() => toast.error('فشل تحميل سجلات الحضور'));
   }, [userId, dateFrom, dateTo]);
+
+  const requestFromUrl = searchParams.get('request');
+
+  useEffect(() => {
+    if (!requestFromUrl || !userId || loading) return;
+    setActiveTab('requests');
+    setRequestFilter('all');
+  }, [requestFromUrl, userId, loading]);
+
+  useEffect(() => {
+    if (!requestFromUrl || loading || activeTab !== 'requests') return;
+    const t = window.setTimeout(() => {
+      document.getElementById(`request-card-${requestFromUrl}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 200);
+    return () => clearTimeout(t);
+  }, [requestFromUrl, loading, activeTab, userRequests.length]);
 
   useEffect(() => {
     if (profile && currentUser?.role === 'admin') {
@@ -787,6 +834,10 @@ export function UserDetailsPage() {
                 const lateMinutes = log.check_in_time
                   ? calculateLateMinutes(log.check_in_time)
                   : 0;
+                const linkedLeave =
+                  log.status === 'on_leave'
+                    ? findApprovedLeaveForLogDate(String(log.date), userRequests)
+                    : null;
                 return (
                   <div
                     key={log.id}
@@ -810,6 +861,25 @@ export function UserDetailsPage() {
                         >
                           {getAttendanceStatusAr(log.status)}
                         </span>
+                        {linkedLeave && (
+                          <button
+                            type="button"
+                            aria-label="الانتقال إلى طلب الإجازة المرتبط بهذا اليوم"
+                            onClick={() =>
+                              navigate(
+                                `/user-details/${userId}?request=${encodeURIComponent(linkedLeave.id)}`
+                              )
+                            }
+                            className="mt-2 flex w-full max-w-full items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1.5 text-left text-[11px] text-violet-900 transition-colors hover:bg-violet-100"
+                          >
+                            <UserCheck className="h-3.5 w-3.5 shrink-0 text-violet-600" aria-hidden />
+                            <span className="min-w-0 truncate">
+                              {linkedLeave.approver_profile?.name_ar?.trim()
+                                ? `تمت الموافقة بواسطة: ${linkedLeave.approver_profile.name_ar.trim()}`
+                                : 'طلب إجازة معتمد — عرض التفاصيل'}
+                            </span>
+                          </button>
+                        )}
                       </div>
                       {lateMinutes > 0 && (
                         <span className="text-xs text-amber-600">تأخير {lateMinutes} د</span>
@@ -988,7 +1058,8 @@ export function UserDetailsPage() {
               filteredRequests.map((req) => (
                 <div
                   key={req.id}
-                  className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm"
+                  id={`request-card-${req.id}`}
+                  className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm scroll-mt-4"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
