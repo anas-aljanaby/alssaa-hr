@@ -5,6 +5,40 @@ export type LeaveRequest = Tables<'leave_requests'>;
 export type LeaveRequestInsert = InsertTables<'leave_requests'>;
 export type RequestStatus = LeaveRequest['status'];
 export type RequestType = LeaveRequest['type'];
+export type ApproverProfileSummary = Pick<Tables<'profiles'>, 'id' | 'name_ar' | 'employee_id'>;
+export type LeaveRequestWithApprover = LeaveRequest & {
+  approver_profile?: ApproverProfileSummary | null;
+};
+
+async function attachApproverProfiles(
+  requests: LeaveRequest[]
+): Promise<LeaveRequestWithApprover[]> {
+  const approverIds = Array.from(
+    new Set(
+      requests
+        .map((request) => request.approver_id)
+        .filter((approverId): approverId is string => Boolean(approverId))
+    )
+  );
+
+  if (!approverIds.length) {
+    return requests.map((request) => ({ ...request, approver_profile: null }));
+  }
+
+  const { data: approvers, error } = await supabase
+    .from('profiles')
+    .select('id, name_ar, employee_id')
+    .in('id', approverIds);
+
+  if (error) throw error;
+
+  const approverMap = new Map((approvers ?? []).map((approver) => [approver.id, approver]));
+
+  return requests.map((request) => ({
+    ...request,
+    approver_profile: request.approver_id ? approverMap.get(request.approver_id) ?? null : null,
+  }));
+}
 
 export async function submitRequest(
   request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>
@@ -27,7 +61,7 @@ export async function getUserRequests(userId: string): Promise<LeaveRequest[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return attachApproverProfiles(data ?? []);
 }
 
 export async function getUserRequestsByStatus(
@@ -42,7 +76,7 @@ export async function getUserRequestsByStatus(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return attachApproverProfiles(data ?? []);
 }
 
 export async function getDepartmentRequests(
@@ -65,7 +99,7 @@ export async function getDepartmentRequests(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return attachApproverProfiles(data ?? []);
 }
 
 export async function getPendingDepartmentRequests(
@@ -89,7 +123,7 @@ export async function getPendingDepartmentRequests(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return attachApproverProfiles(data ?? []);
 }
 
 export async function updateRequestStatus(
@@ -98,19 +132,35 @@ export async function updateRequestStatus(
   approverId: string,
   decisionNote: string
 ): Promise<LeaveRequest> {
+  const decidedAt = new Date().toISOString();
+
   const { data, error } = await supabase
     .from('leave_requests')
     .update({
       status,
       approver_id: approverId,
       decision_note: decisionNote,
+      decided_at: decidedAt,
     })
     .eq('id', requestId)
+    .eq('status', 'pending')
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+
+  const { error: approvalLogError } = await supabase.from('approval_logs').insert({
+    org_id: data.org_id,
+    request_id: data.id,
+    actor_id: approverId,
+    action: status,
+    comment: decisionNote || null,
+  });
+
+  if (approvalLogError) throw approvalLogError;
+
+  const enriched = await attachApproverProfiles([data]);
+  return enriched[0];
 }
 
 export async function getRequestById(requestId: string): Promise<LeaveRequest | null> {
@@ -121,7 +171,9 @@ export async function getRequestById(requestId: string): Promise<LeaveRequest | 
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  if (!data) return null;
+  const enriched = await attachApproverProfiles([data]);
+  return enriched[0];
 }
 
 export async function getAllPendingRequests(): Promise<LeaveRequest[]> {
@@ -132,7 +184,7 @@ export async function getAllPendingRequests(): Promise<LeaveRequest[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return attachApproverProfiles(data ?? []);
 }
 
 export async function getAllRequests(): Promise<LeaveRequest[]> {
@@ -142,7 +194,7 @@ export async function getAllRequests(): Promise<LeaveRequest[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return attachApproverProfiles(data ?? []);
 }
 
 export type RequestChangeEvent = {

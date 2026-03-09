@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Download, MessageSquare, Paperclip } from 'lucide-react';
+import { Calendar, Download, MessageSquare, Paperclip, UserCheck } from 'lucide-react';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { Profile } from '@/lib/services/profiles.service';
 import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
@@ -32,6 +32,12 @@ interface RequestCardProps {
    * Optional label shown for decision note header.
    */
   decisionNoteLabel?: string;
+  /**
+   * Whether to show approver details and decision time when available.
+   */
+  showApproverInfo?: boolean;
+  approverLabel?: string;
+  decidedAtLabel?: string;
 }
 
 export function RequestCard({
@@ -42,7 +48,14 @@ export function RequestCard({
   showDecisionNote = true,
   decisionNoteLabel = 'ملاحظة القرار:',
   onUserClick,
+  showApproverInfo = true,
+  approverLabel = 'تمت المراجعة بواسطة:',
+  decidedAtLabel = 'وقت القرار:',
 }: RequestCardProps) {
+  const requestWithMeta = request as LeaveRequest & {
+    approver_profile?: { id: string; name_ar: string; employee_id: string } | null;
+    decided_at?: string | null;
+  };
   const user = profilesMap?.get(request.user_id);
 
   const openAttachment = async () => {
@@ -163,6 +176,32 @@ export function RequestCard({
           {request.decision_note}
         </div>
       )}
+
+      {showApproverInfo &&
+        request.status !== 'pending' &&
+        (requestWithMeta.approver_profile || requestWithMeta.decided_at) && (
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 mb-3 text-xs text-slate-700">
+            {requestWithMeta.approver_profile && (
+              <div className="flex items-center gap-1.5 mb-1">
+                <UserCheck className="w-3.5 h-3.5" />
+                <span className="opacity-70">{approverLabel}</span>
+                <span>
+                  {requestWithMeta.approver_profile.name_ar}
+                  {requestWithMeta.approver_profile.employee_id
+                    ? ` (${requestWithMeta.approver_profile.employee_id})`
+                    : ''}
+                </span>
+              </div>
+            )}
+            {requestWithMeta.decided_at && (
+              <div className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" />
+                <span className="opacity-70">{decidedAtLabel}</span>
+                <span>{new Date(requestWithMeta.decided_at).toLocaleString('ar-IQ')}</span>
+              </div>
+            )}
+          </div>
+        )}
 
       {onApprove && onReject && request.status === 'pending' && (
         <div className="flex gap-2">

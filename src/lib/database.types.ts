@@ -49,6 +49,7 @@ export interface Database {
           employee_id: string;
           name: string;
           name_ar: string;
+          email: string | null;
           phone: string;
           role: 'employee' | 'manager' | 'admin';
           department_id: string | null;
@@ -64,6 +65,7 @@ export interface Database {
           employee_id: string;
           name: string;
           name_ar: string;
+          email?: string | null;
           phone?: string;
           role?: 'employee' | 'manager' | 'admin';
           department_id?: string | null;
@@ -79,6 +81,7 @@ export interface Database {
           employee_id?: string;
           name?: string;
           name_ar?: string;
+          email?: string | null;
           phone?: string;
           role?: 'employee' | 'manager' | 'admin';
           department_id?: string | null;
@@ -227,6 +230,7 @@ export interface Database {
           decision_note: string | null;
           attachment_url: string | null;
           created_at: string;
+          decided_at: string | null;
         };
         Insert: {
           id?: string;
@@ -241,6 +245,7 @@ export interface Database {
           decision_note?: string | null;
           attachment_url?: string | null;
           created_at?: string;
+          decided_at?: string | null;
         };
         Update: {
           id?: string;
@@ -255,6 +260,7 @@ export interface Database {
           decision_note?: string | null;
           attachment_url?: string | null;
           created_at?: string;
+          decided_at?: string | null;
         };
         Relationships: [
           {
@@ -274,6 +280,59 @@ export interface Database {
           {
             foreignKeyName: 'leave_requests_approver_id_fkey';
             columns: ['approver_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      approval_logs: {
+        Row: {
+          id: string;
+          org_id: string;
+          request_id: string;
+          actor_id: string;
+          action: 'approved' | 'rejected';
+          comment: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          request_id: string;
+          actor_id: string;
+          action: 'approved' | 'rejected';
+          comment?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          request_id?: string;
+          actor_id?: string;
+          action?: 'approved' | 'rejected';
+          comment?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'approval_logs_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'approval_logs_request_id_fkey';
+            columns: ['request_id'];
+            isOneToOne: false;
+            referencedRelation: 'leave_requests';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'approval_logs_actor_id_fkey';
+            columns: ['actor_id'];
             isOneToOne: false;
             referencedRelation: 'profiles';
             referencedColumns: ['id'];

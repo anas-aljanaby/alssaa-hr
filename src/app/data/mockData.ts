@@ -2,7 +2,12 @@
 
 export type UserRole = 'employee' | 'manager' | 'admin';
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'on_leave';
-export type RequestType = 'annual_leave' | 'sick_leave' | 'hourly_permission' | 'time_adjustment';
+export type RequestType =
+  | 'annual_leave'
+  | 'sick_leave'
+  | 'hourly_permission'
+  | 'time_adjustment'
+  | 'overtime';
 export type RequestStatus = 'pending' | 'approved' | 'rejected';
 
 export interface User {

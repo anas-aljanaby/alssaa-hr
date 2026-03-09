@@ -29,7 +29,6 @@ import { now } from '@/lib/time';
 import {
   Mail,
   Phone,
-  MessageCircle,
   Calendar,
   Clock,
   CheckCircle2,
@@ -46,6 +45,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { RequestCard } from '../../components/shared/RequestCard';
 
 function calculateLateMinutes(
   checkInTime: string,
@@ -357,6 +357,13 @@ export function UserDetailsPage() {
     requestFilter === 'all'
       ? userRequests
       : userRequests.filter((r) => r.status === requestFilter);
+  const attendanceTabRequests = useMemo(
+    () =>
+      [...userRequests].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ),
+    [userRequests]
+  );
   const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
     if (!profile) return;
     setEditSubmitting(true);
@@ -746,6 +753,33 @@ export function UserDetailsPage() {
           </div>
 
           <div className="space-y-2">
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-gray-500" />
+                <h3 className="text-sm text-gray-700">اعتمادات الطلبات</h3>
+              </div>
+              <div className="space-y-2">
+                {attendanceTabRequests.length > 0 ? (
+                  attendanceTabRequests.map((request) => (
+                    <RequestCard
+                      key={request.id}
+                      request={request}
+                      showApproverInfo
+                      showDecisionNote
+                      decisionNoteLabel="ملاحظة القرار:"
+                      approverLabel="وافق عليه:"
+                      decidedAtLabel="بتاريخ:"
+                    />
+                  ))
+                ) : (
+                  <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
+                    <AlertCircle className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">لا توجد طلبات ضمن هذا الحساب</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {attendanceLogs.length > 0 ? (
               attendanceLogs.map((log) => {
                 const lateMinutes = log.check_in_time
