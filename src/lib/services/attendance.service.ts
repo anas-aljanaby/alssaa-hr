@@ -46,29 +46,31 @@ export interface MonthDaySummary {
   totalMinutesWorked: number;
 }
 
-function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_out_time'>, shift: ShiftInfo | null): PunchEntry[] {
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * Unified overtime check. A time is "overtime" when:
+ * - It's a non-working day, OR
+ * - On a working day: before (shiftStart - 60) or after shiftEnd
+ *
+ * The 1-hour window before shift start is "early login" (not overtime).
+ * Anything after shift end is overtime. The buffer only controls auto-punch-out timing.
+ */
+export function isOvertimeTime(timeMinutes: number, shift: ShiftInfo, dayOfWeek: number): boolean {
+  const isWorkingDay = !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek);
+  if (!isWorkingDay) return true;
+  const startMin = toMinutes(shift.workStartTime);
+  const endMin = toMinutes(shift.workEndTime);
+  return timeMinutes < startMin - 60 || timeMinutes > endMin;
+}
+
+function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_out_time'>, shift: ShiftInfo | null, dayOfWeek?: number): PunchEntry[] {
   if (!log.check_in_time) return [];
 
-  const toMinutes = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
-
-  const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
-  const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
-  const bufferMinutes = shift?.bufferMinutesAfterShift ?? 30;
-
-  // Punch-in: overtime only when after shift end (early punch-in is on-time, no tag)
-  const inOvertime = (inMin: number) =>
-    shiftStartMinutes !== null &&
-    shiftEndMinutes !== null &&
-    inMin > shiftEndMinutes;
-
-  // Punch-out: not overtime if within buffer after shift end
-  const outOvertime = (outMin: number) =>
-    shiftStartMinutes !== null &&
-    shiftEndMinutes !== null &&
-    (outMin < shiftStartMinutes || outMin > shiftEndMinutes + bufferMinutes);
+  const dow = dayOfWeek ?? now().getDay();
 
   const punches: PunchEntry[] = [];
 
@@ -79,7 +81,7 @@ function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_o
     id: `${log.id}-in`,
     timestamp: inTime,
     type: 'clock_in',
-    isOvertime: inOvertime(inMinutes),
+    isOvertime: shift ? isOvertimeTime(inMinutes, shift, dow) : false,
   });
 
   if (log.check_out_time) {
@@ -90,7 +92,7 @@ function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_o
       id: `${log.id}-out`,
       timestamp: outTime,
       type: 'clock_out',
-      isOvertime: outOvertime(outMinutes),
+      isOvertime: shift ? isOvertimeTime(outMinutes, shift, dow) : false,
     });
   }
 
@@ -99,10 +101,6 @@ function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_o
 
 function computeTotalMinutes(log: AttendanceLog): number {
   if (!log.check_in_time || !log.check_out_time) return 0;
-  const toMinutes = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
   return Math.max(0, toMinutes(log.check_out_time) - toMinutes(log.check_in_time));
 }
 
@@ -160,7 +158,8 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
 export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
   const [log, shift] = await Promise.all([getTodayLog(userId), getEffectiveShiftForUser(userId)]);
 
-  const punches = log ? buildPunches(log, shift) : [];
+  const dayOfWeek = now().getDay();
+  const punches = log ? buildPunches(log, shift, dayOfWeek) : [];
 
   return { log, punches, shift };
 }
@@ -174,7 +173,8 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
   if (logRes.error) throw logRes.error;
 
   const log = logRes.data ?? null;
-  const punches = log ? buildPunches(log, shift) : [];
+  const dayOfWeek = new Date(date).getDay();
+  const punches = log ? buildPunches(log, shift, dayOfWeek) : [];
   const totalMinutesWorked = log ? computeTotalMinutes(log) : 0;
 
   return { log, punches, shift, totalMinutesWorked };
@@ -185,8 +185,12 @@ export async function getAttendanceMonthly(
   year: number,
   month: number
 ): Promise<MonthDaySummary[]> {
-  const logs = await getMonthlyLogs(userId, year, month);
+  const [logs, shift] = await Promise.all([
+    getMonthlyLogs(userId, year, month),
+    getEffectiveShiftForUser(userId),
+  ]);
   const logMap = new Map(logs.map((l) => [l.date, l]));
+  const offDays = shift?.weeklyOffDays ?? [5, 6];
 
   const today = now();
   const todayStr_ = todayStr(today);
@@ -196,15 +200,16 @@ export async function getAttendanceMonthly(
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const dayOfWeek = new Date(dateStr).getDay();
-    const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+    const isOffDay = offDays.includes(dayOfWeek);
     const isFuture = dateStr > todayStr_;
 
     const log = logMap.get(dateStr);
 
     let status: MonthDaySummary['status'] = null;
     if (isFuture) status = 'future';
-    else if (isWeekend && !log) status = 'weekend';
+    else if (isOffDay && !log) status = 'weekend';
     else if (log) status = log.status;
+    else status = 'absent';
 
     summaries.push({
       date: dateStr,
@@ -244,19 +249,6 @@ export interface CheckInResult {
   overtimeRequest: LeaveRequest | null;
 }
 
-function isOvertimeCheckIn(time: string, shift: ShiftInfo): boolean {
-  const toMin = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
-  const nowMin = toMin(time);
-  const startMin = toMin(shift.workStartTime);
-  const endMin = toMin(shift.workEndTime);
-  const buffer = shift.bufferMinutesAfterShift;
-  // Overtime: more than 1 hour before shift start OR after shift end + buffer
-  return nowMin < startMin - 60 || nowMin > endMin + buffer;
-}
-
 export async function checkIn(userId: string): Promise<CheckInResult> {
   const today = todayStr();
   const time = nowTimeStr();
@@ -274,15 +266,17 @@ export async function checkIn(userId: string): Promise<CheckInResult> {
   }
 
   const shift = await getEffectiveShiftForUser(userId);
+  const todayDate = now();
+  const dayOfWeek = todayDate.getDay();
+  const nowMin = toMinutes(time);
+
+  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
+  const isOvertimePunch = shift ? isOvertimeTime(nowMin, shift, dayOfWeek) : false;
 
   let status: AttendanceStatus = 'present';
-  if (shift) {
-    const [startH, startM] = shift.workStartTime.split(':').map(Number);
-    const grace = shift.gracePeriodMinutes;
-    const [nowH, nowM] = time.split(':').map(Number);
-    const startMinutes = startH * 60 + startM + grace;
-    const nowMinutes = nowH * 60 + nowM;
-    if (nowMinutes > startMinutes) status = 'late';
+  if (shift && !isOvertimePunch && isWorkingDay) {
+    const startMinutes = toMinutes(shift.workStartTime) + shift.gracePeriodMinutes;
+    if (nowMin > startMinutes) status = 'late';
   }
 
   let log: AttendanceLog;
@@ -317,20 +311,11 @@ export async function checkIn(userId: string): Promise<CheckInResult> {
     log = data;
   }
 
-  // Auto-create an overtime request when punching in outside normal shift hours
-  // or on a non-working day (no shift configured also qualifies as overtime context).
   let overtimeRequest: LeaveRequest | null = null;
-  const todayDate = now();
-  const dayOfWeek = todayDate.getDay();
-  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
-  const isOvertimePunch = !shift || !isWorkingDay || (shift && isOvertimeCheckIn(time, shift));
-
-  if (isOvertimePunch) {
+  if (isOvertimePunch || !isWorkingDay) {
     try {
-      // Use current date as both start and end (time-based overtime, same day)
       const datePrefix = today;
       const fromDateTime = `${datePrefix}T${time}:00`;
-      // Default to end-of-shift time; if no shift, use current time as placeholder
       const endTime = shift ? shift.workEndTime : time;
       const toDateTime = `${datePrefix}T${endTime}:00`;
 

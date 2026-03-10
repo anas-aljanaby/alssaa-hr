@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LogIn, LogOut, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
-import type { TodayRecord } from '@/lib/services/attendance.service';
+import { isOvertimeTime, type TodayRecord } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 
 interface Props {
@@ -40,15 +40,31 @@ function todayArabicDate(): string {
 export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onCheckIn, onCheckOut }: Props) {
   const { log, shift } = today;
 
-  // Workday elapsed: 0 until shift start, then time from shift start to min(now, shift end). For progress bar only.
-  const [workdayElapsedSeconds, setWorkdayElapsedSeconds] = useState(0);
-  // Hours worked: actual time since punch-in (where late arrival shows up).
   const [punchInElapsedSeconds, setPunchInElapsedSeconds] = useState(0);
-  const [confirmDialog, setConfirmDialog] = useState<'overtime' | 'early_checkout' | null>(null);
+  const [workdayElapsedSeconds, setWorkdayElapsedSeconds] = useState(0);
+  const [confirmDialog, setConfirmDialog] = useState<'overtime' | null>(null);
 
   const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
   const isCompleted = !!(log?.check_in_time && log?.check_out_time);
 
+  // Real elapsed since punch-in (for the main clock and "hours worked")
+  useEffect(() => {
+    if (!isCheckedIn || !log?.check_in_time) {
+      setPunchInElapsedSeconds(0);
+      return;
+    }
+    const computePunchInElapsed = () => {
+      const [h, m] = log.check_in_time!.split(':').map(Number);
+      const currentDate = now();
+      const inMs = new Date(currentDate).setHours(h, m, 0, 0);
+      return Math.max(0, Math.floor((currentDate.getTime() - inMs) / 1000));
+    };
+    setPunchInElapsedSeconds(computePunchInElapsed());
+    const id = setInterval(() => setPunchInElapsedSeconds(computePunchInElapsed()), 1000);
+    return () => clearInterval(id);
+  }, [isCheckedIn, log?.check_in_time]);
+
+  // Workday elapsed: for progress bar only, caps at shift duration
   useEffect(() => {
     if (!isCheckedIn || !shift) {
       setWorkdayElapsedSeconds(0);
@@ -69,23 +85,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     return () => clearInterval(id);
   }, [isCheckedIn, shift]);
 
-  useEffect(() => {
-    if (!isCheckedIn || !log?.check_in_time) {
-      setPunchInElapsedSeconds(0);
-      return;
-    }
-    const computePunchInElapsed = () => {
-      const [h, m] = log.check_in_time!.split(':').map(Number);
-      const currentDate = now();
-      const inMs = new Date(currentDate).setHours(h, m, 0, 0);
-      return Math.max(0, Math.floor((currentDate.getTime() - inMs) / 1000));
-    };
-    setPunchInElapsedSeconds(computePunchInElapsed());
-    const id = setInterval(() => setPunchInElapsedSeconds(computePunchInElapsed()), 1000);
-    return () => clearInterval(id);
-  }, [isCheckedIn, log?.check_in_time]);
-
-  // Tick every second so current time (and isOvertime / isBeforeShift) stays in sync with dev or real clock
+  // Tick every second so current time stays in sync with dev or real clock
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!shift) return;
@@ -95,7 +95,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
 
   const currentNow = now();
   const currentMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
-  const dayOfWeek = currentNow.getDay(); // 0 = Sun, 5 = Fri, 6 = Sat
+  const dayOfWeek = currentNow.getDay();
 
   const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
   const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
@@ -103,15 +103,22 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     ? shiftEndMinutes - shiftStartMinutes
     : null;
 
-  // Timer: workday elapsed (0 until shift start)
-  const displayElapsedSeconds = isCheckedIn && shift ? workdayElapsedSeconds : 0;
+  const isOvertime = shift ? isOvertimeTime(currentMinutes, shift, dayOfWeek) : false;
+  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
+  const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
 
-  // Progress bar: time-based only, 100% at shift end. progress = (currentTime - shiftStart) / (shiftEnd - shiftStart) * 100
+  // Progress bar: 0-100%, caps at shift end
   const progressPercent = shiftDuration != null && shiftDuration > 0
     ? Math.min(100, (workdayElapsedSeconds / (shiftDuration * 60)) * 100)
     : 0;
 
-  // Hours worked: actual time since punch-in (late arrival shows up here). When completed = check_out - check_in.
+  // Overtime elapsed: time past shift end (only meaningful when checked in past shift end on a working day)
+  const isPastShiftEnd = isCheckedIn && shiftEndMinutes !== null && currentMinutes > shiftEndMinutes;
+  const overtimeElapsedSeconds = isPastShiftEnd
+    ? Math.max(0, (currentMinutes - shiftEndMinutes!) * 60 + currentNow.getSeconds())
+    : 0;
+
+  // Hours worked for completed day
   const hoursWorkedSeconds = isCheckedIn
     ? punchInElapsedSeconds
     : isCompleted && log?.check_in_time && log?.check_out_time
@@ -119,27 +126,17 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
       : 0;
   const workedMinutes = Math.floor(hoursWorkedSeconds / 60);
 
-  const bufferMinutes = shift?.bufferMinutesAfterShift ?? 30;
-  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
-  const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
-  // Punch In allowed from 1 hour before shift start. Overtime: outside [shiftStart-60, shiftEnd+buffer].
-  const earlyLoginThresholdMinutes = shiftStartMinutes !== null ? shiftStartMinutes - 60 : null;
-  const outsideShiftHours =
-    shiftStartMinutes !== null &&
-    shiftEndMinutes !== null &&
-    (currentMinutes < (earlyLoginThresholdMinutes ?? shiftStartMinutes) || currentMinutes > shiftEndMinutes + bufferMinutes);
-  const isOvertime = !isWorkingDay || (isWorkingDay && outsideShiftHours);
+  // Overtime: always allowed to punch in. Regular: allowed from 1h before shift.
+  const canPunchIn = !shift || isOvertime || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
 
-  // Punch In button disabled until 1 hour before shift (or always if no shift, e.g. overtime day)
-  const canPunchIn = !shift || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
-  const firstPunchIsLate =
-    log?.check_in_time && shift
-      ? toMinutes(log.check_in_time) > shiftStartMinutes! + shift.gracePeriodMinutes
-      : false;
-  // Only show overtime tag when punch-in was after shift end; early punch-in is on-time
+  // Badge logic for first punch: check overtime first (matches service logic), then late
   const firstPunchIsOvertime =
-    log?.check_in_time && shiftStartMinutes !== null && shiftEndMinutes !== null
-      ? toMinutes(log.check_in_time) > shiftEndMinutes + bufferMinutes
+    log?.check_in_time && shift
+      ? isOvertimeTime(toMinutes(log.check_in_time), shift, dayOfWeek)
+      : false;
+  const firstPunchIsLate =
+    log?.check_in_time && shift && !firstPunchIsOvertime
+      ? toMinutes(log.check_in_time) > shiftStartMinutes! + shift.gracePeriodMinutes
       : false;
 
   const handleCheckInClick = () => {
@@ -152,11 +149,13 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
 
   const handleConfirm = () => {
     setConfirmDialog(null);
-    if (confirmDialog === 'overtime') onCheckIn();
-    else onCheckOut();
+    onCheckIn();
   };
 
   const buttonDisabled = actionLoading || cooldownSecondsLeft > 0;
+
+  // Visual state for the clock circle
+  const clockIsOvertime = isCheckedIn && (isPastShiftEnd || !isWorkingDay || (shift ? isOvertimeTime(toMinutes(log!.check_in_time!), shift, dayOfWeek) : false));
 
   return (
     <>
@@ -171,14 +170,16 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           )}
         </div>
 
-        {/* Pulsing round clock */}
+        {/* Round clock: blue during regular hours, amber during overtime */}
         <div
           className={`w-28 h-28 mx-auto rounded-full flex flex-col items-center justify-center mb-5 ${
             isCompleted
               ? 'bg-emerald-50 border-4 border-emerald-200'
-              : isCheckedIn
-                ? 'bg-blue-50 border-4 border-blue-200 animate-pulse'
-                : 'bg-gray-50 border-4 border-gray-200'
+              : isCheckedIn && clockIsOvertime
+                ? 'bg-amber-50 border-4 border-amber-300 animate-pulse'
+                : isCheckedIn
+                  ? 'bg-blue-50 border-4 border-blue-200 animate-pulse'
+                  : 'bg-gray-50 border-4 border-gray-200'
           }`}
         >
           {isCompleted ? (
@@ -188,11 +189,13 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
             </>
           ) : isCheckedIn ? (
             <>
-              <Clock className="w-7 h-7 text-blue-500 mb-0.5" />
-              <span className="text-xs font-mono tabular-nums text-blue-700 font-semibold leading-tight">
-                {formatElapsed(displayElapsedSeconds)}
+              <Clock className={`w-7 h-7 mb-0.5 ${clockIsOvertime ? 'text-amber-500' : 'text-blue-500'}`} />
+              <span className={`text-xs font-mono tabular-nums font-semibold leading-tight ${clockIsOvertime ? 'text-amber-700' : 'text-blue-700'}`}>
+                {formatElapsed(punchInElapsedSeconds)}
               </span>
-              <span className="text-xs text-blue-500">في العمل</span>
+              <span className={`text-xs ${clockIsOvertime ? 'text-amber-500' : 'text-blue-500'}`}>
+                {clockIsOvertime ? 'عمل إضافي' : 'في العمل'}
+              </span>
             </>
           ) : (
             <>
@@ -209,10 +212,10 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
               <p className="text-xs text-gray-400">الحضور</p>
               <div className="flex items-center gap-1.5">
                 <p className="text-gray-800 font-medium">{formatTime(log.check_in_time)}</p>
-                {firstPunchIsLate ? (
-                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200">متأخر</span>
-                ) : firstPunchIsOvertime ? (
+                {firstPunchIsOvertime ? (
                   <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">عمل إضافي</span>
+                ) : firstPunchIsLate ? (
+                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200">متأخر</span>
                 ) : (
                   <span className="px-1.5 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">في الوقت</span>
                 )}
@@ -227,8 +230,8 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           </div>
         )}
 
-        {/* Progress bar: workday completion only (time-based, 100% at shift end). Hidden during pure overtime work. */}
-        {isCheckedIn && !isOvertime && shiftDuration != null && shiftDuration > 0 && (
+        {/* Progress bar: workday completion only, caps at 100%. Hidden during pure overtime. */}
+        {isCheckedIn && isWorkingDay && !firstPunchIsOvertime && shiftDuration != null && shiftDuration > 0 && (
           <div className="mb-4">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
               <span>{Math.floor(workdayElapsedSeconds / 3600)}س {Math.floor((workdayElapsedSeconds % 3600) / 60)}د من الدوام</span>
@@ -243,7 +246,16 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           </div>
         )}
 
-        {/* Hours worked: actual time since punch-in (late arrival shows here) */}
+        {/* Overtime elapsed indicator when working past shift end */}
+        {isCheckedIn && isPastShiftEnd && isWorkingDay && !firstPunchIsOvertime && (
+          <div className="text-center mb-4">
+            <span className="text-sm text-amber-600">
+              عمل إضافي: <span className="font-semibold text-amber-700">{formatElapsed(overtimeElapsedSeconds)}</span>
+            </span>
+          </div>
+        )}
+
+        {/* Hours worked: actual time since punch-in */}
         {isCheckedIn && (
           <div className="text-center mb-4">
             <span className="text-sm text-gray-600">
@@ -252,7 +264,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
           </div>
         )}
 
-        {/* Total worked — single line for completed day */}
+        {/* Total worked -- single line for completed day */}
         {isCompleted && workedMinutes > 0 && (
           <div className="text-center mb-4">
             <span className="text-sm text-gray-600">
@@ -262,7 +274,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
         )}
 
         {/* Contextual notes */}
-        {!log?.check_in_time && isBeforeShift && (
+        {!log?.check_in_time && isBeforeShift && !isOvertime && (
           <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-gray-400">
             <Clock className="w-3.5 h-3.5" />
             <span>لم يبدأ دوامك بعد</span>
@@ -314,22 +326,18 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
             </button>
           )}
         </div>
-
-        {/* Location note removed: location tracking disabled */}
       </div>
 
-      {/* Confirmation Dialog */}
+      {/* Overtime Confirmation Dialog */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl text-center">
             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
               <AlertTriangle className="w-6 h-6 text-amber-500" />
             </div>
-            <h3 className="text-gray-800 font-semibold mb-2">تأكيد</h3>
+            <h3 className="text-gray-800 font-semibold mb-2">تأكيد عمل إضافي</h3>
             <p className="text-sm text-gray-500 mb-5">
-              {confirmDialog === 'overtime'
-                ? 'أنت خارج ساعات الدوام. سيتم تسجيل هذا كعمل إضافي وإنشاء طلب عمل إضافي تلقائياً بانتظار موافقة المدير. هل تريد المتابعة؟'
-                : 'أنت تغادر قبل نهاية الدوام بأكثر من ساعة. هل تريد المتابعة؟'}
+              أنت خارج ساعات الدوام. سيتم تسجيل هذا كعمل إضافي وإنشاء طلب عمل إضافي تلقائياً بانتظار موافقة المدير. هل تريد المتابعة؟
             </p>
             <div className="flex gap-3">
               <button

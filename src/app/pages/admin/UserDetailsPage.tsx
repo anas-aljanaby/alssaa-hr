@@ -12,6 +12,7 @@ import * as attendanceService from '@/lib/services/attendance.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as auditService from '@/lib/services/audit.service';
+import * as XLSX from 'xlsx';
 import { getRequestTypeAr, getStatusAr, getAttendanceStatusAr } from '../../data/mockData';
 import {
   DropdownMenu,
@@ -44,8 +45,9 @@ import {
   History,
   Trash2,
   X,
+  Download,
 } from 'lucide-react';
-import { RequestCard } from '../../components/shared/RequestCard';
+
 
 function calculateLateMinutes(
   checkInTime: string,
@@ -222,13 +224,7 @@ export function UserDetailsPage() {
     }
   }, [profile, leaveBalance, editAnnualTotal, editSickTotal]);
 
-  const attendanceTabRequests = useMemo(
-    () =>
-      [...userRequests].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ),
-    [userRequests]
-  );
+
 
   async function loadData() {
     if (!userId) return;
@@ -410,6 +406,23 @@ export function UserDetailsPage() {
     } finally {
       setDeletingUser(false);
     }
+  };
+
+  const handleExportAttendance = () => {
+    if (attendanceLogs.length === 0) return;
+    const rows = attendanceLogs.map((log) => ({
+      'التاريخ': log.date,
+      'الحالة': getAttendanceStatusAr(log.status),
+      'وقت الدخول': log.check_in_time ?? '—',
+      'وقت الخروج': log.check_out_time ?? '—',
+      'تأخير (دقائق)': log.check_in_time ? calculateLateMinutes(log.check_in_time) : 0,
+      'انصراف تلقائي': log.auto_punch_out ? 'نعم' : 'لا',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'سجل الحضور');
+    const name = `حضور_${profile.name_ar}_${dateFrom}_إلى_${dateTo}.xlsx`;
+    XLSX.writeFile(wb, name);
   };
 
   return (
@@ -729,6 +742,21 @@ export function UserDetailsPage() {
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700">الفترة</h3>
+              {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+                <button
+                  type="button"
+                  onClick={handleExportAttendance}
+                  disabled={attendanceLogs.length === 0}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-emerald-200"
+                  aria-label="تصدير الحضور"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  تصدير
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-600 mb-1">من</label>
@@ -754,33 +782,6 @@ export function UserDetailsPage() {
           </div>
 
           <div className="space-y-2">
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <FileText className="w-4 h-4 text-gray-500" />
-                <h3 className="text-sm text-gray-700">اعتمادات الطلبات</h3>
-              </div>
-              <div className="space-y-2">
-                {attendanceTabRequests.length > 0 ? (
-                  attendanceTabRequests.map((request) => (
-                    <RequestCard
-                      key={request.id}
-                      request={request}
-                      showApproverInfo
-                      showDecisionNote
-                      decisionNoteLabel="ملاحظة القرار:"
-                      approverLabel="وافق عليه:"
-                      decidedAtLabel="بتاريخ:"
-                    />
-                  ))
-                ) : (
-                  <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
-                    <AlertCircle className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">لا توجد طلبات ضمن هذا الحساب</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {attendanceLogs.length > 0 ? (
               attendanceLogs.map((log) => {
                 const lateMinutes = log.check_in_time
