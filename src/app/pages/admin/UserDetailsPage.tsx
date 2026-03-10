@@ -222,6 +222,14 @@ export function UserDetailsPage() {
     }
   }, [profile, leaveBalance, editAnnualTotal, editSickTotal]);
 
+  const attendanceTabRequests = useMemo(
+    () =>
+      [...userRequests].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ),
+    [userRequests]
+  );
+
   async function loadData() {
     if (!userId) return;
     try {
@@ -357,13 +365,6 @@ export function UserDetailsPage() {
     requestFilter === 'all'
       ? userRequests
       : userRequests.filter((r) => r.status === requestFilter);
-  const attendanceTabRequests = useMemo(
-    () =>
-      [...userRequests].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ),
-    [userRequests]
-  );
   const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
     if (!profile) return;
     setEditSubmitting(true);
