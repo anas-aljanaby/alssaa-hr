@@ -213,3 +213,220 @@ describe('attendance.service', () => {
     expect(sb.channelInstances.at(-1)?.name).toBe('attendance_logs:user:u1');
   });
 });
+
+/** Session overwrite scenarios from docs/edge-cases.md (table rows 1–4). */
+describe('attendance.service — edge cases: session overwrite', () => {
+  const policy9to6 = {
+    ...policyRow,
+    work_start_time: '09:00',
+    work_end_time: '18:00',
+  };
+
+  const baseLog = {
+    ...logRow,
+    check_in_time: '09:00' as string | null,
+    check_out_time: null as string | null,
+    status: 'present' as const,
+  };
+
+  beforeEach(() => {
+    sb.clearQueue();
+    sb.clearChannelInstances();
+  });
+
+  afterEach(() => {
+    setNowFn(() => new Date());
+  });
+
+  it('#1: check in 9:00, check out 13:00, re-check in 14:00 — first session overwritten, status re-evaluated for 14:00', async () => {
+    setNowFn(() => new Date(2025, 5, 11, 9, 0, 0));
+    const { checkIn, checkOut } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    await checkIn('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 13, 0, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null },
+      error: null,
+    });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '13:00' },
+      error: null,
+    });
+    await checkOut('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 14, 0, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '13:00' },
+      error: null,
+    });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '14:00', check_out_time: null, status: 'late' },
+      error: null,
+    });
+    const { log } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('14:00');
+    expect(log.check_out_time).toBeNull();
+    expect(log.status).toBe('late');
+    expect(submitRequest).not.toHaveBeenCalled();
+  });
+
+  it('#2: check in 9:00, check out 13:00, re-check in 18:01 — present + overtime request attempted', async () => {
+    setNowFn(() => new Date(2025, 5, 11, 9, 0, 0));
+    const { checkIn, checkOut } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    await checkIn('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 13, 0, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null },
+      error: null,
+    });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '13:00' },
+      error: null,
+    });
+    await checkOut('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 18, 1, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '13:00' },
+      error: null,
+    });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '18:01', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    const { log, overtimeRequest } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('18:01');
+    expect(log.status).toBe('present');
+    expect(submitRequest).toHaveBeenCalled();
+    expect(overtimeRequest).not.toBeNull();
+  });
+
+  it('#3: check in 9:00, check out 17:00, re-check in 17:30 — late while still within shift', async () => {
+    setNowFn(() => new Date(2025, 5, 11, 9, 0, 0));
+    const { checkIn, checkOut } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    await checkIn('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 17, 0, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null },
+      error: null,
+    });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '17:00' },
+      error: null,
+    });
+    await checkOut('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 17, 30, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '17:00' },
+      error: null,
+    });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '17:30', check_out_time: null, status: 'late' },
+      error: null,
+    });
+    const { log } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('17:30');
+    expect(log.status).toBe('late');
+    expect(submitRequest).not.toHaveBeenCalled();
+  });
+
+  /** docs/edge-cases.md #4: second same-minute check-in should overwrite; current `checkIn` throws if still checked in. */
+  it('#4: two rapid check-ins same minute — second overwrites cleanly without error', async () => {
+    setNowFn(() => new Date(2025, 5, 11, 9, 0, 0));
+    const { checkIn, checkOut } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    await checkIn('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 13, 0, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: null },
+      error: null,
+    });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '13:00' },
+      error: null,
+    });
+    await checkOut('u1');
+
+    setNowFn(() => new Date(2025, 5, 11, 14, 0, 0));
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '09:00', check_out_time: '13:00' },
+      error: null,
+    });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '14:00', check_out_time: null, status: 'late' },
+      error: null,
+    });
+    await checkIn('u1');
+
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '14:00', check_out_time: null },
+      error: null,
+    });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '14:00', check_out_time: null, status: 'late' },
+      error: null,
+    });
+    const { log } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('14:00');
+    expect(log.check_out_time).toBeNull();
+    expect(log.status).toBe('late');
+    expect(submitRequest).not.toHaveBeenCalled();
+  });
+});

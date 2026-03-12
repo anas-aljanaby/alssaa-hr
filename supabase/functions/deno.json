@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.window", "deno.ns"]
+  },
+  "test": {
+    "include": ["**/*.test.ts"]
+  }
+}
