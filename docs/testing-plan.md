@@ -159,6 +159,8 @@ Tests: identifies unpunched users, creates punch-out records, sends notification
 **Priority: 🟢 Low** — dev-only, but quick to test.
 
 ---
+*** done up to this point ***
+---
 
 ## Phase 4 — React Contexts & Hooks
 

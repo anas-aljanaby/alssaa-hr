@@ -430,3 +430,175 @@ describe('attendance.service — edge cases: session overwrite', () => {
     expect(submitRequest).not.toHaveBeenCalled();
   });
 });
+
+/** Overtime classification boundaries from docs/edge-cases.md (#5–10). Shift 9:00–18:00, Wed 2025-06-11 (working day). */
+describe('attendance.service — edge cases: overtime classification boundaries', () => {
+  const policy9to6 = {
+    ...policyRow,
+    work_start_time: '09:00',
+    work_end_time: '18:00',
+  };
+
+  const baseLog = {
+    ...logRow,
+    check_in_time: '09:00' as string | null,
+    check_out_time: null as string | null,
+    status: 'present' as const,
+  };
+
+  const shift9to6 = {
+    workStartTime: '09:00',
+    workEndTime: '18:00',
+    gracePeriodMinutes: 15,
+    bufferMinutesAfterShift: 30,
+    weeklyOffDays: [5, 6] as number[],
+  };
+
+  /** Wednesday — not in weeklyOffDays */
+  const workingDayDow = 3;
+
+  beforeEach(() => {
+    sb.clearQueue();
+    sb.clearChannelInstances();
+  });
+
+  afterEach(() => {
+    setNowFn(() => new Date());
+  });
+
+  it('#5: exactly shiftStart − 60min (08:00) — not overtime; checkIn present; no overtime request', async () => {
+    const { isOvertimeTime, checkIn } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    expect(isOvertimeTime(8 * 60, shift9to6, workingDayDow)).toBe(false);
+
+    setNowFn(() => new Date(2025, 5, 11, 8, 0, 0));
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '08:00', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    const { log } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('08:00');
+    expect(log.status).toBe('present');
+    expect(submitRequest).not.toHaveBeenCalled();
+  });
+
+  it('#6: shiftStart − 61min (07:59) — overtime; present + overtime request', async () => {
+    const { isOvertimeTime, checkIn } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    expect(isOvertimeTime(7 * 60 + 59, shift9to6, workingDayDow)).toBe(true);
+
+    setNowFn(() => new Date(2025, 5, 11, 7, 59, 0));
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '07:59', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    const { log, overtimeRequest } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('07:59');
+    expect(log.status).toBe('present');
+    expect(submitRequest).toHaveBeenCalled();
+    expect(overtimeRequest).not.toBeNull();
+  });
+
+  it('#7: exactly shiftEnd (18:00) — not overtime; status late', async () => {
+    const { isOvertimeTime, checkIn } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    expect(isOvertimeTime(18 * 60, shift9to6, workingDayDow)).toBe(false);
+
+    setNowFn(() => new Date(2025, 5, 11, 18, 0, 0));
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '18:00', check_out_time: null, status: 'late' },
+      error: null,
+    });
+    const { log } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('18:00');
+    expect(log.status).toBe('late');
+    expect(submitRequest).not.toHaveBeenCalled();
+  });
+
+  it('#8: shiftEnd + 1min (18:01) — overtime; present + overtime request', async () => {
+    const { isOvertimeTime, checkIn } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    expect(isOvertimeTime(18 * 60 + 1, shift9to6, workingDayDow)).toBe(true);
+
+    setNowFn(() => new Date(2025, 5, 11, 18, 1, 0));
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '18:01', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    const { log, overtimeRequest } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('18:01');
+    expect(log.status).toBe('present');
+    expect(submitRequest).toHaveBeenCalled();
+    expect(overtimeRequest).not.toBeNull();
+  });
+
+  it('#9: exactly midnight (00:00) — overtime; present + overtime request', async () => {
+    const { isOvertimeTime, checkIn } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    expect(isOvertimeTime(0, shift9to6, workingDayDow)).toBe(true);
+
+    setNowFn(() => new Date(2025, 5, 11, 0, 0, 0));
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '00:00', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    const { log, overtimeRequest } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('00:00');
+    expect(log.status).toBe('present');
+    expect(submitRequest).toHaveBeenCalled();
+    expect(overtimeRequest).not.toBeNull();
+  });
+
+  it('#10: 23:59 — overtime; present + overtime request', async () => {
+    const { isOvertimeTime, checkIn } = await import('./attendance.service');
+    const { submitRequest } = await import('./requests.service');
+    vi.mocked(submitRequest).mockClear();
+
+    expect(isOvertimeTime(23 * 60 + 59, shift9to6, workingDayDow)).toBe(true);
+
+    setNowFn(() => new Date(2025, 5, 11, 23, 59, 0));
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: policy9to6, error: null });
+    sb.queueResult({
+      data: { ...baseLog, id: 'log1', check_in_time: '23:59', check_out_time: null, status: 'present' },
+      error: null,
+    });
+    const { log, overtimeRequest } = await checkIn('u1');
+
+    expect(log.check_in_time).toBe('23:59');
+    expect(log.status).toBe('present');
+    expect(submitRequest).toHaveBeenCalled();
+    expect(overtimeRequest).not.toBeNull();
+  });
+});
