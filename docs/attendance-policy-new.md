@@ -32,13 +32,15 @@ Given a shift of **9:00 AM – 6:00 PM** with a **15 min grace period** and a **
 
 Note: Overtime uses a strict `>` comparison against shift end. A punch at exactly 6:00 PM is still within the shift (late zone), while 6:01 PM is overtime. Example: if someone punches out at 6:10 PM, then punches back in at 6:12 PM, that 6:12 PM punch-in is an overtime session.
 
-| Time Window | Zone | Punch-In Status |
-|---|---|---|
-| 12:00 AM – 7:59 AM | Overtime (before early login window) | `present` + overtime flag |
-| 8:00 AM – 8:59 AM | Early login (within configurable window before shift) | `present` (on time) |
-| 9:00 AM – 9:15 AM | Within grace period | `present` (on time) |
-| 9:16 AM – 6:00 PM | After grace, during/at end of shift | `late` |
-| 6:01 PM – 11:59 PM | Overtime (after shift end) | `present` + overtime flag |
+| Time Window | Zone | Session `status` | `is_overtime` |
+|---|---|---|---|
+| 12:00 AM – 7:59 AM | Overtime (before early login window) | `present` | `true` |
+| 8:00 AM – 8:59 AM | Early login (within configurable window before shift) | `present` | `false` |
+| 9:00 AM – 9:15 AM | Within grace period | `present` | `false` |
+| 9:16 AM – 6:00 PM | After grace, during/at end of shift | `late` | `false` |
+| 6:01 PM – 11:59 PM | Overtime (after shift end) | `present` | `true` |
+
+> **Important:** The session-level `status` and `is_overtime` flag describe only that individual punch-in. They do **not** determine whether the employee fulfilled their regular shift. The day-level verdict — including whether the employee counts as truly present — is determined by `effective_status` on the daily summary, which requires at least one non-overtime session to produce `present` or `late`.
 
 The early login window duration is configurable per organization via `early_login_minutes` in the attendance policy. The value `60` above is the default.
 
@@ -78,14 +80,21 @@ The daily summary is recalculated each time a session is created, updated, or cl
 
 ## Daily Status Resolution
 
-The `effective_status` on the daily summary is resolved using the following priority (highest first):
+The `effective_status` on the daily summary reflects whether the employee fulfilled their regular shift that day. **Overtime sessions are excluded from this determination** — they are tracked separately via `is_overtime` and `total_overtime_minutes` but have no bearing on `effective_status`.
 
-1. **`on_leave`** — An approved leave record exists covering this date. This takes absolute priority.
-2. **`late`** — At least one non-overtime session has `status = 'late'` (the employee's first regular-hours arrival was late).
-3. **`present`** — At least one session exists and the employee was on time.
-4. **`absent`** — It is a past working day and no sessions exist.
+Priority order (highest first):
 
-Weekend/off-days with no sessions have no status (they are simply off-days). Weekend/off-days with sessions are shown as overtime days.
+1. **`on_leave`** — An approved leave record exists covering this date. This takes absolute priority, regardless of whether the employee punched in.
+2. **`late`** — At least one **non-overtime** session has `status = 'late'` and no non-overtime `present` session exists. The employee arrived during their shift but after the grace period.
+3. **`present`** — At least one **non-overtime** session has `status = 'present'`. The employee arrived on time during their regular shift hours.
+4. **`overtime_only`** — Sessions exist for the day, but **all** of them are overtime sessions (`is_overtime = true`). The employee did not work during their regular shift hours.
+5. **`absent`** — It is a past working day and no sessions exist at all.
+
+> **Key principle:** `present` and `late` can only result from non-overtime sessions. An employee who exclusively worked overtime hours — whether before the early login window, after shift end, or on an off-day — is **not** considered present for their regular shift.
+
+Working day with only overtime sessions → `overtime_only` (not `present`, not `absent`).
+
+Off-days with no sessions have no `effective_status` (they are simply off-days). Off-days with sessions are shown as overtime days on the calendar; no `effective_status` is set since there is no shift to fulfill.
 
 ---
 
@@ -101,14 +110,17 @@ Evaluated at check-in time in this order:
 
 Overtime punches are **never** tagged as `late`. The overtime check runs first and is conclusive.
 
-### Status Values (Daily Summary)
+Note: The session `status` field uses `present` for both on-time and overtime punch-ins because, at the session level, the employee did show up — the `is_overtime` flag is what distinguishes the two cases. The day-level `effective_status` is where the full picture (shift fulfillment) is assessed.
+
+### Status Values (Daily Summary — `effective_status`)
 
 | Status | Meaning |
 |---|---|
-| `present` | At least one on-time session exists |
-| `late` | First regular-hours session was after grace period |
-| `absent` | Past working day with no sessions |
-| `on_leave` | Approved leave covers this date |
+| `present` | At least one non-overtime session with `status = 'present'` exists. Employee arrived on time during regular shift hours. |
+| `late` | At least one non-overtime session with `status = 'late'` exists, and no non-overtime `present` session exists. Employee arrived during shift hours but after the grace period. |
+| `overtime_only` | Sessions exist, but all are overtime (`is_overtime = true`). Employee did not work during regular shift hours. |
+| `absent` | Past working day with no sessions at all. |
+| `on_leave` | Approved leave covers this date. Takes priority over all other statuses. |
 
 ### Flags (Session & Daily)
 
@@ -228,10 +240,11 @@ Once checked out (no active session), the display shows "إجمالي ساعات
 
 - **Present** (green): `effective_status = 'present'`
 - **Late** (amber): `effective_status = 'late'`
+- **Overtime Only** (purple): `effective_status = 'overtime_only'` — employee worked but not during regular shift hours
 - **Absent** (red): `effective_status = 'absent'` or past working day with no sessions
 - **On Leave** (blue): `effective_status = 'on_leave'`
 - **Weekend/Off** (no indicator): Day is in the employee's `weeklyOffDays` with no sessions
-- **Overtime on off-day** (green with overtime badge): Off-day but sessions exist (all overtime)
+- **Overtime on off-day** (purple with overtime badge): Off-day but sessions exist (all overtime); no `effective_status` is set since it is not a working day
 - **Future** (no indicator): Date is after today
 
 Weekend detection uses the employee's actual `weeklyOffDays` (from their custom schedule or org policy), not hardcoded days.
@@ -307,14 +320,14 @@ The audit log is append-only. Rows are never updated or deleted. It provides a c
 | Scenario | Behavior |
 |---|---|
 | Overnight overtime (2 AM punch-in) | Allowed. Classified as overtime on the current calendar date. Confirmation shown. |
-| Employee late at 9:30 on a 9:00 shift (15 min grace) | Tagged `late`. |
-| Employee punches in at 9:14 on a 9:00 shift (15 min grace) | Tagged `present` (within grace). |
+| Employee late at 9:30 on a 9:00 shift (15 min grace) | Session tagged `late`, `is_overtime = false`. `effective_status = 'late'`. |
+| Employee punches in at 9:14 on a 9:00 shift (15 min grace) | Session tagged `present`, `is_overtime = false`. `effective_status = 'present'`. |
 | Employee punches in at exactly 9:15 | Tagged `present` (grace period is inclusive: `<=`). |
 | Employee punches in at 9:16 | Tagged `late` (first minute after grace). |
-| Didn't work regular shift, comes in at 8 PM | Overtime session created. Daily effective status = `present` (overtime attendance counts). |
-| Non-working day punch-in | All sessions = overtime. Confirmation shown. Daily shown as overtime day. |
-| Works 8 AM – 12 PM, returns 2 PM – 6 PM | Two sessions. Total = 8 hours. Daily status based on first session's arrival classification. |
-| Works regular shift, leaves, returns at 8 PM | Regular session + overtime session. Both preserved, and the overtime session triggers an auto overtime request. |
+| Didn't work regular shift, comes in at 8 PM | Overtime session created. `effective_status = 'overtime_only'` — the employee did not fulfill their regular shift. |
+| Non-working day punch-in | All sessions are overtime. Confirmation shown. Calendar shows overtime day. No `effective_status` set (it is not a working day). |
+| Works 8 AM – 12 PM, returns 2 PM – 6 PM | Two non-overtime sessions. `effective_status` based on first session's arrival classification (`present` or `late`). |
+| Works regular shift, leaves, returns at 8 PM | Regular session + overtime session. `effective_status` is determined by the regular session alone (`present` or `late`). The overtime session contributes only to `total_overtime_minutes`. |
 | Works until 6:10 PM, punches out, punches in again at 6:12 PM | 6:12 PM punch-in is overtime (`> shiftEnd`). A new overtime session is created and an overtime request is auto-created. |
 | Forgets to check out, auto-punch-out fires | Only regular sessions are auto-closed, at the job trigger time. Overtime sessions are excluded. Flagged `needs_review`. |
 | Manager corrects auto-punch-out time | Session updated, audit log records old and new values. Daily summary recalculated. |
