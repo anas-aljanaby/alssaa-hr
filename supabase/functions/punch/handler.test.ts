@@ -44,6 +44,16 @@ type EdgeCase = {
   note: string;
 };
 
+type OffDayCase = {
+  id: string;
+  date: string;
+  punchInTime: string;
+  workDays: number[];
+  expectedStatus: 'present' | 'late';
+  expectedIsOvertime: boolean;
+  note: string;
+};
+
 function edgeCaseDeps(
   opts: {
     userId?: string;
@@ -141,6 +151,36 @@ async function runPunchInEdgeCase(tc: EdgeCase): Promise<void> {
       method: 'POST',
       headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'check_in', devOverrideTime: `2025-06-01T${tc.punchInTime}:00.000Z` }),
+    }),
+    deps
+  );
+
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { status?: string; is_overtime?: boolean };
+  const inserted = getLastInsert() as { status?: string; is_overtime?: boolean } | null;
+
+  assertEquals(body.status, tc.expectedStatus);
+  assertEquals(inserted?.status, tc.expectedStatus);
+  assertEquals(Boolean(body.is_overtime), tc.expectedIsOvertime);
+  assertEquals(Boolean(inserted?.is_overtime), tc.expectedIsOvertime);
+}
+
+async function runOffDayPunchInCase(tc: OffDayCase): Promise<void> {
+  const { deps, getLastInsert } = edgeCaseDeps({
+    profile: {
+      org_id: 'o1',
+      work_days: tc.workDays,
+      work_start_time: '09:00',
+      work_end_time: '18:00',
+    },
+    policy: { work_start_time: '09:00', grace_period_minutes: 15 },
+  });
+
+  const res = await handlePunch(
+    new Request('http://x', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'check_in', devOverrideTime: `${tc.date}T${tc.punchInTime}:00` }),
     }),
     deps
   );
@@ -400,5 +440,68 @@ const punchInEdgeCases: EdgeCase[] = [
 for (const tc of punchInEdgeCases) {
   Deno.test(`edge case ${tc.id} check_in ${tc.punchInTime} -> ${tc.expectedStatus} (overtime=${tc.expectedIsOvertime})`, async () => {
     await runPunchInEdgeCase(tc);
+  });
+}
+
+const nonWorkingDayCases: OffDayCase[] = [
+  {
+    id: '2.1',
+    date: '2025-06-06',
+    punchInTime: '10:00',
+    workDays: [0, 1, 2, 3, 4],
+    expectedStatus: 'present',
+    expectedIsOvertime: true,
+    note: 'Friday off-day punch-in',
+  },
+  {
+    id: '2.2',
+    date: '2025-06-07',
+    punchInTime: '09:00',
+    workDays: [0, 1, 2, 3, 4],
+    expectedStatus: 'present',
+    expectedIsOvertime: true,
+    note: 'Saturday off-day punch-in',
+  },
+  {
+    id: '2.3',
+    date: '2025-06-06',
+    punchInTime: '08:00',
+    workDays: [0, 1, 2, 3, 4],
+    expectedStatus: 'present',
+    expectedIsOvertime: true,
+    note: 'Friday off-day early punch-in',
+  },
+  {
+    id: '2.4',
+    date: '2025-06-06',
+    punchInTime: '00:01',
+    workDays: [0, 1, 2, 3, 4],
+    expectedStatus: 'present',
+    expectedIsOvertime: true,
+    note: 'Friday off-day very early punch-in',
+  },
+  {
+    id: '2.5',
+    date: '2025-06-06',
+    punchInTime: '23:59',
+    workDays: [0, 1, 2, 3, 4],
+    expectedStatus: 'present',
+    expectedIsOvertime: true,
+    note: 'Friday off-day end-of-day punch-in',
+  },
+  {
+    id: '2.6',
+    date: '2025-06-09',
+    punchInTime: '10:00',
+    workDays: [0, 2, 3, 4, 5, 6],
+    expectedStatus: 'present',
+    expectedIsOvertime: true,
+    note: 'Custom user off-day punch-in',
+  },
+];
+
+for (const tc of nonWorkingDayCases) {
+  Deno.test(`edge case ${tc.id} non-working-day check_in ${tc.date} ${tc.punchInTime} -> ${tc.expectedStatus} (overtime=${tc.expectedIsOvertime})`, async () => {
+    await runOffDayPunchInCase(tc);
   });
 }

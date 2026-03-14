@@ -52,18 +52,18 @@ This document tracks planned test cases and edge cases in English.
 
 | # | Implemented | Day | Punch-In Time | Expected status | Expected `is_overtime` | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2.1 | [ ] | Friday (off-day) | 10:00 | `present` | `true` | Non-working day punch |
-| 2.2 | [ ] | Saturday (off-day) | 09:00 | `present` | `true` | Non-working day punch |
-| 2.3 | [ ] | Friday (off-day) | 08:00 | `present` | `true` | Early off-day punch |
-| 2.4 | [ ] | Friday (off-day) | 00:01 | `present` | `true` | Very early off-day punch |
-| 2.5 | [ ] | Friday (off-day) | 23:59 | `present` | `true` | End-of-day off-day punch |
-| 2.6 | [ ] | Custom off-day (per-user) | 10:00 | `present` | `true` | User-specific non-working day |
+| 2.1 | [x] | Friday (off-day) | 10:00 | `present` | `true` | Non-working day punch |
+| 2.2 | [x] | Saturday (off-day) | 09:00 | `present` | `true` | Non-working day punch |
+| 2.3 | [x] | Friday (off-day) | 08:00 | `present` | `true` | Early off-day punch |
+| 2.4 | [x] | Friday (off-day) | 00:01 | `present` | `true` | Very early off-day punch |
+| 2.5 | [x] | Friday (off-day) | 23:59 | `present` | `true` | End-of-day off-day punch |
+| 2.6 | [x] | Custom off-day (per-user) | 10:00 | `present` | `true` | User-specific non-working day |
 
 ### 2.2 Confirmation Dialog (Non-Working Day)
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 2.2.1 | [ ] | Any non-working-day punch attempt | Confirmation dialog is shown before submission | Applies to weekly off-days and custom per-user off-days |
+| 2.2.1 | [x] | Any non-working-day punch attempt | Confirmation dialog is shown before submission | Applies to weekly off-days and custom per-user off-days |
 
 ## 3. Multi-Session - Basic
 
