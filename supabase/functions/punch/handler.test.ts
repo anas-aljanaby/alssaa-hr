@@ -505,3 +505,259 @@ for (const tc of nonWorkingDayCases) {
     await runOffDayPunchInCase(tc);
   });
 }
+
+type SessionStep = { action: 'check_in' | 'check_out'; at: string };
+
+type Part3Case = {
+  id: string;
+  date: string;
+  steps: SessionStep[];
+  expectedSessionCount: number;
+  expectedTotalWorkMinutes?: number;
+  expectedFirstCheckIn?: string;
+  expectedLastCheckOut?: string;
+  expectedSessionStatuses?: Array<'present' | 'late'>;
+  expectedSessionOvertimeFlags?: boolean[];
+};
+
+function hhmmToMin(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function multiSessionDeps(
+  opts: {
+    profile?: { org_id: string; work_days: number[] | null; work_start_time: string; work_end_time: string };
+    policy?: { work_start_time: string; grace_period_minutes: number };
+    date?: string;
+    userId?: string;
+  } = {}
+): { deps: PunchDeps; getInserted: () => Array<Record<string, unknown>>; getCurrentLog: () => Record<string, unknown> | null } {
+  const profile = opts.profile ?? { org_id: 'o1', work_days: null, work_start_time: '09:00', work_end_time: '18:00' };
+  const policy = opts.policy ?? { work_start_time: '09:00', grace_period_minutes: 15 };
+  const date = opts.date ?? '2025-06-10';
+  const userId = opts.userId ?? 'u1';
+
+  let currentLog: Record<string, unknown> | null = null;
+  const inserted: Array<Record<string, unknown>> = [];
+
+  const admin: PunchServiceClient = {
+    from: (table: string) => {
+      let op: 'select' | 'insert' | 'update' = 'select';
+      let payload: Record<string, unknown> | null = null;
+
+      const chain = {
+        select: () => chain,
+        insert: (v: unknown) => {
+          op = 'insert';
+          payload = (v ?? null) as Record<string, unknown> | null;
+          return chain;
+        },
+        update: (v: unknown) => {
+          op = 'update';
+          payload = (v ?? null) as Record<string, unknown> | null;
+          return chain;
+        },
+        upsert: () => chain,
+        delete: () => chain,
+        eq: () => chain,
+        not: () => chain,
+        neq: () => chain,
+        in: () => chain,
+        gte: () => chain,
+        lte: () => chain,
+        order: () => chain,
+        limit: () => chain,
+        range: () => chain,
+        maybeSingle: () => chain,
+        single: () => chain,
+        is: () => chain,
+        then: <TResult1 = QResult, TResult2 = never>(
+          onF?: ((v: QResult) => TResult1 | PromiseLike<TResult1>) | null,
+          onR?: ((e: unknown) => TResult2 | PromiseLike<TResult2>) | null
+        ): PromiseLike<TResult1 | TResult2> => {
+          let result: QResult = { data: null, error: null };
+
+          if (table === 'profiles') {
+            result = { data: profile, error: null };
+          } else if (table === 'attendance_policy') {
+            result = { data: policy, error: null };
+          } else if (table === 'attendance_logs' && op === 'select') {
+            result = { data: currentLog, error: null };
+          } else if (table === 'attendance_logs' && op === 'insert') {
+            currentLog = {
+              id: `p3-${inserted.length + 1}`,
+              org_id: profile.org_id,
+              user_id: userId,
+              date,
+              ...(payload ?? {}),
+            };
+            inserted.push(currentLog);
+            result = { data: currentLog, error: null };
+          } else if (table === 'attendance_logs' && op === 'update') {
+            currentLog = { ...(currentLog ?? { id: 'p3-0', org_id: profile.org_id, user_id: userId, date }), ...(payload ?? {}) };
+            result = { data: currentLog, error: null };
+          }
+
+          return Promise.resolve(result).then(onF ?? undefined, onR ?? undefined);
+        },
+      };
+
+      return chain;
+    },
+  };
+
+  return {
+    deps: {
+      getEnv: () => ({ ...baseEnv, isProduction: false }),
+      createUserClient: () => ({
+        auth: {
+          getUser: async () => ({
+            data: { user: { id: userId } },
+            error: null,
+          }),
+        },
+      }),
+      createServiceClient: () => admin,
+    },
+    getInserted: () => inserted,
+    getCurrentLog: () => currentLog,
+  };
+}
+
+async function runPart3Steps(deps: PunchDeps, date: string, steps: SessionStep[]): Promise<void> {
+  for (const s of steps) {
+    await handlePunch(
+      new Request('http://x', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: s.action, devOverrideTime: `${date}T${s.at}:00.000Z` }),
+      }),
+      deps
+    );
+  }
+}
+
+const part3Cases: Part3Case[] = [
+  {
+    id: '3.1',
+    date: '2025-06-10', // Tuesday (working day)
+    steps: [
+      { action: 'check_in', at: '08:30' },
+      { action: 'check_out', at: '12:00' },
+      { action: 'check_in', at: '13:00' },
+      { action: 'check_out', at: '18:00' },
+    ],
+    expectedSessionCount: 2,
+    expectedTotalWorkMinutes: 510,
+    expectedFirstCheckIn: '08:30',
+    expectedLastCheckOut: '18:00',
+  },
+  {
+    id: '3.2',
+    date: '2025-06-10', // Tuesday (working day)
+    steps: [
+      { action: 'check_in', at: '09:30' },
+      { action: 'check_out', at: '13:00' },
+      { action: 'check_in', at: '14:00' },
+      { action: 'check_out', at: '18:30' },
+    ],
+    expectedSessionCount: 2,
+    expectedFirstCheckIn: '09:30',
+    expectedLastCheckOut: '18:30',
+    expectedSessionStatuses: ['late', 'late'],
+  },
+  {
+    id: '3.3',
+    date: '2025-06-10', // Tuesday (working day)
+    steps: [
+      { action: 'check_in', at: '09:00' },
+      { action: 'check_out', at: '18:10' },
+      { action: 'check_in', at: '18:12' },
+    ],
+    expectedSessionCount: 2,
+    expectedFirstCheckIn: '09:00',
+    expectedSessionStatuses: ['present', 'present'],
+    expectedSessionOvertimeFlags: [false, true],
+  },
+  {
+    id: '3.4',
+    date: '2025-06-06', // Friday (off-day)
+    steps: [
+      { action: 'check_in', at: '10:00' },
+      { action: 'check_out', at: '13:00' },
+      { action: 'check_in', at: '15:00' },
+      { action: 'check_out', at: '19:00' },
+    ],
+    expectedSessionCount: 2,
+    expectedTotalWorkMinutes: 420,
+  },
+  {
+    id: '3.5',
+    date: '2025-06-10', // Tuesday (working day)
+    steps: [{ action: 'check_in', at: '20:00' }],
+    expectedSessionCount: 1,
+    expectedSessionStatuses: ['present'],
+    expectedSessionOvertimeFlags: [true],
+  },
+  {
+    id: '3.6',
+    date: '2025-06-10', // Tuesday (working day)
+    steps: [
+      { action: 'check_in', at: '08:30' },
+      { action: 'check_out', at: '10:00' },
+      { action: 'check_in', at: '11:00' },
+      { action: 'check_out', at: '13:00' },
+      { action: 'check_in', at: '14:00' },
+      { action: 'check_out', at: '17:00' },
+    ],
+    expectedSessionCount: 3,
+    expectedTotalWorkMinutes: 390,
+    expectedFirstCheckIn: '08:30',
+    expectedLastCheckOut: '17:00',
+  },
+];
+
+for (const tc of part3Cases) {
+  Deno.test(`part 3 ${tc.id} multi-session contract`, async () => {
+    const { deps, getInserted, getCurrentLog } = multiSessionDeps({
+      date: tc.date,
+    });
+
+    await runPart3Steps(deps, tc.date, tc.steps);
+
+    const inserted = getInserted();
+    const currentLog = getCurrentLog();
+
+    assertEquals(inserted.length, tc.expectedSessionCount);
+
+    if (tc.expectedFirstCheckIn) {
+      assertEquals((inserted[0] as { check_in_time?: string } | undefined)?.check_in_time, tc.expectedFirstCheckIn);
+    }
+
+    if (tc.expectedLastCheckOut) {
+      assertEquals((currentLog as { check_out_time?: string } | null)?.check_out_time, tc.expectedLastCheckOut);
+    }
+
+    if (typeof tc.expectedTotalWorkMinutes === 'number') {
+      const checkIn = (currentLog as { check_in_time?: string } | null)?.check_in_time;
+      const checkOut = (currentLog as { check_out_time?: string } | null)?.check_out_time;
+      const totalWorkMinutes = checkIn && checkOut ? hhmmToMin(checkOut) - hhmmToMin(checkIn) : 0;
+      assertEquals(totalWorkMinutes, tc.expectedTotalWorkMinutes);
+    }
+
+    if (tc.expectedSessionStatuses) {
+      const actualStatuses = inserted.map((r) => r.status) as Array<'present' | 'late' | undefined>;
+      for (let i = 0; i < tc.expectedSessionStatuses.length; i++) {
+        assertEquals(actualStatuses[i], tc.expectedSessionStatuses[i]);
+      }
+    }
+
+    if (tc.expectedSessionOvertimeFlags) {
+      const actualOvertime = inserted.map((r) => r.is_overtime);
+      for (let i = 0; i < tc.expectedSessionOvertimeFlags.length; i++) {
+        assertEquals(Boolean(actualOvertime[i]), tc.expectedSessionOvertimeFlags[i]);
+      }
+    }
+  });
+}

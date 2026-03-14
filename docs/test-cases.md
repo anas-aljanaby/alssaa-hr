@@ -80,13 +80,13 @@ Expected daily summary:
 
 | # | Implemented | Field | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.1.1 | [ ] | `total_work_minutes` | `510` | 210 + 300 |
-| 3.1.2 | [ ] | `total_overtime_minutes` | `0` | No overtime sessions |
-| 3.1.3 | [ ] | `effective_status` | `present` | Day is valid and worked |
-| 3.1.4 | [ ] | `session_count` | `2` | Two completed sessions |
-| 3.1.5 | [ ] | `first_check_in` | `08:30` | First session check-in |
-| 3.1.6 | [ ] | `last_check_out` | `18:00` | Last session check-out |
-| 3.1.7 | [ ] | `is_short_day` | `false` | 510 min = 8.5 h, above 8 h minimum |
+| 3.1.1 | [x] | `total_work_minutes` | `510` | 210 + 300 |
+| 3.1.2 | [x] | `total_overtime_minutes` | `0` | No overtime sessions |
+| 3.1.3 | [x] | `effective_status` | `present` | Day is valid and worked |
+| 3.1.4 | [x] | `session_count` | `2` | Two completed sessions |
+| 3.1.5 | [x] | `first_check_in` | `08:30` | First session check-in |
+| 3.1.6 | [x] | `last_check_out` | `18:00` | Last session check-out |
+| 3.1.7 | [x] | `is_short_day` | `false` | 510 min = 8.5 h, above 8 h minimum |
 
 ### 3.2 Late First Session, On-Time Return
 
@@ -99,8 +99,8 @@ Scenario: Punches in at 09:30 (late), out at 13:00, returns at 14:00, out at 18:
 
 | # | Implemented | Assertion | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.2.1 | [ ] | Session classification rule | Independent per session | Each session classified by its own check-in |
-| 3.2.2 | [ ] | `effective_status` | `late` | At least one non-overtime session is `late` |
+| 3.2.1 | [x] | Session classification rule | Independent per session | Each session classified by its own check-in |
+| 3.2.2 | [x] | `effective_status` | `late` | At least one non-overtime session is `late` |
 
 ### 3.3 Regular Session + Post-Shift Overtime Session
 
@@ -113,9 +113,9 @@ Scenario: Works 09:00 - 18:10, punches out, then punches back in at 18:12.
 
 | # | Implemented | Assertion | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.3.1 | [ ] | Overtime threshold | `18:12 > 18:00` => overtime | Session 2 is overtime session |
-| 3.3.2 | [ ] | Overtime request creation | Auto-created for session 2 | Separate overtime workflow trigger |
-| 3.3.3 | [ ] | `effective_status` | `present` | Session 1 is regular and on time |
+| 3.3.1 | [x] | Overtime threshold | `18:12 > 18:00` => overtime | Session 2 is overtime session |
+| 3.3.2 | [x] | Overtime request creation | Auto-created for session 2 | Separate overtime workflow trigger |
+| 3.3.3 | [x] | `effective_status` | `present` | Session 1 is regular and on time |
 
 ### 3.4 Off-Day With Multiple Overtime Sessions
 
@@ -130,12 +130,12 @@ Expected daily summary:
 
 | # | Implemented | Field / Assertion | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.4.1 | [ ] | `total_work_minutes` | `420` | 180 + 240 |
-| 3.4.2 | [ ] | `total_overtime_minutes` | `420` | All worked minutes are overtime |
-| 3.4.3 | [ ] | `effective_status` | `present` | Overtime attendance counts |
-| 3.4.4 | [ ] | `session_count` | `2` | Two completed sessions |
-| 3.4.5 | [ ] | Calendar display | Overtime day | Not absent, not off |
-| 3.4.6 | [ ] | Overtime requests | Separate request per session | Both sessions generate overtime requests |
+| 3.4.1 | [x] | `total_work_minutes` | `420` | 180 + 240 |
+| 3.4.2 | [x] | `total_overtime_minutes` | `420` | All worked minutes are overtime |
+| 3.4.3 | [x] | `effective_status` | `present` | Overtime attendance counts |
+| 3.4.4 | [x] | `session_count` | `2` | Two completed sessions |
+| 3.4.5 | [x] | Calendar display | Overtime day | Not absent, not off |
+| 3.4.6 | [x] | Overtime requests | Separate request per session | Both sessions generate overtime requests |
 
 ### 3.5 No Regular Session - Only Comes In for Overtime After Shift End
 
@@ -149,9 +149,9 @@ Expected daily summary:
 
 | # | Implemented | Field / Assertion | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.5.1 | [ ] | `effective_status` | `present` | Overtime punch counts as attendance |
-| 3.5.2 | [ ] | Attendance flag | Not absent | Day should not be marked absent |
-| 3.5.3 | [ ] | Calendar display | Present / overtime badge | Calendar dot shows attendance |
+| 3.5.1 | [x] | `effective_status` | `present` | Overtime punch counts as attendance |
+| 3.5.2 | [x] | Attendance flag | Not absent | Day should not be marked absent |
+| 3.5.3 | [x] | Calendar display | Present / overtime badge | Calendar dot shows attendance |
 
 ### 3.6 Many Sessions - Sum Correctness
 
@@ -167,6 +167,33 @@ Expected daily summary:
 
 | # | Implemented | Field | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.6.1 | [ ] | `total_work_minutes` | `390` | 90 + 120 + 180 |
-| 3.6.2 | [ ] | `is_short_day` | `true` | 390 min = 6.5 h, below 8 h minimum |
-| 3.6.3 | [ ] | `session_count` | `3` | Three completed sessions |
+| 3.6.1 | [x] | `total_work_minutes` | `390` | 90 + 120 + 180 |
+| 3.6.2 | [x] | `is_short_day` | `true` | 390 min = 6.5 h, below 8 h minimum |
+| 3.6.3 | [x] | `session_count` | `3` | Three completed sessions |
+
+## 4. Daily Summary — Effective Status Resolution
+
+Priority order: `on_leave` > `late` > `present` > `absent`
+
+Notes / definitions used by these test cases:
+- `on_leave` applies only when leave is approved for the day (`Yes (approved)`).
+- `late` applies when there is at least one *non-overtime* late session and no approved leave for the day.
+- `present` applies when there is attendance (including overtime-only days), and the above priority rules do not produce `late` or `on_leave`.
+- Off-day (non-working day) behavior:
+  - With sessions: expect `present` even if the sessions are overtime.
+  - Without sessions: expect no attendance status (must not be `absent`).
+
+| # | Sessions | Leave? | Expected effective_status | Notes |
+| --- | --- | --- | --- | --- |
+| 4.1 | None | Yes (approved) | `on_leave` | Leave takes absolute priority over attendance classification |
+| 4.2 | One late session | Yes (approved) | `on_leave` | `on_leave` priority over `late` |
+| 4.3 | One present session | No | `present` | Regular attendance yields `present` when nothing else applies |
+| 4.4 | One late session | No | `late` | Late (non-overtime) beats `present` |
+| 4.5 | One present + one late (non-overtime) | No | `late` | Presence exists, but `late` exists too |
+| 4.6 | One present (overtime) + one late (non-overtime) | No | `late` | Late non-overtime exists, so result should still be `late` |
+| 4.7 | Only overtime sessions | No | `present` | No non-overtime late exists => treat as attendance (`present`) |
+| 4.8 | None, past working day | No | `absent` | Past working day with no sessions => absent |
+| 4.9 | None, today (not yet EOD) | No | `absent` (or not yet determined — verify behavior) | Check whether the system should still return `absent` or a non-final state before end-of-day |
+| 4.10 | None, off-day | No | No status (not absent) | Off-day without sessions should not be classified as `absent` |
+| 4.11 | Sessions on off-day (all overtime) | No | `present` | Off-day attendance (overtime-only) still counts as `present` |
+
