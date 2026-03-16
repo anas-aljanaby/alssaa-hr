@@ -20,6 +20,8 @@ const STATUS_LABELS: Record<string, string> = {
   late: 'متأخر',
   absent: 'غائب',
   on_leave: 'إجازة',
+  overtime_only: 'عمل إضافي فقط',
+  overtime_offday: 'عمل إضافي (يوم عطلة)',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -27,6 +29,8 @@ const STATUS_COLORS: Record<string, string> = {
   late: 'bg-amber-100 text-amber-700 border-amber-200',
   absent: 'bg-red-100 text-red-700 border-red-200',
   on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
+  overtime_only: 'bg-violet-100 text-violet-700 border-violet-200',
+  overtime_offday: 'bg-violet-100 text-violet-700 border-violet-200',
 };
 
 function formatDateAr(dateStr: string): string {
@@ -98,6 +102,10 @@ export function DayDetailsSheet({ userId, date, onClose }: Props) {
   }, [userId, date]);
 
   const open = !!date;
+  const displayStatus = record?.summary?.effective_status
+    ?? (((record?.summary?.session_count ?? 0) > 0 && !record?.summary?.effective_status) ? 'overtime_offday' : record?.log?.status);
+
+  const sessionMap = new Map((record?.sessions ?? []).map((s) => [s.id, s]));
 
   return (
     <Drawer open={open} onOpenChange={(o) => { if (!o) onClose(); }} direction="bottom">
@@ -127,9 +135,9 @@ export function DayDetailsSheet({ userId, date, onClose }: Props) {
 
               {/* Status + total hours */}
               <div className="flex items-center gap-3 mb-4">
-                {record.log?.status && (
-                  <span className={`px-2.5 py-1 text-xs rounded-full border ${STATUS_COLORS[record.log.status] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                    {STATUS_LABELS[record.log.status] ?? record.log.status}
+                {displayStatus && (
+                  <span className={`px-2.5 py-1 text-xs rounded-full border ${STATUS_COLORS[displayStatus] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                    {STATUS_LABELS[displayStatus] ?? displayStatus}
                   </span>
                 )}
                 {record.totalMinutesWorked > 0 && (
@@ -148,14 +156,18 @@ export function DayDetailsSheet({ userId, date, onClose }: Props) {
                 </div>
               ) : (
                 <div>
-                  {record.punches.map((punch, i) => (
+                  {record.punches.map((punch, i) => {
+                      const sessionId = punch.id.replace(/-(in|out)$/, '');
+                      const session = sessionMap.get(sessionId);
+                      return (
                     <PunchRow
                       key={punch.id}
                       punch={punch}
                       isLast={i === record.punches.length - 1}
-                      isAutoPunchOut={punch.type === 'clock_out' ? record.log?.auto_punch_out : undefined}
+                      isAutoPunchOut={punch.type === 'clock_out' ? session?.is_auto_punch_out : undefined}
                     />
-                  ))}
+                      );
+                    })}
                 </div>
               )}
             </>

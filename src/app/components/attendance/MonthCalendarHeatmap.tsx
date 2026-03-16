@@ -27,6 +27,9 @@ function dotColor(status: MonthDaySummary['status']): string | null {
     case 'late': return 'bg-amber-500';
     case 'absent': return 'bg-red-500';
     case 'on_leave': return 'bg-blue-400';
+    case 'overtime_only':
+    case 'overtime_offday':
+      return 'bg-violet-500';
     case 'weekend':
     case 'future':
     case null: return null;
@@ -143,6 +146,7 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
         <LegendItem color="bg-amber-500" label="متأخر" />
         <LegendItem color="bg-red-500" label="غائب" />
         <LegendItem color="bg-blue-400" label="إجازة" />
+        <LegendItem color="bg-violet-500" label="عمل إضافي" />
       </div>
     </div>
   );

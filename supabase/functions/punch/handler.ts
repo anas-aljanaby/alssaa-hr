@@ -75,18 +75,239 @@ type ProfileRow = {
   work_end_time?: string | null;
 };
 
-type AttendanceLogRow = {
+type SessionRow = {
   id: string;
-  check_in_time?: string | null;
+  org_id?: string;
+  user_id?: string;
+  date?: string;
+  check_in_time: string;
   check_out_time?: string | null;
+  status: 'present' | 'late';
+  is_overtime: boolean;
+  duration_minutes?: number;
+  is_auto_punch_out?: boolean;
+  is_early_departure?: boolean;
+  needs_review?: boolean;
+  is_dev?: boolean;
 };
 
-type PolicyRow = { work_start_time?: string | null; grace_period_minutes?: number | null };
+type DailySummaryRow = {
+  id: string;
+  user_id: string;
+  date: string;
+  first_check_in: string | null;
+  last_check_out: string | null;
+  total_work_minutes: number;
+  total_overtime_minutes: number;
+  effective_status: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
+  is_short_day: boolean;
+  session_count: number;
+};
+
+type PolicyRow = {
+  work_start_time?: string | null;
+  work_end_time?: string | null;
+  grace_period_minutes?: number | null;
+  weekly_off_days?: number[] | null;
+  early_login_minutes?: number | null;
+  minimum_required_minutes?: number | null;
+};
+
+type ResolvedSchedule = {
+  hasShift: boolean;
+  isWorkingDay: boolean;
+  workStartTime: string | null;
+  workEndTime: string | null;
+  gracePeriodMinutes: number;
+  earlyLoginMinutes: number;
+  minimumRequiredMinutes: number | null;
+};
 
 function errMsg(e: unknown): string {
   return typeof e === 'object' && e !== null && 'message' in e && typeof (e as { message: unknown }).message === 'string'
     ? (e as { message: string }).message
     : 'Error';
+}
+
+function toMinutes(timeStr: string): number {
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function fromMinutes(min: number): number {
+  if (min < 0) return min + 1440;
+  if (min >= 1440) return min - 1440;
+  return min;
+}
+
+function diffMinutes(checkInTime: string, checkOutTime: string): number {
+  const minutes = toMinutes(checkOutTime) - toMinutes(checkInTime);
+  return minutes > 0 ? minutes : 0;
+}
+
+function resolveSchedule(profile: ProfileRow, policy: PolicyRow | null, date: Date): ResolvedSchedule {
+  const hasCustomSchedule =
+    Array.isArray(profile.work_days) &&
+    profile.work_days.length > 0 &&
+    !!profile.work_start_time &&
+    !!profile.work_end_time;
+
+  const workStartTime = hasCustomSchedule
+    ? profile.work_start_time ?? null
+    : policy?.work_start_time ?? null;
+  const workEndTime = hasCustomSchedule
+    ? profile.work_end_time ?? null
+    : policy?.work_end_time ?? null;
+
+  const hasShift = !!workStartTime && !!workEndTime;
+  const weekday = date.getDay();
+  const weeklyOffDays = hasCustomSchedule
+    ? [0, 1, 2, 3, 4, 5, 6].filter((d) => !(profile.work_days ?? []).includes(d))
+    : policy?.weekly_off_days ?? [5, 6];
+
+  const isWorkingDay = hasShift ? !weeklyOffDays.includes(weekday) : true;
+
+  return {
+    hasShift,
+    isWorkingDay,
+    workStartTime,
+    workEndTime,
+    gracePeriodMinutes: policy?.grace_period_minutes ?? 15,
+    earlyLoginMinutes: policy?.early_login_minutes ?? 60,
+    minimumRequiredMinutes: policy?.minimum_required_minutes ?? null,
+  };
+}
+
+function classifySessionCheckIn(
+  time: string,
+  schedule: ResolvedSchedule
+): { status: 'present' | 'late'; isOvertime: boolean } {
+  if (!schedule.hasShift) {
+    return { status: 'present', isOvertime: false };
+  }
+  if (!schedule.isWorkingDay) {
+    return { status: 'present', isOvertime: true };
+  }
+
+  const nowMinutes = toMinutes(time);
+  const shiftStartMinutes = toMinutes(schedule.workStartTime!);
+  const shiftEndMinutes = toMinutes(schedule.workEndTime!);
+  const earlyLoginStart = fromMinutes(shiftStartMinutes - schedule.earlyLoginMinutes);
+
+  if (nowMinutes < earlyLoginStart || nowMinutes > shiftEndMinutes) {
+    return { status: 'present', isOvertime: true };
+  }
+
+  if (nowMinutes > shiftStartMinutes + schedule.gracePeriodMinutes) {
+    return { status: 'late', isOvertime: false };
+  }
+
+  return { status: 'present', isOvertime: false };
+}
+
+async function hasApprovedLeaveForDate(
+  admin: PunchServiceClient,
+  userId: string,
+  dateStr: string
+): Promise<boolean> {
+  const dayStart = `${dateStr}T00:00:00`;
+  const dayEnd = `${dateStr}T23:59:59`;
+  const { data } = await admin
+    .from('leave_requests')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'approved')
+    .neq('type', 'overtime')
+    .lte('from_date_time', dayEnd)
+    .gte('to_date_time', dayStart)
+    .limit(1)
+    .maybeSingle();
+
+  return !!data;
+}
+
+function resolveEffectiveStatus(
+  sessions: SessionRow[],
+  isWorkingDay: boolean,
+  hasApprovedLeave: boolean,
+  isPastOrToday: boolean
+): DailySummaryRow['effective_status'] {
+  if (hasApprovedLeave) return 'on_leave';
+  if (!isWorkingDay) return null;
+
+  if (sessions.length === 0) {
+    return isPastOrToday ? 'absent' : null;
+  }
+
+  const nonOvertime = sessions.filter((s) => !s.is_overtime);
+  const hasPresent = nonOvertime.some((s) => s.status === 'present');
+  const hasLate = nonOvertime.some((s) => s.status === 'late');
+
+  if (hasLate && !hasPresent) return 'late';
+  if (hasPresent) return 'present';
+  if (sessions.every((s) => s.is_overtime)) return 'overtime_only';
+  return null;
+}
+
+export async function recalculateDailySummary(
+  admin: PunchServiceClient,
+  input: {
+    orgId: string;
+    userId: string;
+    dateStr: string;
+    schedule: ResolvedSchedule;
+  }
+): Promise<DailySummaryRow | null> {
+  const { orgId, userId, dateStr, schedule } = input;
+  const { data: sessionsRaw } = await admin
+    .from('attendance_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', dateStr)
+    .order('check_in_time', { ascending: true });
+
+  const sessions = (sessionsRaw ?? []) as SessionRow[];
+  const totalWorkMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+  const totalOvertimeMinutes = sessions
+    .filter((s) => s.is_overtime)
+    .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+  const firstCheckIn = sessions.length ? sessions[0].check_in_time : null;
+  const lastCheckOut = sessions
+    .filter((s) => !!s.check_out_time)
+    .map((s) => s.check_out_time as string)
+    .sort()
+    .at(-1) ?? null;
+  const hasApprovedLeave = await hasApprovedLeaveForDate(admin, userId, dateStr);
+  const todayDate = toDateStr(new Date());
+  const isPastOrToday = dateStr <= todayDate;
+  const effectiveStatus = resolveEffectiveStatus(sessions, schedule.isWorkingDay, hasApprovedLeave, isPastOrToday);
+  const isShortDay = schedule.minimumRequiredMinutes != null
+    ? totalWorkMinutes < schedule.minimumRequiredMinutes
+    : false;
+
+  const payload = {
+    org_id: orgId,
+    user_id: userId,
+    date: dateStr,
+    first_check_in: firstCheckIn,
+    last_check_out: lastCheckOut,
+    total_work_minutes: totalWorkMinutes,
+    total_overtime_minutes: totalOvertimeMinutes,
+    effective_status: effectiveStatus,
+    is_short_day: isShortDay,
+    session_count: sessions.length,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: summary, error } = await admin
+    .from('attendance_daily_summary')
+    .upsert(payload, { onConflict: 'user_id,date' })
+    .select('*')
+    .single();
+  if (error) {
+    throw error;
+  }
+  return summary as DailySummaryRow;
 }
 
 export async function handlePunch(req: Request, deps: PunchDeps): Promise<Response> {
@@ -110,7 +331,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       );
     }
 
-    const { supabaseUrl, supabaseAnonKey, serviceRoleKey, isProduction } = deps.getEnv();
+    const { isProduction } = deps.getEnv();
 
     const clientWithAuth = deps.createUserClient(authHeader);
     const { data: { user: caller } } = await clientWithAuth.auth.getUser();
@@ -165,83 +386,50 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const orgId = profile.org_id;
 
-    const { data: existingRaw } = await admin
-      .from('attendance_logs')
+    const { data: openSessionRaw } = await admin
+      .from('attendance_sessions')
       .select('*')
       .eq('user_id', caller.id)
       .eq('date', today)
+      .is('check_out_time', null)
+      .order('check_in_time', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
-    const existing = existingRaw as AttendanceLogRow | null;
+    const openSession = openSessionRaw as SessionRow | null;
+
+    const { data: policyRaw } = await admin
+      .from('attendance_policy')
+      .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days, early_login_minutes, minimum_required_minutes')
+      .eq('org_id', orgId)
+      .limit(1)
+      .maybeSingle();
+
+    const policy = policyRaw as PolicyRow | null;
+    const schedule = resolveSchedule(profile, policy, effectiveNow);
 
     if (action === 'check_in') {
-      if (existing?.check_in_time) {
+      if (openSession) {
         return new Response(
           JSON.stringify({ error: 'Already checked in today', code: 'ALREADY_CHECKED_IN' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      let status: 'present' | 'late' = 'present';
-      const hasCustomSchedule =
-        profile.work_days &&
-        (profile.work_days as number[]).length > 0 &&
-        profile.work_start_time &&
-        profile.work_end_time;
-
-      const { data: policyRaw } = await admin
-        .from('attendance_policy')
-        .select('work_start_time, grace_period_minutes')
-        .eq('org_id', orgId)
-        .limit(1)
-        .maybeSingle();
-
-      const policy = policyRaw as PolicyRow | null;
-      const workStartTime = hasCustomSchedule ? profile.work_start_time : policy?.work_start_time;
-      const grace = policy?.grace_period_minutes ?? 0;
-
-      if (workStartTime) {
-        const [startH, startM] = (workStartTime as string).split(':').map(Number);
-        const [nowH, nowM] = time.split(':').map(Number);
-        const startMinutes = startH * 60 + startM + grace;
-        const nowMinutes = nowH * 60 + nowM;
-        if (nowMinutes > startMinutes) status = 'late';
-      }
+      const classification = classifySessionCheckIn(time, schedule);
 
       const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
 
-      if (existing) {
-        const { data: updated, error } = await admin
-          .from('attendance_logs')
-          .update({
-            check_in_time: time,
-            status,
-            is_dev: isDev,
-          })
-          .eq('id', existing.id)
-          .select()
-          .single();
-
-        if (error) {
-          return new Response(
-            JSON.stringify({ error: errMsg(error), code: 'UPDATE_FAILED' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        return new Response(
-          JSON.stringify(updated),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       const { data: inserted, error } = await admin
-        .from('attendance_logs')
+        .from('attendance_sessions')
         .insert({
           org_id: orgId,
           user_id: caller.id,
           date: today,
           check_in_time: time,
-          status,
+          status: classification.status,
+          is_overtime: classification.isOvertime,
+          duration_minutes: 0,
           is_dev: isDev,
         })
         .select()
@@ -253,34 +441,58 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      const insertedSession = inserted as SessionRow;
+
+      if (insertedSession.is_overtime) {
+        // Best effort: attendance session is source of truth.
+        await admin
+          .from('overtime_requests')
+          .insert({
+            org_id: orgId,
+            user_id: caller.id,
+            session_id: insertedSession.id,
+            status: 'pending',
+          });
+      }
+
+      await recalculateDailySummary(admin, {
+        orgId,
+        userId: caller.id,
+        dateStr: today,
+        schedule,
+      });
+
       return new Response(
-        JSON.stringify(inserted),
+        JSON.stringify(insertedSession),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!existing?.check_in_time) {
+    if (!openSession?.check_in_time) {
       return new Response(
         JSON.stringify({ error: 'Must check in before checking out', code: 'NO_CHECK_IN' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    if (existing.check_out_time) {
-      return new Response(
-        JSON.stringify({ error: 'Already checked out today', code: 'ALREADY_CHECKED_OUT' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
+    const durationMinutes = diffMinutes(openSession.check_in_time, time);
+    const isEarlyDeparture =
+      schedule.hasShift &&
+      schedule.isWorkingDay &&
+      !openSession.is_overtime &&
+      toMinutes(time) < toMinutes(schedule.workEndTime!);
 
     const { data: updated, error } = await admin
-      .from('attendance_logs')
+      .from('attendance_sessions')
       .update({
         check_out_time: time,
+        duration_minutes: durationMinutes,
+        is_early_departure: isEarlyDeparture,
         is_dev: isDev,
       })
-      .eq('id', existing.id)
+      .eq('id', openSession.id)
       .select()
       .single();
 
@@ -290,6 +502,14 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    await recalculateDailySummary(admin, {
+      orgId,
+      userId: caller.id,
+      dateStr: today,
+      schedule,
+    });
+
     return new Response(
       JSON.stringify(updated),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -1,85 +1,111 @@
-/**
- * Contract tests for punch handler.
- * Geofence / outside-area flows are not implemented (N/A).
- */
-
 import { assertEquals } from 'jsr:@std/assert';
-import { createQueuedFromClient, json, type QResult } from '../_test/queued_supabase.ts';
-import { handlePunch, type PunchDeps, type PunchEnv, type PunchServiceClient } from './handler.ts';
+import { handlePunch, recalculateDailySummary, type PunchDeps, type PunchEnv, type PunchServiceClient } from './handler.ts';
+
+type Session = {
+  id: string;
+  org_id: string;
+  user_id: string;
+  date: string;
+  check_in_time: string;
+  check_out_time: string | null;
+  status: 'present' | 'late';
+  is_overtime: boolean;
+  duration_minutes: number;
+  is_auto_punch_out: boolean;
+  is_early_departure: boolean;
+  needs_review: boolean;
+  is_dev: boolean;
+};
+
+type Summary = {
+  id: string;
+  org_id: string;
+  user_id: string;
+  date: string;
+  first_check_in: string | null;
+  last_check_out: string | null;
+  total_work_minutes: number;
+  total_overtime_minutes: number;
+  effective_status: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
+  is_short_day: boolean;
+  session_count: number;
+  updated_at: string;
+};
+
+type LeaveRow = {
+  id: string;
+  user_id: string;
+  status: 'approved' | 'pending' | 'rejected';
+  type: string;
+  from_date_time: string;
+  to_date_time: string;
+};
+
+function json(res: Response): Promise<unknown> {
+  return res.json();
+}
 
 const baseEnv: PunchEnv = {
   supabaseUrl: 'https://x.supabase.co',
   supabaseAnonKey: 'anon',
   serviceRoleKey: 'service',
-  isProduction: true,
+  isProduction: false,
 };
 
-function userDeps(
-  queue: QResult[],
-  opts: {
-    user: { id: string } | null;
-    env?: Partial<PunchEnv>;
-  }
-): PunchDeps {
-  const admin = createQueuedFromClient(queue);
-  return {
-    getEnv: () => ({ ...baseEnv, ...opts.env }),
-    createUserClient: () => ({
-      auth: {
-        getUser: async () => ({
-          data: { user: opts.user },
-          error: null,
-        }),
-      },
-    }),
-    createServiceClient: () => admin as unknown as PunchServiceClient,
+function makeDeps(opts?: {
+  userId?: string;
+  profile?: { org_id: string; work_days: number[] | null; work_start_time: string | null; work_end_time: string | null };
+  policy?: {
+    work_start_time: string;
+    work_end_time: string;
+    grace_period_minutes: number;
+    weekly_off_days: number[];
+    early_login_minutes: number;
+    minimum_required_minutes: number | null;
   };
-}
+  leaveRows?: LeaveRow[];
+}) {
+  const userId = opts?.userId ?? 'u1';
+  const profile = opts?.profile ?? {
+    org_id: 'o1',
+    work_days: null,
+    work_start_time: null,
+    work_end_time: null,
+  };
+  const policy = opts?.policy ?? {
+    work_start_time: '09:00',
+    work_end_time: '18:00',
+    grace_period_minutes: 15,
+    weekly_off_days: [5, 6],
+    early_login_minutes: 60,
+    minimum_required_minutes: 480,
+  };
 
-type EdgeCase = {
-  id: string;
-  punchInTime: string;
-  expectedStatus: 'present' | 'late';
-  expectedIsOvertime: boolean;
-  note: string;
-};
+  const sessions: Session[] = [];
+  const summaries: Summary[] = [];
+  const overtimeRequests: Array<{ session_id: string; user_id: string }> = [];
+  const leaveRows = opts?.leaveRows ?? [];
 
-type OffDayCase = {
-  id: string;
-  date: string;
-  punchInTime: string;
-  workDays: number[];
-  expectedStatus: 'present' | 'late';
-  expectedIsOvertime: boolean;
-  note: string;
-};
-
-function edgeCaseDeps(
-  opts: {
-    userId?: string;
-    profile?: { org_id: string; work_days: number[] | null; work_start_time: string | null; work_end_time: string | null };
-    policy?: { work_start_time: string; grace_period_minutes: number };
-    existingToday?: { id: string; check_in_time: string | null; check_out_time: string | null } | null;
-  } = {}
-): { deps: PunchDeps; getLastInsert: () => Record<string, unknown> | null } {
-  const profile = opts.profile ?? { org_id: 'o1', work_days: null, work_start_time: null, work_end_time: null };
-  const policy = opts.policy ?? { work_start_time: '09:00', grace_period_minutes: 15 };
-  const existingToday = opts.existingToday ?? null;
-  const userId = opts.userId ?? 'u1';
-
-  let lastInsert: Record<string, unknown> | null = null;
+  let idCounter = 1;
 
   const admin: PunchServiceClient = {
     from: (table: string) => {
-      let op: 'select' | 'insert' | 'update' = 'select';
+      let op: 'select' | 'insert' | 'update' | 'upsert' = 'select';
       let payload: Record<string, unknown> | null = null;
+      let eqFilters: Record<string, unknown> = {};
+      let neqFilters: Record<string, unknown> = {};
+      let isFilters: Record<string, unknown> = {};
+      let gteFilters: Record<string, unknown> = {};
+      let lteFilters: Record<string, unknown> = {};
+      let limitCount: number | null = null;
+      let orderBy: { column: string; ascending: boolean } | null = null;
+      let mode: 'single' | 'maybeSingle' | 'many' = 'many';
 
       const chain = {
         select: () => chain,
         insert: (v: unknown) => {
           op = 'insert';
           payload = (v ?? null) as Record<string, unknown> | null;
-          lastInsert = payload;
           return chain;
         },
         update: (v: unknown) => {
@@ -87,677 +113,344 @@ function edgeCaseDeps(
           payload = (v ?? null) as Record<string, unknown> | null;
           return chain;
         },
-        upsert: () => chain,
+        upsert: (v: unknown) => {
+          op = 'upsert';
+          payload = (v ?? null) as Record<string, unknown> | null;
+          return chain;
+        },
         delete: () => chain,
-        eq: () => chain,
+        eq: (k: unknown, v: unknown) => {
+          eqFilters[String(k)] = v;
+          return chain;
+        },
         not: () => chain,
-        neq: () => chain,
+        neq: (k: unknown, v: unknown) => {
+          neqFilters[String(k)] = v;
+          return chain;
+        },
         in: () => chain,
-        gte: () => chain,
-        lte: () => chain,
-        order: () => chain,
-        limit: () => chain,
+        gte: (k: unknown, v: unknown) => {
+          gteFilters[String(k)] = v;
+          return chain;
+        },
+        lte: (k: unknown, v: unknown) => {
+          lteFilters[String(k)] = v;
+          return chain;
+        },
+        order: (k: unknown, opts?: { ascending?: boolean }) => {
+          orderBy = { column: String(k), ascending: opts?.ascending ?? true };
+          return chain;
+        },
+        limit: (v: unknown) => {
+          limitCount = Number(v);
+          return chain;
+        },
         range: () => chain,
-        maybeSingle: () => chain,
-        single: () => chain,
-        is: () => chain,
-        then: <TResult1 = QResult, TResult2 = never>(
-          onF?: ((v: QResult) => TResult1 | PromiseLike<TResult1>) | null,
+        maybeSingle: () => {
+          mode = 'maybeSingle';
+          return chain;
+        },
+        single: () => {
+          mode = 'single';
+          return chain;
+        },
+        is: (k: unknown, v: unknown) => {
+          isFilters[String(k)] = v;
+          return chain;
+        },
+        then: <TResult1 = { data: unknown; error: unknown | null }, TResult2 = never>(
+          onF?: ((v: { data: unknown; error: unknown | null }) => TResult1 | PromiseLike<TResult1>) | null,
           onR?: ((e: unknown) => TResult2 | PromiseLike<TResult2>) | null
         ): PromiseLike<TResult1 | TResult2> => {
-          let result: QResult = { data: null, error: null };
+          let data: unknown = null;
+          let error: unknown | null = null;
 
           if (table === 'profiles') {
-            result = { data: profile, error: null };
+            data = profile;
           } else if (table === 'attendance_policy') {
-            result = { data: policy, error: null };
-          } else if (table === 'attendance_logs' && op === 'select') {
-            result = { data: existingToday, error: null };
-          } else if (table === 'attendance_logs' && op === 'insert') {
-            result = { data: { id: 'edge-new', ...(payload ?? {}) }, error: null };
-          } else if (table === 'attendance_logs' && op === 'update') {
-            result = { data: { id: 'edge-update', ...(payload ?? {}) }, error: null };
+            data = policy;
+          } else if (table === 'attendance_sessions' && op === 'select') {
+            let rows = sessions.filter((s) => {
+              for (const [k, v] of Object.entries(eqFilters)) {
+                if ((s as unknown as Record<string, unknown>)[k] !== v) return false;
+              }
+              for (const [k, v] of Object.entries(isFilters)) {
+                if ((s as unknown as Record<string, unknown>)[k] !== v) return false;
+              }
+              return true;
+            });
+            if (orderBy) {
+              rows = rows.sort((a, b) => {
+                const av = String((a as unknown as Record<string, unknown>)[orderBy!.column] ?? '');
+                const bv = String((b as unknown as Record<string, unknown>)[orderBy!.column] ?? '');
+                return orderBy!.ascending ? av.localeCompare(bv) : bv.localeCompare(av);
+              });
+            }
+            if (typeof limitCount === 'number') rows = rows.slice(0, limitCount);
+            data = mode === 'many' ? rows : (rows[0] ?? null);
+          } else if (table === 'attendance_sessions' && op === 'insert') {
+            const row: Session = {
+              id: `s-${idCounter++}`,
+              org_id: String(payload?.org_id ?? 'o1'),
+              user_id: String(payload?.user_id ?? userId),
+              date: String(payload?.date),
+              check_in_time: String(payload?.check_in_time),
+              check_out_time: (payload?.check_out_time ?? null) as string | null,
+              status: (payload?.status ?? 'present') as 'present' | 'late',
+              is_overtime: Boolean(payload?.is_overtime),
+              duration_minutes: Number(payload?.duration_minutes ?? 0),
+              is_auto_punch_out: Boolean(payload?.is_auto_punch_out),
+              is_early_departure: Boolean(payload?.is_early_departure),
+              needs_review: Boolean(payload?.needs_review),
+              is_dev: Boolean(payload?.is_dev),
+            };
+            sessions.push(row);
+            data = row;
+          } else if (table === 'attendance_sessions' && op === 'update') {
+            const id = String(eqFilters.id);
+            const idx = sessions.findIndex((s) => s.id === id);
+            if (idx >= 0) {
+              sessions[idx] = {
+                ...sessions[idx],
+                ...(payload as Partial<Session>),
+              };
+              data = sessions[idx];
+            } else {
+              data = null;
+            }
+          } else if (table === 'leave_requests') {
+            let rows = leaveRows.filter((r) => {
+              for (const [k, v] of Object.entries(eqFilters)) {
+                if ((r as unknown as Record<string, unknown>)[k] !== v) return false;
+              }
+              for (const [k, v] of Object.entries(neqFilters)) {
+                if ((r as unknown as Record<string, unknown>)[k] === v) return false;
+              }
+              for (const [k, v] of Object.entries(lteFilters)) {
+                if (String((r as unknown as Record<string, unknown>)[k] ?? '') > String(v)) return false;
+              }
+              for (const [k, v] of Object.entries(gteFilters)) {
+                if (String((r as unknown as Record<string, unknown>)[k] ?? '') < String(v)) return false;
+              }
+              return true;
+            });
+            if (typeof limitCount === 'number') rows = rows.slice(0, limitCount);
+            data = mode === 'many' ? rows : (rows[0] ?? null);
+          } else if (table === 'attendance_daily_summary' && op === 'upsert') {
+            const p = payload as unknown as Summary;
+            const idx = summaries.findIndex((s) => s.user_id === p.user_id && s.date === p.date);
+            const row: Summary = {
+              id: idx >= 0 ? summaries[idx].id : `ds-${idCounter++}`,
+              org_id: p.org_id,
+              user_id: p.user_id,
+              date: p.date,
+              first_check_in: p.first_check_in,
+              last_check_out: p.last_check_out,
+              total_work_minutes: p.total_work_minutes,
+              total_overtime_minutes: p.total_overtime_minutes,
+              effective_status: p.effective_status,
+              is_short_day: p.is_short_day,
+              session_count: p.session_count,
+              updated_at: p.updated_at,
+            };
+            if (idx >= 0) summaries[idx] = row;
+            else summaries.push(row);
+            data = row;
+          } else if (table === 'attendance_daily_summary' && op === 'select') {
+            let rows = summaries.filter((s) => {
+              for (const [k, v] of Object.entries(eqFilters)) {
+                if ((s as unknown as Record<string, unknown>)[k] !== v) return false;
+              }
+              return true;
+            });
+            if (typeof limitCount === 'number') rows = rows.slice(0, limitCount);
+            data = mode === 'many' ? rows : (rows[0] ?? null);
+          } else if (table === 'overtime_requests' && op === 'insert') {
+            overtimeRequests.push({
+              session_id: String(payload?.session_id ?? ''),
+              user_id: String(payload?.user_id ?? ''),
+            });
+            data = { id: `or-${idCounter++}`, ...payload };
           }
 
-          return Promise.resolve(result).then(onF ?? undefined, onR ?? undefined);
+          return Promise.resolve({ data, error }).then(onF ?? undefined, onR ?? undefined);
         },
       };
-
-      return chain;
+      return chain as unknown as ReturnType<PunchServiceClient['from']>;
     },
   };
 
-  return {
-    deps: {
-      getEnv: () => ({ ...baseEnv, isProduction: false }),
-      createUserClient: () => ({
-        auth: {
-          getUser: async () => ({
-            data: { user: { id: userId } },
-            error: null,
-          }),
-        },
-      }),
-      createServiceClient: () => admin,
-    },
-    getLastInsert: () => lastInsert,
+  const deps: PunchDeps = {
+    getEnv: () => baseEnv,
+    createUserClient: () => ({
+      auth: {
+        getUser: async () => ({ data: { user: { id: userId } }, error: null }),
+      },
+    }),
+    createServiceClient: () => admin,
   };
+
+  return { deps, sessions, summaries, overtimeRequests, admin, profile, policy, userId };
 }
 
-async function runPunchInEdgeCase(tc: EdgeCase): Promise<void> {
-  const { deps, getLastInsert } = edgeCaseDeps();
-  const res = await handlePunch(
+async function punch(deps: PunchDeps, action: 'check_in' | 'check_out', iso: string): Promise<Response> {
+  return handlePunch(
     new Request('http://x', {
       method: 'POST',
       headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in', devOverrideTime: `2025-06-01T${tc.punchInTime}:00.000Z` }),
+      body: JSON.stringify({ action, devOverrideTime: iso }),
     }),
     deps
   );
-
-  assertEquals(res.status, 200);
-  const body = (await json(res)) as { status?: string; is_overtime?: boolean };
-  const inserted = getLastInsert() as { status?: string; is_overtime?: boolean } | null;
-
-  assertEquals(body.status, tc.expectedStatus);
-  assertEquals(inserted?.status, tc.expectedStatus);
-  assertEquals(Boolean(body.is_overtime), tc.expectedIsOvertime);
-  assertEquals(Boolean(inserted?.is_overtime), tc.expectedIsOvertime);
 }
 
-async function runOffDayPunchInCase(tc: OffDayCase): Promise<void> {
-  const { deps, getLastInsert } = edgeCaseDeps({
+Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T08:30:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T13:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+
+  assertEquals(mem.sessions.length, 2);
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 510);
+  assertEquals(summary?.total_overtime_minutes, 0);
+  assertEquals(summary?.first_check_in, '08:30');
+  assertEquals(summary?.last_check_out, '18:00');
+  assertEquals(summary?.effective_status, 'present');
+  assertEquals(summary?.session_count, 2);
+  assertEquals(summary?.is_short_day, false);
+});
+
+Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
+  const mem = makeDeps({
     profile: {
       org_id: 'o1',
-      work_days: tc.workDays,
+      work_days: [0, 1, 2, 3, 4],
       work_start_time: '09:00',
       work_end_time: '18:00',
     },
-    policy: { work_start_time: '09:00', grace_period_minutes: 15 },
   });
 
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in', devOverrideTime: `${tc.date}T${tc.punchInTime}:00` }),
-    }),
-    deps
-  );
+  await punch(mem.deps, 'check_in', '2025-06-06T10:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-06T13:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-06T15:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-06T19:00:00');
 
+  const summary = mem.summaries.find((s) => s.date === '2025-06-06');
+  assertEquals(summary?.total_work_minutes, 420);
+  assertEquals(summary?.total_overtime_minutes, 420);
+  assertEquals(summary?.effective_status, null);
+  assertEquals(summary?.session_count, 2);
+  assertEquals(mem.overtimeRequests.length, 2);
+});
+
+Deno.test('part 3.5 working day overtime-only yields overtime_only', async () => {
+  const mem = makeDeps();
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
   assertEquals(res.status, 200);
-  const body = (await json(res)) as { status?: string; is_overtime?: boolean };
-  const inserted = getLastInsert() as { status?: string; is_overtime?: boolean } | null;
-
-  assertEquals(body.status, tc.expectedStatus);
-  assertEquals(inserted?.status, tc.expectedStatus);
-  assertEquals(Boolean(body.is_overtime), tc.expectedIsOvertime);
-  assertEquals(Boolean(inserted?.is_overtime), tc.expectedIsOvertime);
-}
-
-Deno.test('OPTIONS returns 200 with CORS', async () => {
-  const res = await handlePunch(new Request('http://x', { method: 'OPTIONS' }), userDeps([], { user: null }));
-  assertEquals(res.status, 200);
-  assertEquals(res.headers.get('Access-Control-Allow-Origin'), '*');
-});
-
-Deno.test('non-POST returns 405 METHOD_NOT_ALLOWED', async () => {
-  const res = await handlePunch(
-    new Request('http://x', { method: 'GET', headers: { Authorization: 'Bearer t' } }),
-    userDeps([], { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 405);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'METHOD_NOT_ALLOWED');
-});
-
-Deno.test('missing Authorization returns 401 UNAUTHORIZED', async () => {
-  const res = await handlePunch(
-    new Request('http://x', { method: 'POST', body: '{}' }),
-    userDeps([], { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 401);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'UNAUTHORIZED');
-});
-
-Deno.test('non-Bearer Authorization returns 401', async () => {
-  const res = await handlePunch(
-    new Request('http://x', { method: 'POST', headers: { Authorization: 'Basic x' }, body: '{}' }),
-    userDeps([], { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 401);
-});
-
-Deno.test('getUser null returns 401 UNAUTHORIZED', async () => {
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in' }),
-    }),
-    userDeps([], { user: null })
-  );
-  assertEquals(res.status, 401);
-});
-
-Deno.test('invalid action returns 400 INVALID_ACTION', async () => {
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'noop' }),
-    }),
-    userDeps([], { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 400);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'INVALID_ACTION');
-});
-
-Deno.test('non-prod invalid devOverrideTime returns 400 INVALID_TIME', async () => {
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in', devOverrideTime: 'not-a-date' }),
-    }),
-    userDeps([], { user: { id: 'u1' }, env: { isProduction: false } })
-  );
-  assertEquals(res.status, 400);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'INVALID_TIME');
-});
-
-Deno.test('no profile returns 403 NO_PROFILE', async () => {
-  const q: QResult[] = [{ data: null, error: null }];
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in' }),
-    }),
-    userDeps(q, { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 403);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'NO_PROFILE');
-});
-
-Deno.test('check_in when already checked in returns 400 ALREADY_CHECKED_IN', async () => {
-  const q: QResult[] = [
-    { data: { org_id: 'o1', work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: { id: 'l1', check_in_time: '08:00' }, error: null },
-  ];
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in' }),
-    }),
-    userDeps(q, { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 400);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'ALREADY_CHECKED_IN');
-});
-
-Deno.test('check_out without check_in returns 400 NO_CHECK_IN', async () => {
-  const q: QResult[] = [
-    { data: { org_id: 'o1', work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: { id: 'l1', check_in_time: null }, error: null },
-  ];
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_out' }),
-    }),
-    userDeps(q, { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 400);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'NO_CHECK_IN');
-});
-
-Deno.test('check_out when already checked out returns 400 ALREADY_CHECKED_OUT', async () => {
-  const q: QResult[] = [
-    { data: { org_id: 'o1', work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: { id: 'l1', check_in_time: '08:00', check_out_time: '17:00' }, error: null },
-  ];
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_out' }),
-    }),
-    userDeps(q, { user: { id: 'u1' } })
-  );
-  assertEquals(res.status, 400);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'ALREADY_CHECKED_OUT');
-});
-
-Deno.test('happy check_in insert returns 200 with inserted row', async () => {
-  const inserted = {
-    id: 'new1',
-    org_id: 'o1',
-    user_id: 'u1',
-    date: '2025-06-01',
-    check_in_time: '10:00',
-    status: 'present',
-  };
-  const q: QResult[] = [
-    { data: { org_id: 'o1', work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: null, error: null },
-    { data: { work_start_time: '09:00', grace_period_minutes: 15 }, error: null },
-    { data: inserted, error: null },
-  ];
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in', devOverrideTime: '2025-06-01T10:00:00.000Z' }),
-    }),
-    userDeps(q, { user: { id: 'u1' }, env: { isProduction: false } })
-  );
-  assertEquals(res.status, 200);
-  const body = (await json(res)) as { id?: string; status?: string };
-  assertEquals(body.id, 'new1');
+  const body = (await json(res)) as { is_overtime?: boolean; status?: string };
   assertEquals(body.status, 'present');
+  assertEquals(body.is_overtime, true);
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'overtime_only');
 });
 
-Deno.test('check_in late when now past start + grace', async () => {
-  const inserted = {
-    id: 'new1',
-    org_id: 'o1',
-    user_id: 'u1',
-    date: '2025-06-01',
-    check_in_time: '09:20',
-    status: 'late',
-  };
-  const q: QResult[] = [
-    { data: { org_id: 'o1', work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: null, error: null },
-    { data: { work_start_time: '09:00', grace_period_minutes: 15 }, error: null },
-    { data: inserted, error: null },
-  ];
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_in', devOverrideTime: '2025-06-01T09:20:00.000Z' }),
-    }),
-    userDeps(q, { user: { id: 'u1' }, env: { isProduction: false } })
-  );
-  assertEquals(res.status, 200);
-  const body = (await json(res)) as { status?: string };
-  assertEquals(body.status, 'late');
-});
-
-Deno.test('happy check_out updates row', async () => {
-  const updated = { id: 'l1', check_out_time: '18:00' };
-  const q: QResult[] = [
-    { data: { org_id: 'o1', work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: { id: 'l1', check_in_time: '08:00', check_out_time: null }, error: null },
-    { data: updated, error: null },
-  ];
-  const res = await handlePunch(
-    new Request('http://x', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_out', devOverrideTime: '2025-06-01T18:00:00.000Z' }),
-    }),
-    userDeps(q, { user: { id: 'u1' }, env: { isProduction: false } })
-  );
-  assertEquals(res.status, 200);
-  const body = (await json(res)) as { check_out_time?: string };
-  assertEquals(body.check_out_time, '18:00');
-});
-
-const punchInEdgeCases: EdgeCase[] = [
-  { id: '1.1.1', punchInTime: '09:00', expectedStatus: 'present', expectedIsOvertime: false, note: 'shift start' },
-  { id: '1.1.2', punchInTime: '09:14', expectedStatus: 'present', expectedIsOvertime: false, note: 'inside grace' },
-  { id: '1.1.3', punchInTime: '09:15', expectedStatus: 'present', expectedIsOvertime: false, note: 'grace boundary inclusive' },
-  { id: '1.1.4', punchInTime: '09:16', expectedStatus: 'late', expectedIsOvertime: false, note: 'first minute after grace' },
-  { id: '1.1.5', punchInTime: '09:30', expectedStatus: 'late', expectedIsOvertime: false, note: 'clearly late' },
-  { id: '1.1.6', punchInTime: '17:59', expectedStatus: 'late', expectedIsOvertime: false, note: 'still within shift' },
-  { id: '1.1.7', punchInTime: '18:00', expectedStatus: 'late', expectedIsOvertime: false, note: 'exactly shift end' },
-  { id: '1.2.1', punchInTime: '08:00', expectedStatus: 'present', expectedIsOvertime: false, note: 'early window start' },
-  { id: '1.2.2', punchInTime: '08:01', expectedStatus: 'present', expectedIsOvertime: false, note: 'inside early window' },
-  { id: '1.2.3', punchInTime: '08:59', expectedStatus: 'present', expectedIsOvertime: false, note: 'early window end' },
-  { id: '1.2.4', punchInTime: '07:59', expectedStatus: 'present', expectedIsOvertime: true, note: 'before early window' },
-  { id: '1.2.5', punchInTime: '07:00', expectedStatus: 'present', expectedIsOvertime: true, note: 'well before early window' },
-  { id: '1.3.1', punchInTime: '18:00', expectedStatus: 'late', expectedIsOvertime: false, note: 'shift end strict overtime boundary' },
-  { id: '1.3.2', punchInTime: '18:01', expectedStatus: 'present', expectedIsOvertime: true, note: 'first overtime minute' },
-  { id: '1.3.3', punchInTime: '20:00', expectedStatus: 'present', expectedIsOvertime: true, note: 'post-shift overtime' },
-  { id: '1.3.4', punchInTime: '23:59', expectedStatus: 'present', expectedIsOvertime: true, note: 'end of day overtime' },
-  { id: '1.4.1', punchInTime: '00:00', expectedStatus: 'present', expectedIsOvertime: true, note: 'midnight overtime' },
-  { id: '1.4.2', punchInTime: '02:00', expectedStatus: 'present', expectedIsOvertime: true, note: 'overnight overtime' },
-  { id: '1.4.3', punchInTime: '07:59', expectedStatus: 'present', expectedIsOvertime: true, note: 'one minute before early window' },
-];
-
-for (const tc of punchInEdgeCases) {
-  Deno.test(`edge case ${tc.id} check_in ${tc.punchInTime} -> ${tc.expectedStatus} (overtime=${tc.expectedIsOvertime})`, async () => {
-    await runPunchInEdgeCase(tc);
+Deno.test('part 4.1 approved leave with no sessions resolves on_leave', async () => {
+  const mem = makeDeps({
+    leaveRows: [
+      {
+        id: 'l1',
+        user_id: 'u1',
+        status: 'approved',
+        type: 'annual_leave',
+        from_date_time: '2025-06-10T00:00:00',
+        to_date_time: '2025-06-10T23:59:59',
+      },
+    ],
   });
-}
 
-const nonWorkingDayCases: OffDayCase[] = [
-  {
-    id: '2.1',
-    date: '2025-06-06',
-    punchInTime: '10:00',
-    workDays: [0, 1, 2, 3, 4],
-    expectedStatus: 'present',
-    expectedIsOvertime: true,
-    note: 'Friday off-day punch-in',
-  },
-  {
-    id: '2.2',
-    date: '2025-06-07',
-    punchInTime: '09:00',
-    workDays: [0, 1, 2, 3, 4],
-    expectedStatus: 'present',
-    expectedIsOvertime: true,
-    note: 'Saturday off-day punch-in',
-  },
-  {
-    id: '2.3',
-    date: '2025-06-06',
-    punchInTime: '08:00',
-    workDays: [0, 1, 2, 3, 4],
-    expectedStatus: 'present',
-    expectedIsOvertime: true,
-    note: 'Friday off-day early punch-in',
-  },
-  {
-    id: '2.4',
-    date: '2025-06-06',
-    punchInTime: '00:01',
-    workDays: [0, 1, 2, 3, 4],
-    expectedStatus: 'present',
-    expectedIsOvertime: true,
-    note: 'Friday off-day very early punch-in',
-  },
-  {
-    id: '2.5',
-    date: '2025-06-06',
-    punchInTime: '23:59',
-    workDays: [0, 1, 2, 3, 4],
-    expectedStatus: 'present',
-    expectedIsOvertime: true,
-    note: 'Friday off-day end-of-day punch-in',
-  },
-  {
-    id: '2.6',
-    date: '2025-06-09',
-    punchInTime: '10:00',
-    workDays: [0, 2, 3, 4, 5, 6],
-    expectedStatus: 'present',
-    expectedIsOvertime: true,
-    note: 'Custom user off-day punch-in',
-  },
-];
-
-for (const tc of nonWorkingDayCases) {
-  Deno.test(`edge case ${tc.id} non-working-day check_in ${tc.date} ${tc.punchInTime} -> ${tc.expectedStatus} (overtime=${tc.expectedIsOvertime})`, async () => {
-    await runOffDayPunchInCase(tc);
-  });
-}
-
-type SessionStep = { action: 'check_in' | 'check_out'; at: string };
-
-type Part3Case = {
-  id: string;
-  date: string;
-  steps: SessionStep[];
-  expectedSessionCount: number;
-  expectedTotalWorkMinutes?: number;
-  expectedFirstCheckIn?: string;
-  expectedLastCheckOut?: string;
-  expectedSessionStatuses?: Array<'present' | 'late'>;
-  expectedSessionOvertimeFlags?: boolean[];
-};
-
-function hhmmToMin(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
-function multiSessionDeps(
-  opts: {
-    profile?: { org_id: string; work_days: number[] | null; work_start_time: string; work_end_time: string };
-    policy?: { work_start_time: string; grace_period_minutes: number };
-    date?: string;
-    userId?: string;
-  } = {}
-): { deps: PunchDeps; getInserted: () => Array<Record<string, unknown>>; getCurrentLog: () => Record<string, unknown> | null } {
-  const profile = opts.profile ?? { org_id: 'o1', work_days: null, work_start_time: '09:00', work_end_time: '18:00' };
-  const policy = opts.policy ?? { work_start_time: '09:00', grace_period_minutes: 15 };
-  const date = opts.date ?? '2025-06-10';
-  const userId = opts.userId ?? 'u1';
-
-  let currentLog: Record<string, unknown> | null = null;
-  const inserted: Array<Record<string, unknown>> = [];
-
-  const admin: PunchServiceClient = {
-    from: (table: string) => {
-      let op: 'select' | 'insert' | 'update' = 'select';
-      let payload: Record<string, unknown> | null = null;
-
-      const chain = {
-        select: () => chain,
-        insert: (v: unknown) => {
-          op = 'insert';
-          payload = (v ?? null) as Record<string, unknown> | null;
-          return chain;
-        },
-        update: (v: unknown) => {
-          op = 'update';
-          payload = (v ?? null) as Record<string, unknown> | null;
-          return chain;
-        },
-        upsert: () => chain,
-        delete: () => chain,
-        eq: () => chain,
-        not: () => chain,
-        neq: () => chain,
-        in: () => chain,
-        gte: () => chain,
-        lte: () => chain,
-        order: () => chain,
-        limit: () => chain,
-        range: () => chain,
-        maybeSingle: () => chain,
-        single: () => chain,
-        is: () => chain,
-        then: <TResult1 = QResult, TResult2 = never>(
-          onF?: ((v: QResult) => TResult1 | PromiseLike<TResult1>) | null,
-          onR?: ((e: unknown) => TResult2 | PromiseLike<TResult2>) | null
-        ): PromiseLike<TResult1 | TResult2> => {
-          let result: QResult = { data: null, error: null };
-
-          if (table === 'profiles') {
-            result = { data: profile, error: null };
-          } else if (table === 'attendance_policy') {
-            result = { data: policy, error: null };
-          } else if (table === 'attendance_logs' && op === 'select') {
-            result = { data: currentLog, error: null };
-          } else if (table === 'attendance_logs' && op === 'insert') {
-            currentLog = {
-              id: `p3-${inserted.length + 1}`,
-              org_id: profile.org_id,
-              user_id: userId,
-              date,
-              ...(payload ?? {}),
-            };
-            inserted.push(currentLog);
-            result = { data: currentLog, error: null };
-          } else if (table === 'attendance_logs' && op === 'update') {
-            currentLog = { ...(currentLog ?? { id: 'p3-0', org_id: profile.org_id, user_id: userId, date }), ...(payload ?? {}) };
-            result = { data: currentLog, error: null };
-          }
-
-          return Promise.resolve(result).then(onF ?? undefined, onR ?? undefined);
-        },
-      };
-
-      return chain;
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-10',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
     },
-  };
-
-  return {
-    deps: {
-      getEnv: () => ({ ...baseEnv, isProduction: false }),
-      createUserClient: () => ({
-        auth: {
-          getUser: async () => ({
-            data: { user: { id: userId } },
-            error: null,
-          }),
-        },
-      }),
-      createServiceClient: () => admin,
-    },
-    getInserted: () => inserted,
-    getCurrentLog: () => currentLog,
-  };
-}
-
-async function runPart3Steps(deps: PunchDeps, date: string, steps: SessionStep[]): Promise<void> {
-  for (const s of steps) {
-    await handlePunch(
-      new Request('http://x', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: s.action, devOverrideTime: `${date}T${s.at}:00.000Z` }),
-      }),
-      deps
-    );
-  }
-}
-
-const part3Cases: Part3Case[] = [
-  {
-    id: '3.1',
-    date: '2025-06-10', // Tuesday (working day)
-    steps: [
-      { action: 'check_in', at: '08:30' },
-      { action: 'check_out', at: '12:00' },
-      { action: 'check_in', at: '13:00' },
-      { action: 'check_out', at: '18:00' },
-    ],
-    expectedSessionCount: 2,
-    expectedTotalWorkMinutes: 510,
-    expectedFirstCheckIn: '08:30',
-    expectedLastCheckOut: '18:00',
-  },
-  {
-    id: '3.2',
-    date: '2025-06-10', // Tuesday (working day)
-    steps: [
-      { action: 'check_in', at: '09:30' },
-      { action: 'check_out', at: '13:00' },
-      { action: 'check_in', at: '14:00' },
-      { action: 'check_out', at: '18:30' },
-    ],
-    expectedSessionCount: 2,
-    expectedFirstCheckIn: '09:30',
-    expectedLastCheckOut: '18:30',
-    expectedSessionStatuses: ['late', 'late'],
-  },
-  {
-    id: '3.3',
-    date: '2025-06-10', // Tuesday (working day)
-    steps: [
-      { action: 'check_in', at: '09:00' },
-      { action: 'check_out', at: '18:10' },
-      { action: 'check_in', at: '18:12' },
-    ],
-    expectedSessionCount: 2,
-    expectedFirstCheckIn: '09:00',
-    expectedSessionStatuses: ['present', 'present'],
-    expectedSessionOvertimeFlags: [false, true],
-  },
-  {
-    id: '3.4',
-    date: '2025-06-06', // Friday (off-day)
-    steps: [
-      { action: 'check_in', at: '10:00' },
-      { action: 'check_out', at: '13:00' },
-      { action: 'check_in', at: '15:00' },
-      { action: 'check_out', at: '19:00' },
-    ],
-    expectedSessionCount: 2,
-    expectedTotalWorkMinutes: 420,
-  },
-  {
-    id: '3.5',
-    date: '2025-06-10', // Tuesday (working day)
-    steps: [{ action: 'check_in', at: '20:00' }],
-    expectedSessionCount: 1,
-    expectedSessionStatuses: ['present'],
-    expectedSessionOvertimeFlags: [true],
-  },
-  {
-    id: '3.6',
-    date: '2025-06-10', // Tuesday (working day)
-    steps: [
-      { action: 'check_in', at: '08:30' },
-      { action: 'check_out', at: '10:00' },
-      { action: 'check_in', at: '11:00' },
-      { action: 'check_out', at: '13:00' },
-      { action: 'check_in', at: '14:00' },
-      { action: 'check_out', at: '17:00' },
-    ],
-    expectedSessionCount: 3,
-    expectedTotalWorkMinutes: 390,
-    expectedFirstCheckIn: '08:30',
-    expectedLastCheckOut: '17:00',
-  },
-];
-
-for (const tc of part3Cases) {
-  Deno.test(`part 3 ${tc.id} multi-session contract`, async () => {
-    const { deps, getInserted, getCurrentLog } = multiSessionDeps({
-      date: tc.date,
-    });
-
-    await runPart3Steps(deps, tc.date, tc.steps);
-
-    const inserted = getInserted();
-    const currentLog = getCurrentLog();
-
-    assertEquals(inserted.length, tc.expectedSessionCount);
-
-    if (tc.expectedFirstCheckIn) {
-      assertEquals((inserted[0] as { check_in_time?: string } | undefined)?.check_in_time, tc.expectedFirstCheckIn);
-    }
-
-    if (tc.expectedLastCheckOut) {
-      assertEquals((currentLog as { check_out_time?: string } | null)?.check_out_time, tc.expectedLastCheckOut);
-    }
-
-    if (typeof tc.expectedTotalWorkMinutes === 'number') {
-      const checkIn = (currentLog as { check_in_time?: string } | null)?.check_in_time;
-      const checkOut = (currentLog as { check_out_time?: string } | null)?.check_out_time;
-      const totalWorkMinutes = checkIn && checkOut ? hhmmToMin(checkOut) - hhmmToMin(checkIn) : 0;
-      assertEquals(totalWorkMinutes, tc.expectedTotalWorkMinutes);
-    }
-
-    if (tc.expectedSessionStatuses) {
-      const actualStatuses = inserted.map((r) => r.status) as Array<'present' | 'late' | undefined>;
-      for (let i = 0; i < tc.expectedSessionStatuses.length; i++) {
-        assertEquals(actualStatuses[i], tc.expectedSessionStatuses[i]);
-      }
-    }
-
-    if (tc.expectedSessionOvertimeFlags) {
-      const actualOvertime = inserted.map((r) => r.is_overtime);
-      for (let i = 0; i < tc.expectedSessionOvertimeFlags.length; i++) {
-        assertEquals(Boolean(actualOvertime[i]), tc.expectedSessionOvertimeFlags[i]);
-      }
-    }
   });
-}
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'on_leave');
+});
+
+Deno.test('part 4.5 mixed non-overtime present + late resolves present', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T11:00:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'present');
+});
+
+Deno.test('part 4.6 overtime present + non-overtime late resolves late', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T07:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T08:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'late');
+});
+
+Deno.test('part 4.10 off-day with no sessions keeps no effective_status', async () => {
+  const mem = makeDeps({
+    profile: {
+      org_id: 'o1',
+      work_days: [0, 1, 2, 3, 4],
+      work_start_time: '09:00',
+      work_end_time: '18:00',
+    },
+  });
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-06',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: false,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-06');
+  assertEquals(summary?.effective_status, null);
+});
+
+Deno.test('part 4.11 off-day with overtime sessions keeps no effective_status', async () => {
+  const mem = makeDeps({
+    profile: {
+      org_id: 'o1',
+      work_days: [0, 1, 2, 3, 4],
+      work_start_time: '09:00',
+      work_end_time: '18:00',
+    },
+  });
+  await punch(mem.deps, 'check_in', '2025-06-06T10:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-06T13:00:00');
+  const summary = mem.summaries.find((s) => s.date === '2025-06-06');
+  assertEquals(summary?.effective_status, null);
+});

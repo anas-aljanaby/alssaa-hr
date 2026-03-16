@@ -216,6 +216,203 @@ export interface Database {
         ];
       };
 
+      attendance_sessions: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string;
+          date: string;
+          check_in_time: string;
+          check_out_time: string | null;
+          status: 'present' | 'late';
+          is_overtime: boolean;
+          is_auto_punch_out: boolean;
+          is_early_departure: boolean;
+          needs_review: boolean;
+          duration_minutes: number;
+          is_dev: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id?: string;
+          user_id: string;
+          date: string;
+          check_in_time: string;
+          check_out_time?: string | null;
+          status?: 'present' | 'late';
+          is_overtime?: boolean;
+          is_auto_punch_out?: boolean;
+          is_early_departure?: boolean;
+          needs_review?: boolean;
+          duration_minutes?: number;
+          is_dev?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          user_id?: string;
+          date?: string;
+          check_in_time?: string;
+          check_out_time?: string | null;
+          status?: 'present' | 'late';
+          is_overtime?: boolean;
+          is_auto_punch_out?: boolean;
+          is_early_departure?: boolean;
+          needs_review?: boolean;
+          duration_minutes?: number;
+          is_dev?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'attendance_sessions_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_sessions_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      attendance_daily_summary: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string;
+          date: string;
+          first_check_in: string | null;
+          last_check_out: string | null;
+          total_work_minutes: number;
+          total_overtime_minutes: number;
+          effective_status: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
+          is_short_day: boolean;
+          session_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id?: string;
+          user_id: string;
+          date: string;
+          first_check_in?: string | null;
+          last_check_out?: string | null;
+          total_work_minutes?: number;
+          total_overtime_minutes?: number;
+          effective_status?: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
+          is_short_day?: boolean;
+          session_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          user_id?: string;
+          date?: string;
+          first_check_in?: string | null;
+          last_check_out?: string | null;
+          total_work_minutes?: number;
+          total_overtime_minutes?: number;
+          effective_status?: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
+          is_short_day?: boolean;
+          session_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'attendance_daily_summary_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_daily_summary_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      overtime_requests: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string;
+          session_id: string;
+          status: 'pending' | 'approved' | 'rejected';
+          reviewed_by: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id?: string;
+          user_id: string;
+          session_id: string;
+          status?: 'pending' | 'approved' | 'rejected';
+          reviewed_by?: string | null;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          user_id?: string;
+          session_id?: string;
+          status?: 'pending' | 'approved' | 'rejected';
+          reviewed_by?: string | null;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'overtime_requests_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'overtime_requests_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'overtime_requests_session_id_fkey';
+            columns: ['session_id'];
+            isOneToOne: true;
+            referencedRelation: 'attendance_sessions';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'overtime_requests_reviewed_by_fkey';
+            columns: ['reviewed_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
       leave_requests: {
         Row: {
           id: string;
@@ -512,6 +709,8 @@ export interface Database {
           annual_leave_per_year: number;
           sick_leave_per_year: number;
           auto_punch_out_buffer_minutes: number;
+          early_login_minutes: number;
+          minimum_required_minutes: number | null;
         };
         Insert: {
           id?: string;
@@ -525,6 +724,8 @@ export interface Database {
           annual_leave_per_year?: number;
           sick_leave_per_year?: number;
           auto_punch_out_buffer_minutes?: number;
+          early_login_minutes?: number;
+          minimum_required_minutes?: number | null;
         };
         Update: {
           id?: string;
@@ -538,6 +739,8 @@ export interface Database {
           annual_leave_per_year?: number;
           sick_leave_per_year?: number;
           auto_punch_out_buffer_minutes?: number;
+          early_login_minutes?: number;
+          minimum_required_minutes?: number | null;
         };
         Relationships: [
           {

@@ -7,6 +7,10 @@ import type { LeaveRequest } from './requests.service';
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
 export type AttendanceStatus = AttendanceLog['status'];
+export type AttendanceSession = Tables<'attendance_sessions'>;
+export type AttendanceDailySummary = Tables<'attendance_daily_summary'>;
+export type AttendanceEffectiveStatus = AttendanceDailySummary['effective_status'];
+export type CalendarStatus = AttendanceStatus | 'overtime_only' | 'overtime_offday' | 'weekend' | 'future' | null;
 
 export type PunchType = 'clock_in' | 'clock_out';
 
@@ -31,6 +35,8 @@ export interface TodayRecord {
   log: AttendanceLog | null;
   punches: PunchEntry[];
   shift: ShiftInfo | null;
+  sessions?: AttendanceSession[];
+  summary?: AttendanceDailySummary | null;
 }
 
 export interface DayRecord {
@@ -38,11 +44,13 @@ export interface DayRecord {
   punches: PunchEntry[];
   shift: ShiftInfo | null;
   totalMinutesWorked: number;
+  sessions?: AttendanceSession[];
+  summary?: AttendanceDailySummary | null;
 }
 
 export interface MonthDaySummary {
   date: string;
-  status: AttendanceStatus | 'weekend' | 'future' | null;
+  status: CalendarStatus;
   totalMinutesWorked: number;
 }
 
@@ -67,41 +75,95 @@ export function isOvertimeTime(timeMinutes: number, shift: ShiftInfo, dayOfWeek:
   return timeMinutes < startMin - 60 || timeMinutes > endMin;
 }
 
-function buildPunches(log: Pick<AttendanceLog, 'id' | 'check_in_time' | 'check_out_time'>, shift: ShiftInfo | null, dayOfWeek?: number): PunchEntry[] {
-  if (!log.check_in_time) return [];
-
-  const dow = dayOfWeek ?? now().getDay();
-
+function buildPunchesFromSessions(sessions: AttendanceSession[]): PunchEntry[] {
   const punches: PunchEntry[] = [];
+  const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
 
-  const inTime = log.check_in_time;
-  const inMinutes = toMinutes(inTime);
-
-  punches.push({
-    id: `${log.id}-in`,
-    timestamp: inTime,
-    type: 'clock_in',
-    isOvertime: shift ? isOvertimeTime(inMinutes, shift, dow) : false,
-  });
-
-  if (log.check_out_time) {
-    const outTime = log.check_out_time;
-    const outMinutes = toMinutes(outTime);
-
+  for (const session of sorted) {
     punches.push({
-      id: `${log.id}-out`,
-      timestamp: outTime,
-      type: 'clock_out',
-      isOvertime: shift ? isOvertimeTime(outMinutes, shift, dow) : false,
+      id: `${session.id}-in`,
+      timestamp: session.check_in_time,
+      type: 'clock_in',
+      isOvertime: session.is_overtime,
     });
+    if (session.check_out_time) {
+      punches.push({
+        id: `${session.id}-out`,
+        timestamp: session.check_out_time,
+        type: 'clock_out',
+        isOvertime: session.is_overtime,
+      });
+    }
   }
 
   return punches;
 }
 
-function computeTotalMinutes(log: AttendanceLog): number {
-  if (!log.check_in_time || !log.check_out_time) return 0;
-  return Math.max(0, toMinutes(log.check_out_time) - toMinutes(log.check_in_time));
+function computeTotalMinutesFromSessions(sessions: AttendanceSession[]): number {
+  return sessions.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+}
+
+function normalizeSessions(data: unknown, dateHint: string): AttendanceSession[] {
+  if (Array.isArray(data)) return data as AttendanceSession[];
+  if (!data || typeof data !== 'object') return [];
+  const row = data as Partial<AttendanceLog>;
+  if (!row.check_in_time) return [];
+  return [{
+    id: String(row.id ?? `legacy-${dateHint}`),
+    org_id: String(row.org_id ?? ''),
+    user_id: String(row.user_id ?? ''),
+    date: String(row.date ?? dateHint),
+    check_in_time: row.check_in_time,
+    check_out_time: row.check_out_time ?? null,
+    status: row.status === 'late' ? 'late' : 'present',
+    is_overtime: false,
+    is_auto_punch_out: Boolean(row.auto_punch_out),
+    is_early_departure: false,
+    needs_review: false,
+    duration_minutes: row.check_out_time ? Math.max(0, toMinutes(row.check_out_time) - toMinutes(row.check_in_time)) : 0,
+    is_dev: Boolean(row.is_dev),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }];
+}
+
+function normalizeSummary(data: unknown): AttendanceDailySummary | null {
+  if (!data || typeof data !== 'object') return null;
+  const row = data as Partial<AttendanceDailySummary>;
+  if (typeof row.date !== 'string' || typeof row.user_id !== 'string') return null;
+  return row as AttendanceDailySummary;
+}
+
+function buildPseudoLog(
+  date: string,
+  sessions: AttendanceSession[],
+  summary: AttendanceDailySummary | null
+): AttendanceLog | null {
+  if (!sessions.length && !summary) return null;
+  const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const first = sorted[0];
+  const last = [...sorted].reverse().find((s) => !!s.check_out_time) ?? sorted[sorted.length - 1];
+  const rawStatus = summary?.effective_status ?? first?.status ?? null;
+  const status: AttendanceLog['status'] =
+    rawStatus === 'overtime_only'
+      ? 'present'
+      : (rawStatus as AttendanceLog['status']) ?? 'present';
+
+  return {
+    id: summary?.id ?? first?.id ?? `pseudo-${date}`,
+    org_id: summary?.org_id ?? first?.org_id ?? '',
+    user_id: summary?.user_id ?? first?.user_id ?? '',
+    date,
+    check_in_time: summary?.first_check_in ?? first?.check_in_time ?? null,
+    check_out_time: summary?.last_check_out ?? last?.check_out_time ?? null,
+    check_in_lat: null,
+    check_in_lng: null,
+    check_out_lat: null,
+    check_out_lng: null,
+    status,
+    is_dev: false,
+    auto_punch_out: sessions.some((s) => !!s.is_auto_punch_out),
+  };
 }
 
 /** Returns effective shift for a user: per-user schedule if set, else org policy. */
@@ -156,28 +218,59 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
 }
 
 export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
-  const [log, shift] = await Promise.all([getTodayLog(userId), getEffectiveShiftForUser(userId)]);
+  const today = todayStr();
+  const sessionsRes = await supabase
+    .from('attendance_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', today)
+    .order('check_in_time', { ascending: true });
+  const shift = await getEffectiveShiftForUser(userId);
+  const summaryRes = await supabase
+    .from('attendance_daily_summary')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', today)
+    .maybeSingle();
 
-  const dayOfWeek = now().getDay();
-  const punches = log ? buildPunches(log, shift, dayOfWeek) : [];
+  if (sessionsRes.error) throw sessionsRes.error;
+  if (summaryRes.error) throw summaryRes.error;
 
-  return { log, punches, shift };
+  const sessions = normalizeSessions(sessionsRes.data, today);
+  const summary = normalizeSummary(summaryRes.data);
+  const punches = buildPunchesFromSessions(sessions);
+  const log = buildPseudoLog(today, sessions, summary);
+
+  return { log, punches, shift, sessions, summary };
 }
 
 export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
-  const [logRes, shift] = await Promise.all([
-    supabase.from('attendance_logs').select('*').eq('user_id', userId).eq('date', date).maybeSingle(),
+  const [sessionsRes, summaryRes, shift] = await Promise.all([
+    supabase
+      .from('attendance_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', date)
+      .order('check_in_time', { ascending: true }),
+    supabase
+      .from('attendance_daily_summary')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', date)
+      .maybeSingle(),
     getEffectiveShiftForUser(userId),
   ]);
 
-  if (logRes.error) throw logRes.error;
+  if (sessionsRes.error) throw sessionsRes.error;
+  if (summaryRes.error) throw summaryRes.error;
 
-  const log = logRes.data ?? null;
-  const dayOfWeek = new Date(date).getDay();
-  const punches = log ? buildPunches(log, shift, dayOfWeek) : [];
-  const totalMinutesWorked = log ? computeTotalMinutes(log) : 0;
+  const sessions = normalizeSessions(sessionsRes.data, date);
+  const summary = normalizeSummary(summaryRes.data);
+  const punches = buildPunchesFromSessions(sessions);
+  const totalMinutesWorked = summary?.total_work_minutes ?? computeTotalMinutesFromSessions(sessions);
+  const log = buildPseudoLog(date, sessions, summary);
 
-  return { log, punches, shift, totalMinutesWorked };
+  return { log, punches, shift, totalMinutesWorked, sessions, summary };
 }
 
 export async function getAttendanceMonthly(
@@ -185,11 +278,22 @@ export async function getAttendanceMonthly(
   year: number,
   month: number
 ): Promise<MonthDaySummary[]> {
-  const [logs, shift] = await Promise.all([
-    getMonthlyLogs(userId, year, month),
+  const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const [summariesRes, shift] = await Promise.all([
+    supabase
+      .from('attendance_daily_summary')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', from)
+      .lte('date', to),
     getEffectiveShiftForUser(userId),
   ]);
-  const logMap = new Map(logs.map((l) => [l.date, l]));
+
+  if (summariesRes.error) throw summariesRes.error;
+  const summaryMap = new Map((summariesRes.data ?? []).map((s) => [s.date, s]));
   const offDays = shift?.weeklyOffDays ?? [5, 6];
 
   const today = now();
@@ -203,18 +307,25 @@ export async function getAttendanceMonthly(
     const isOffDay = offDays.includes(dayOfWeek);
     const isFuture = dateStr > todayStr_;
 
-    const log = logMap.get(dateStr);
+    const summary = summaryMap.get(dateStr);
 
     let status: MonthDaySummary['status'] = null;
     if (isFuture) status = 'future';
-    else if (isOffDay && !log) status = 'weekend';
-    else if (log) status = log.status;
+    else if (isOffDay && !summary) status = 'weekend';
+    else if (summary?.effective_status === 'overtime_only') status = 'overtime_only';
+    else if (summary?.effective_status === 'present') status = 'present';
+    else if (summary?.effective_status === 'late') status = 'late';
+    else if (summary?.effective_status === 'absent') status = 'absent';
+    else if (summary?.effective_status === 'on_leave') status = 'on_leave';
+    else if (isOffDay && (summary?.session_count ?? 0) > 0) status = 'overtime_offday';
+    else if (!isOffDay && (summary?.session_count ?? 0) > 0 && summary?.effective_status == null) status = 'overtime_only';
+    else if (isOffDay) status = 'weekend';
     else status = 'absent';
 
     summaries.push({
       date: dateStr,
       status,
-      totalMinutesWorked: log ? computeTotalMinutes(log) : 0,
+      totalMinutesWorked: summary?.total_work_minutes ?? 0,
     });
   }
 
@@ -250,9 +361,48 @@ export interface CheckInResult {
 }
 
 export async function checkIn(userId: string): Promise<CheckInResult> {
+  const edgeInvoke = (supabase as unknown as { functions?: { invoke?: Function } }).functions?.invoke;
+  if (typeof edgeInvoke === 'function') {
+    const invoked = await supabase.functions.invoke('punch', {
+      body: { action: 'check_in' },
+    });
+    const data = (invoked as { data?: unknown } | undefined)?.data;
+    const error = (invoked as { error?: { message?: string } } | undefined)?.error;
+    if (!invoked) {
+      return checkInLegacy(userId);
+    }
+    if (error) throw new Error(error.message || 'Failed to check in');
+
+    const session = data as AttendanceSession;
+    const today = await getAttendanceToday(userId);
+    const log = today.log ?? buildPseudoLog(todayStr(), [session], null);
+    if (!log) {
+      throw new Error('Unable to build check-in result');
+    }
+
+    let overtimeRequest: LeaveRequest | null = null;
+    if (session?.is_overtime) {
+      try {
+        const { data: req } = await supabase
+          .from('overtime_requests')
+          .select('*')
+          .eq('session_id', session.id)
+          .maybeSingle();
+        overtimeRequest = req as unknown as LeaveRequest | null;
+      } catch {
+        overtimeRequest = null;
+      }
+    }
+
+    return { log, overtimeRequest };
+  }
+
+  return checkInLegacy(userId);
+}
+
+async function checkInLegacy(userId: string): Promise<CheckInResult> {
   const today = todayStr();
   const time = nowTimeStr();
-
   const { data: existing, error: existingError } = await supabase
     .from('attendance_logs')
     .select('*')
@@ -266,10 +416,9 @@ export async function checkIn(userId: string): Promise<CheckInResult> {
   }
 
   const shift = await getEffectiveShiftForUser(userId);
-  const todayDate = now();
-  const dayOfWeek = todayDate.getDay();
+  const nowDate = now();
+  const dayOfWeek = nowDate.getDay();
   const nowMin = toMinutes(time);
-
   const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
   const isOvertimePunch = shift ? isOvertimeTime(nowMin, shift, dayOfWeek) : false;
 
@@ -280,54 +429,37 @@ export async function checkIn(userId: string): Promise<CheckInResult> {
   }
 
   let log: AttendanceLog;
-
   if (existing) {
-    const { data, error } = await supabase
+    const { data: updated, error } = await supabase
       .from('attendance_logs')
-      .update({
-        check_in_time: time,
-        check_out_time: null,
-        status,
-      })
+      .update({ check_in_time: time, check_out_time: null, status })
       .eq('id', existing.id)
       .select()
       .single();
-
     if (error) throw error;
-    log = data;
+    log = updated;
   } else {
-    const { data, error } = await supabase
+    const { data: inserted, error } = await supabase
       .from('attendance_logs')
-      .insert({
-        user_id: userId,
-        date: today,
-        check_in_time: time,
-        status,
-      })
+      .insert({ user_id: userId, date: today, check_in_time: time, status })
       .select()
       .single();
-
     if (error) throw error;
-    log = data;
+    log = inserted;
   }
 
   let overtimeRequest: LeaveRequest | null = null;
   if (isOvertimePunch || !isWorkingDay) {
     try {
-      const datePrefix = today;
-      const fromDateTime = `${datePrefix}T${time}:00`;
-      const endTime = shift ? shift.workEndTime : time;
-      const toDateTime = `${datePrefix}T${endTime}:00`;
-
       overtimeRequest = await submitRequest({
         user_id: userId,
         type: 'overtime',
-        from_date_time: fromDateTime,
-        to_date_time: toDateTime,
+        from_date_time: `${today}T${time}:00`,
+        to_date_time: `${today}T${shift?.workEndTime ?? time}:00`,
         note: 'طلب عمل إضافي تم إنشاؤه تلقائياً',
       });
     } catch {
-      // Non-blocking: punch-in succeeds even if request creation fails
+      overtimeRequest = null;
     }
   }
 
@@ -335,9 +467,32 @@ export async function checkIn(userId: string): Promise<CheckInResult> {
 }
 
 export async function checkOut(userId: string, checkoutTime?: string): Promise<AttendanceLog> {
+  const edgeInvoke = (supabase as unknown as { functions?: { invoke?: Function } }).functions?.invoke;
+  if (typeof edgeInvoke === 'function') {
+    const payload = checkoutTime
+      ? { action: 'check_out' as const, devOverrideTime: `${todayStr()}T${checkoutTime}:00` }
+      : { action: 'check_out' as const };
+
+    const invoked = await supabase.functions.invoke('punch', { body: payload });
+    if (!invoked) {
+      return checkOutLegacy(userId, checkoutTime);
+    }
+    const error = (invoked as { error?: { message?: string } } | undefined)?.error;
+    if (error) throw new Error(error.message || 'Failed to check out');
+
+    const today = await getAttendanceToday(userId);
+    if (!today.log) {
+      throw new Error('Unable to load updated attendance log');
+    }
+    return today.log;
+  }
+
+  return checkOutLegacy(userId, checkoutTime);
+}
+
+async function checkOutLegacy(userId: string, checkoutTime?: string): Promise<AttendanceLog> {
   const today = todayStr();
   const time = checkoutTime ?? nowTimeStr();
-
   const { data: existing, error: existingError } = await supabase
     .from('attendance_logs')
     .select('*')
@@ -346,23 +501,15 @@ export async function checkOut(userId: string, checkoutTime?: string): Promise<A
     .maybeSingle();
 
   if (existingError) throw existingError;
-  if (!existing?.check_in_time) {
-    throw new Error('Must check in before checking out');
-  }
-  if (existing.check_out_time) {
-    throw new Error('Already checked out today');
-  }
+  if (!existing?.check_in_time) throw new Error('Must check in before checking out');
+  if (existing.check_out_time) throw new Error('Already checked out today');
 
   const { data, error } = await supabase
     .from('attendance_logs')
-    .update({
-      check_out_time: time,
-      auto_punch_out: false,
-    })
+    .update({ check_out_time: time, auto_punch_out: false })
     .eq('id', existing.id)
     .select()
     .single();
-
   if (error) throw error;
   return data;
 }
