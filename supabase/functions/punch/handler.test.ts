@@ -304,6 +304,36 @@ async function punch(deps: PunchDeps, action: 'check_in' | 'check_out', iso: str
   );
 }
 
+Deno.test('part 1.1 grace period boundaries classify check-in correctly', async () => {
+  const cases: Array<{
+    id: string;
+    iso: string;
+    expectedStatus: 'present' | 'late';
+    expectedOvertime: boolean;
+  }> = [
+    { id: '1.1.1', iso: '2025-06-10T09:00:00', expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.1.2', iso: '2025-06-10T09:14:00', expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.1.3', iso: '2025-06-10T09:15:00', expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.1.4', iso: '2025-06-10T09:16:00', expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.1.5', iso: '2025-06-10T09:30:00', expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.1.6', iso: '2025-06-10T17:59:00', expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.1.7', iso: '2025-06-10T18:00:00', expectedStatus: 'late', expectedOvertime: false },
+  ];
+
+  for (const testCase of cases) {
+    const mem = makeDeps();
+    const res = await punch(mem.deps, 'check_in', testCase.iso);
+    assertEquals(res.status, 200, `${testCase.id} should accept check-in`);
+    const body = (await json(res)) as { status?: 'present' | 'late'; is_overtime?: boolean };
+    assertEquals(body.status, testCase.expectedStatus, `${testCase.id} status mismatch`);
+    assertEquals(body.is_overtime, testCase.expectedOvertime, `${testCase.id} is_overtime mismatch`);
+
+    assertEquals(mem.sessions.length, 1, `${testCase.id} should create one session`);
+    assertEquals(mem.sessions[0].status, testCase.expectedStatus, `${testCase.id} persisted status mismatch`);
+    assertEquals(mem.sessions[0].is_overtime, testCase.expectedOvertime, `${testCase.id} persisted overtime mismatch`);
+  }
+});
+
 Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', '2025-06-10T08:30:00');
