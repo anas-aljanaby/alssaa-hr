@@ -389,6 +389,32 @@ Deno.test('part 1.3 post-shift overtime boundaries classify check-in correctly',
   }
 });
 
+Deno.test('part 1.4 overnight and very-early check-ins classify as overtime', async () => {
+  const cases: Array<{
+    id: string;
+    iso: string;
+    expectedStatus: 'present' | 'late';
+    expectedOvertime: boolean;
+  }> = [
+    { id: '1.4.1', iso: '2025-06-10T00:00:00', expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.4.2', iso: '2025-06-10T02:00:00', expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.4.3', iso: '2025-06-10T07:59:00', expectedStatus: 'present', expectedOvertime: true },
+  ];
+
+  for (const testCase of cases) {
+    const mem = makeDeps();
+    const res = await punch(mem.deps, 'check_in', testCase.iso);
+    assertEquals(res.status, 200, `${testCase.id} should accept check-in`);
+    const body = (await json(res)) as { status?: 'present' | 'late'; is_overtime?: boolean };
+    assertEquals(body.status, testCase.expectedStatus, `${testCase.id} status mismatch`);
+    assertEquals(body.is_overtime, testCase.expectedOvertime, `${testCase.id} is_overtime mismatch`);
+
+    assertEquals(mem.sessions.length, 1, `${testCase.id} should create one session`);
+    assertEquals(mem.sessions[0].status, testCase.expectedStatus, `${testCase.id} persisted status mismatch`);
+    assertEquals(mem.sessions[0].is_overtime, testCase.expectedOvertime, `${testCase.id} persisted overtime mismatch`);
+  }
+});
+
 Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', '2025-06-10T08:30:00');
