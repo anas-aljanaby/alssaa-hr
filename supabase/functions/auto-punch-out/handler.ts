@@ -20,6 +20,16 @@ export function formatTimeHHMM(t: string): string {
   return `${parts[0].padStart(2, '0')}:${(parts[1] ?? '0').padStart(2, '0')}`;
 }
 
+function nowToTimeHHMM(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function diffMinutes(checkIn: string, checkOut: string): number {
+  const inM = timeToMinutes(checkIn);
+  const outM = timeToMinutes(checkOut);
+  return Math.max(0, outM - inM);
+}
+
 export type AutoPunchEnv = {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -73,19 +83,26 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
 
     const admin = deps.createServiceClient();
 
-    const { data: openLogsRaw, error: logsError } = await admin
-      .from('attendance_logs')
-      .select('id, user_id, org_id, date, check_in_time')
+    const { data: openSessionsRaw, error: sessionsError } = await admin
+      .from('attendance_sessions')
+      .select('id, user_id, org_id, date, check_in_time, is_overtime')
       .eq('date', today)
-      .not('check_in_time', 'is', null)
-      .is('check_out_time', null);
+      .is('check_out_time', null)
+      .eq('is_overtime', false);
 
-    const openLogs = openLogsRaw as { id: string; user_id: string; org_id: string; date: string; check_in_time: string }[] | null;
+    const openSessions = openSessionsRaw as {
+      id: string;
+      user_id: string;
+      org_id: string;
+      date: string;
+      check_in_time: string;
+      is_overtime: boolean;
+    }[] | null;
 
-    if (logsError) {
+    if (sessionsError) {
       const msg =
-        typeof logsError === 'object' && logsError !== null && 'message' in logsError
-          ? String((logsError as { message: string }).message)
+        typeof sessionsError === 'object' && sessionsError !== null && 'message' in sessionsError
+          ? String((sessionsError as { message: string }).message)
           : 'Query failed';
       return new Response(
         JSON.stringify({ error: msg, code: 'QUERY_FAILED' }),
@@ -93,9 +110,9 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       );
     }
 
-    if (!openLogs?.length) {
+    if (!openSessions?.length) {
       return new Response(
-        JSON.stringify({ processed: 0, message: 'No open logs' }),
+        JSON.stringify({ processed: 0, message: 'No open sessions' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -103,11 +120,11 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     const dayOfWeek = effectiveNow.getDay();
     let processed = 0;
 
-    for (const log of openLogs) {
+    for (const session of openSessions) {
       const { data: profileRaw } = await admin
         .from('profiles')
         .select('work_days, work_start_time, work_end_time')
-        .eq('id', log.user_id)
+        .eq('id', session.user_id)
         .single();
 
       const profile = profileRaw as {
@@ -119,7 +136,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       const { data: policyRaw } = await admin
         .from('attendance_policy')
         .select('work_end_time, auto_punch_out_buffer_minutes, weekly_off_days')
-        .eq('org_id', log.org_id)
+        .eq('org_id', session.org_id)
         .limit(1)
         .maybeSingle();
 
@@ -149,25 +166,30 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
 
       if (nowMinutes <= cutoffMinutes) continue;
 
-      const shiftEndTimeStr = formatTimeHHMM(workEndTime);
+      const actualCheckoutTime = nowToTimeHHMM(effectiveNow);
+      const durationMinutes = diffMinutes(session.check_in_time, actualCheckoutTime);
 
       const { error: updateError } = await admin
-        .from('attendance_logs')
+        .from('attendance_sessions')
         .update({
-          check_out_time: shiftEndTimeStr,
-          auto_punch_out: true,
+          check_out_time: actualCheckoutTime,
+          duration_minutes: durationMinutes,
+          is_auto_punch_out: true,
+          needs_review: true,
+          is_early_departure: false,
+          last_action_at: effectiveNow.toISOString(),
         })
-        .eq('id', log.id);
+        .eq('id', session.id);
 
       if (updateError) continue;
 
       await admin.from('notifications').insert({
-        org_id: log.org_id,
-        user_id: log.user_id,
+        org_id: session.org_id,
+        user_id: session.user_id,
         title: 'Forgot to punch out',
         title_ar: 'نسيت تسجيل الانصراف',
-        message: `The system recorded your departure at ${shiftEndTimeStr}. If this is incorrect, submit a correction request.`,
-        message_ar: `تم تسجيل انصرافك تلقائياً الساعة ${shiftEndTimeStr}. إن كان ذلك غير صحيح، قدم طلب تصحيح.`,
+        message: `The system recorded your departure at ${actualCheckoutTime}. If this is incorrect, submit a correction request.`,
+        message_ar: `تم تسجيل انصرافك تلقائياً الساعة ${actualCheckoutTime}. إن كان ذلك غير صحيح، قدم طلب تصحيح.`,
         type: 'attendance',
       });
 
@@ -175,7 +197,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     }
 
     return new Response(
-      JSON.stringify({ processed, total: openLogs.length }),
+      JSON.stringify({ processed, total: openSessions.length }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

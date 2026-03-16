@@ -1,7 +1,6 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables } from '../database.types';
 import { now } from '../time';
-import { submitRequest } from './requests.service';
 import type { LeaveRequest } from './requests.service';
 
 export type AttendanceLog = Tables<'attendance_logs'>;
@@ -52,6 +51,35 @@ export interface MonthDaySummary {
   date: string;
   status: CalendarStatus;
   totalMinutesWorked: number;
+}
+
+function resolveCalendarStatus(
+  dateStr: string,
+  isOffDay: boolean,
+  summary: AttendanceDailySummary | undefined,
+  todayStr_: string
+): CalendarStatus {
+  const isFuture = dateStr > todayStr_;
+  const isToday = dateStr === todayStr_;
+
+  if (isFuture) return 'future';
+  if (summary?.effective_status === 'present') return 'present';
+  if (summary?.effective_status === 'late') return 'late';
+  if (summary?.effective_status === 'absent') return 'absent';
+  if (summary?.effective_status === 'on_leave') return 'on_leave';
+  if (summary?.effective_status === 'overtime_only') return 'overtime_only';
+
+  // Off-day with attendance is rendered as overtime day (no effective_status by policy).
+  if (isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_offday';
+
+  // Working day with sessions but unresolved summary should still appear as overtime-only.
+  if (!isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_only';
+
+  if (isOffDay) return 'weekend';
+
+  // Policy defines absent for past working day only; today's empty state remains neutral.
+  if (isToday) return null;
+  return 'absent';
 }
 
 function toMinutes(t: string): number {
@@ -121,6 +149,7 @@ function normalizeSessions(data: unknown, dateHint: string): AttendanceSession[]
     is_early_departure: false,
     needs_review: false,
     duration_minutes: row.check_out_time ? Math.max(0, toMinutes(row.check_out_time) - toMinutes(row.check_in_time)) : 0,
+    last_action_at: new Date().toISOString(),
     is_dev: Boolean(row.is_dev),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -305,22 +334,8 @@ export async function getAttendanceMonthly(
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const dayOfWeek = new Date(dateStr).getDay();
     const isOffDay = offDays.includes(dayOfWeek);
-    const isFuture = dateStr > todayStr_;
-
     const summary = summaryMap.get(dateStr);
-
-    let status: MonthDaySummary['status'] = null;
-    if (isFuture) status = 'future';
-    else if (isOffDay && !summary) status = 'weekend';
-    else if (summary?.effective_status === 'overtime_only') status = 'overtime_only';
-    else if (summary?.effective_status === 'present') status = 'present';
-    else if (summary?.effective_status === 'late') status = 'late';
-    else if (summary?.effective_status === 'absent') status = 'absent';
-    else if (summary?.effective_status === 'on_leave') status = 'on_leave';
-    else if (isOffDay && (summary?.session_count ?? 0) > 0) status = 'overtime_offday';
-    else if (!isOffDay && (summary?.session_count ?? 0) > 0 && summary?.effective_status == null) status = 'overtime_only';
-    else if (isOffDay) status = 'weekend';
-    else status = 'absent';
+    const status = resolveCalendarStatus(dateStr, isOffDay, summary, todayStr_);
 
     summaries.push({
       date: dateStr,
@@ -450,17 +465,8 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
 
   let overtimeRequest: LeaveRequest | null = null;
   if (isOvertimePunch || !isWorkingDay) {
-    try {
-      overtimeRequest = await submitRequest({
-        user_id: userId,
-        type: 'overtime',
-        from_date_time: `${today}T${time}:00`,
-        to_date_time: `${today}T${shift?.workEndTime ?? time}:00`,
-        note: 'طلب عمل إضافي تم إنشاؤه تلقائياً',
-      });
-    } catch {
-      overtimeRequest = null;
-    }
+    // Legacy mode cannot create session-linked overtime_requests safely.
+    overtimeRequest = null;
   }
 
   return { log, overtimeRequest };
@@ -556,14 +562,14 @@ export async function getMonthlyStats(
   year: number,
   month: number
 ): Promise<MonthlyStats> {
-  const logs = await getMonthlyLogs(userId, year, month);
+  const summaries = await getAttendanceMonthly(userId, year, month);
 
   return {
-    presentDays: logs.filter((l) => l.status === 'present').length,
-    lateDays: logs.filter((l) => l.status === 'late').length,
-    absentDays: logs.filter((l) => l.status === 'absent').length,
-    leaveDays: logs.filter((l) => l.status === 'on_leave').length,
-    totalWorkingDays: logs.length,
+    presentDays: summaries.filter((d) => d.status === 'present').length,
+    lateDays: summaries.filter((d) => d.status === 'late').length,
+    absentDays: summaries.filter((d) => d.status === 'absent').length,
+    leaveDays: summaries.filter((d) => d.status === 'on_leave').length,
+    totalWorkingDays: summaries.filter((d) => d.status !== 'future' && d.status !== 'weekend').length,
   };
 }
 

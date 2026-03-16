@@ -122,7 +122,14 @@ export async function handleDevSeedAttendance(req: Request, deps: DevSeedDeps): 
     const daysInMonth = new Date(lastMonthYear, lastMonth + 1, 0).getDate();
 
     type DayKind = 'on_time' | 'late' | 'absent' | 'overtime';
-    const rows: { date: string; check_in_time: string; check_out_time: string; status: 'present' | 'late' }[] = [];
+    const rows: {
+      date: string;
+      check_in_time: string;
+      check_out_time: string;
+      status: 'present' | 'late';
+      is_overtime: boolean;
+      duration_minutes: number;
+    }[] = [];
 
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(lastMonthYear, lastMonth, day);
@@ -171,12 +178,14 @@ export async function handleDevSeedAttendance(req: Request, deps: DevSeedDeps): 
         check_in_time: `${pad2(checkInH)}:${pad2(checkInM)}`,
         check_out_time: `${pad2(checkOutH)}:${pad2(checkOutM)}`,
         status,
+        is_overtime: kind === 'overtime',
+        duration_minutes: Math.max(0, (checkOutH * 60 + checkOutM) - (checkInH * 60 + checkInM)),
       });
     }
 
     let inserted = 0;
     for (const row of rows) {
-      const { error } = await admin.from('attendance_logs').upsert(
+      const { error } = await admin.from('attendance_sessions').insert(
         {
           org_id: profile.org_id,
           user_id: caller.id,
@@ -184,8 +193,10 @@ export async function handleDevSeedAttendance(req: Request, deps: DevSeedDeps): 
           check_in_time: row.check_in_time,
           check_out_time: row.check_out_time,
           status: row.status,
+          is_overtime: row.is_overtime,
+          duration_minutes: row.duration_minutes,
+          is_dev: true,
         },
-        { onConflict: 'user_id,date' }
       );
       if (!error) inserted++;
     }

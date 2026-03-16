@@ -230,6 +230,7 @@ export interface Database {
           is_early_departure: boolean;
           needs_review: boolean;
           duration_minutes: number;
+          last_action_at: string;
           is_dev: boolean;
           created_at: string;
           updated_at: string;
@@ -247,6 +248,7 @@ export interface Database {
           is_early_departure?: boolean;
           needs_review?: boolean;
           duration_minutes?: number;
+          last_action_at?: string;
           is_dev?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -264,6 +266,7 @@ export interface Database {
           is_early_departure?: boolean;
           needs_review?: boolean;
           duration_minutes?: number;
+          last_action_at?: string;
           is_dev?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -405,6 +408,160 @@ export interface Database {
           },
           {
             foreignKeyName: 'overtime_requests_reviewed_by_fkey';
+            columns: ['reviewed_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      attendance_audit_log: {
+        Row: {
+          id: string;
+          org_id: string;
+          session_id: string | null;
+          employee_id: string;
+          action: 'check_in' | 'check_out' | 'auto_punch_out' | 'correction_approved' | 'manual_edit' | 'session_deleted';
+          performed_by: string | null;
+          old_values: Json | null;
+          new_values: Json | null;
+          reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id?: string;
+          session_id?: string | null;
+          employee_id: string;
+          action: 'check_in' | 'check_out' | 'auto_punch_out' | 'correction_approved' | 'manual_edit' | 'session_deleted';
+          performed_by?: string | null;
+          old_values?: Json | null;
+          new_values?: Json | null;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          session_id?: string | null;
+          employee_id?: string;
+          action?: 'check_in' | 'check_out' | 'auto_punch_out' | 'correction_approved' | 'manual_edit' | 'session_deleted';
+          performed_by?: string | null;
+          old_values?: Json | null;
+          new_values?: Json | null;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'attendance_audit_log_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_audit_log_session_id_fkey';
+            columns: ['session_id'];
+            isOneToOne: false;
+            referencedRelation: 'attendance_sessions';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_audit_log_employee_id_fkey';
+            columns: ['employee_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_audit_log_performed_by_fkey';
+            columns: ['performed_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      attendance_correction_requests: {
+        Row: {
+          id: string;
+          org_id: string;
+          employee_id: string;
+          session_id: string | null;
+          date: string;
+          proposed_check_in_time: string | null;
+          proposed_check_out_time: string | null;
+          reason: string;
+          status: 'pending' | 'approved' | 'rejected';
+          requested_by: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id?: string;
+          employee_id: string;
+          session_id?: string | null;
+          date: string;
+          proposed_check_in_time?: string | null;
+          proposed_check_out_time?: string | null;
+          reason?: string;
+          status?: 'pending' | 'approved' | 'rejected';
+          requested_by: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          employee_id?: string;
+          session_id?: string | null;
+          date?: string;
+          proposed_check_in_time?: string | null;
+          proposed_check_out_time?: string | null;
+          reason?: string;
+          status?: 'pending' | 'approved' | 'rejected';
+          requested_by?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'attendance_correction_requests_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_correction_requests_employee_id_fkey';
+            columns: ['employee_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_correction_requests_session_id_fkey';
+            columns: ['session_id'];
+            isOneToOne: false;
+            referencedRelation: 'attendance_sessions';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_correction_requests_requested_by_fkey';
+            columns: ['requested_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'attendance_correction_requests_reviewed_by_fkey';
             columns: ['reviewed_by'];
             isOneToOne: false;
             referencedRelation: 'profiles';

@@ -107,6 +107,7 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
             const isToday = isCurrentMonth && day === todayDate;
             const isFutureDay = summary?.status === 'future';
             const isWeekend = summary?.status === 'weekend';
+            const isOvertimeOffday = summary?.status === 'overtime_offday';
             const dot = summary ? dotColor(summary.status) : null;
             const isTappable = !isFutureDay && summary?.status !== 'weekend' && summary?.status != null;
 
@@ -133,6 +134,9 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
                 )}
                 {isToday && dot && (
                   <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
+                )}
+                {isOvertimeOffday && !isToday && (
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-violet-200 border border-violet-500" />
                 )}
               </button>
             );

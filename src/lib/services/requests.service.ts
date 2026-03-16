@@ -159,6 +159,17 @@ export async function updateRequestStatus(
 
   if (approvalLogError) throw approvalLogError;
 
+  if (status === 'approved' && data.type === 'time_adjustment') {
+    const { error: correctionError } = await supabase.rpc(
+      'approve_attendance_correction_from_leave_request',
+      {
+        p_leave_request_id: data.id,
+        p_approver_id: approverId,
+      }
+    );
+    if (correctionError) throw correctionError;
+  }
+
   const enriched = await attachApproverProfiles([data]);
   return enriched[0];
 }

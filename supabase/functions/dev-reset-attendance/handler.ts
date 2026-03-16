@@ -68,13 +68,13 @@ export async function handleDevResetAttendance(req: Request, deps: DevResetDeps)
     const admin = deps.createServiceClient();
 
     const { data: deletedRaw, error } = await admin
-      .from('attendance_logs')
+      .from('attendance_sessions')
       .delete()
       .eq('user_id', caller.id)
       .eq('is_dev', true)
-      .select('id');
+      .select('id, date');
 
-    const deleted = deletedRaw as { id: string }[] | null;
+    const deleted = deletedRaw as { id: string; date: string }[] | null;
 
     if (error) {
       return new Response(
@@ -84,8 +84,17 @@ export async function handleDevResetAttendance(req: Request, deps: DevResetDeps)
     }
 
     const count = deleted?.length ?? 0;
+    const deletedDates = Array.from(new Set((deleted ?? []).map((d) => d.date)));
+    if (deletedDates.length > 0) {
+      await admin
+        .from('attendance_daily_summary')
+        .delete()
+        .eq('user_id', caller.id)
+        .in('date', deletedDates);
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, deleted: count, message: `Deleted ${count} dev attendance record(s)` }),
+      JSON.stringify({ ok: true, deleted: count, message: `Deleted ${count} dev attendance session(s)` }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (_e) {

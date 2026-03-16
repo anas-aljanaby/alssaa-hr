@@ -85,6 +85,7 @@ type SessionRow = {
   status: 'present' | 'late';
   is_overtime: boolean;
   duration_minutes?: number;
+  last_action_at?: string;
   is_auto_punch_out?: boolean;
   is_early_departure?: boolean;
   needs_review?: boolean;
@@ -134,10 +135,25 @@ function toMinutes(timeStr: string): number {
   return h * 60 + m;
 }
 
+function toSecondsHHMM(timeStr: string): number {
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 3600 + m * 60;
+}
+
+function currentSecondsOfDay(d: Date): number {
+  return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+}
+
 function fromMinutes(min: number): number {
   if (min < 0) return min + 1440;
   if (min >= 1440) return min - 1440;
   return min;
+}
+
+function fromSeconds(sec: number): number {
+  if (sec < 0) return sec + 86400;
+  if (sec >= 86400) return sec - 86400;
+  return sec;
 }
 
 function diffMinutes(checkInTime: string, checkOutTime: string): number {
@@ -179,7 +195,7 @@ function resolveSchedule(profile: ProfileRow, policy: PolicyRow | null, date: Da
 }
 
 function classifySessionCheckIn(
-  time: string,
+  nowSeconds: number,
   schedule: ResolvedSchedule
 ): { status: 'present' | 'late'; isOvertime: boolean } {
   if (!schedule.hasShift) {
@@ -189,16 +205,15 @@ function classifySessionCheckIn(
     return { status: 'present', isOvertime: true };
   }
 
-  const nowMinutes = toMinutes(time);
-  const shiftStartMinutes = toMinutes(schedule.workStartTime!);
-  const shiftEndMinutes = toMinutes(schedule.workEndTime!);
-  const earlyLoginStart = fromMinutes(shiftStartMinutes - schedule.earlyLoginMinutes);
+  const shiftStartSeconds = toSecondsHHMM(schedule.workStartTime!);
+  const shiftEndSeconds = toSecondsHHMM(schedule.workEndTime!);
+  const earlyLoginStartSeconds = fromSeconds(shiftStartSeconds - schedule.earlyLoginMinutes * 60);
 
-  if (nowMinutes < earlyLoginStart || nowMinutes > shiftEndMinutes) {
+  if (nowSeconds < earlyLoginStartSeconds || nowSeconds > shiftEndSeconds) {
     return { status: 'present', isOvertime: true };
   }
 
-  if (nowMinutes > shiftStartMinutes + schedule.gracePeriodMinutes) {
+  if (nowSeconds > shiftStartSeconds + schedule.gracePeriodMinutes * 60) {
     return { status: 'late', isOvertime: false };
   }
 
@@ -398,6 +413,26 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const openSession = openSessionRaw as SessionRow | null;
 
+    const { data: latestActionRaw } = await admin
+      .from('attendance_sessions')
+      .select('last_action_at')
+      .eq('user_id', caller.id)
+      .order('last_action_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const latestAction = latestActionRaw as { last_action_at?: string } | null;
+    if (latestAction?.last_action_at) {
+      const secondsSinceLastAction =
+        Math.floor((effectiveNow.getTime() - new Date(latestAction.last_action_at).getTime()) / 1000);
+      if (secondsSinceLastAction >= 0 && secondsSinceLastAction < 60) {
+        return new Response(
+          JSON.stringify({ error: 'Please wait before the next punch action', code: 'COOLDOWN_ACTIVE' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     const { data: policyRaw } = await admin
       .from('attendance_policy')
       .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days, early_login_minutes, minimum_required_minutes')
@@ -416,7 +451,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         );
       }
 
-      const classification = classifySessionCheckIn(time, schedule);
+      const classification = classifySessionCheckIn(currentSecondsOfDay(effectiveNow), schedule);
 
       const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
 
@@ -430,6 +465,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           status: classification.status,
           is_overtime: classification.isOvertime,
           duration_minutes: 0,
+          last_action_at: effectiveNow.toISOString(),
           is_dev: isDev,
         })
         .select()
@@ -448,12 +484,12 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         // Best effort: attendance session is source of truth.
         await admin
           .from('overtime_requests')
-          .insert({
+          .upsert({
             org_id: orgId,
             user_id: caller.id,
             session_id: insertedSession.id,
             status: 'pending',
-          });
+          }, { onConflict: 'session_id' });
       }
 
       await recalculateDailySummary(admin, {
@@ -490,6 +526,9 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         check_out_time: time,
         duration_minutes: durationMinutes,
         is_early_departure: isEarlyDeparture,
+        is_auto_punch_out: false,
+        needs_review: false,
+        last_action_at: effectiveNow.toISOString(),
         is_dev: isDev,
       })
       .eq('id', openSession.id)
