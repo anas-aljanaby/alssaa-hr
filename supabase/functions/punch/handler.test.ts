@@ -415,6 +415,49 @@ Deno.test('part 1.4 overnight and very-early check-ins classify as overtime', as
   }
 });
 
+Deno.test('part 2.1 off-day punch-in is always present + overtime', async () => {
+  const defaultOffDayCases: Array<{
+    id: string;
+    iso: string;
+  }> = [
+    { id: '2.1', iso: '2025-06-06T10:00:00' },
+    { id: '2.2', iso: '2025-06-07T09:00:00' },
+    { id: '2.3', iso: '2025-06-06T08:00:00' },
+    { id: '2.4', iso: '2025-06-06T00:01:00' },
+    { id: '2.5', iso: '2025-06-06T23:59:00' },
+  ];
+
+  for (const testCase of defaultOffDayCases) {
+    const mem = makeDeps();
+    const res = await punch(mem.deps, 'check_in', testCase.iso);
+    assertEquals(res.status, 200, `${testCase.id} should accept off-day check-in`);
+    const body = (await json(res)) as { status?: 'present' | 'late'; is_overtime?: boolean };
+    assertEquals(body.status, 'present', `${testCase.id} status mismatch`);
+    assertEquals(body.is_overtime, true, `${testCase.id} is_overtime mismatch`);
+    assertEquals(mem.sessions.length, 1, `${testCase.id} should create one session`);
+    assertEquals(mem.sessions[0].status, 'present', `${testCase.id} persisted status mismatch`);
+    assertEquals(mem.sessions[0].is_overtime, true, `${testCase.id} persisted overtime mismatch`);
+  }
+
+  const customOffDay = makeDeps({
+    profile: {
+      org_id: 'o1',
+      // User works Sun-Thu, so Friday is user-specific off-day.
+      work_days: [0, 1, 2, 3, 4],
+      work_start_time: '09:00',
+      work_end_time: '18:00',
+    },
+  });
+  const customRes = await punch(customOffDay.deps, 'check_in', '2025-06-06T10:00:00');
+  assertEquals(customRes.status, 200, '2.6 should accept custom off-day check-in');
+  const customBody = (await json(customRes)) as { status?: 'present' | 'late'; is_overtime?: boolean };
+  assertEquals(customBody.status, 'present', '2.6 status mismatch');
+  assertEquals(customBody.is_overtime, true, '2.6 is_overtime mismatch');
+  assertEquals(customOffDay.sessions.length, 1, '2.6 should create one session');
+  assertEquals(customOffDay.sessions[0].status, 'present', '2.6 persisted status mismatch');
+  assertEquals(customOffDay.sessions[0].is_overtime, true, '2.6 persisted overtime mismatch');
+});
+
 Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', '2025-06-10T08:30:00');
