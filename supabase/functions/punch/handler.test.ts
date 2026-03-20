@@ -465,14 +465,28 @@ Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   await punch(mem.deps, 'check_in', '2025-06-10T13:00:00');
   await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
 
+  // 3.1.S1 + 3.1.S2 session-level assertions.
   assertEquals(mem.sessions.length, 2);
+  const [s1, s2] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.check_in_time, '08:30');
+  assertEquals(s1.check_out_time, '12:00');
+  assertEquals(s1.status, 'present');
+  assertEquals(s1.is_overtime, false);
+  assertEquals(s1.duration_minutes, 210);
+  assertEquals(s2.check_in_time, '13:00');
+  assertEquals(s2.check_out_time, '18:00');
+  assertEquals(s2.status, 'present');
+  assertEquals(s2.is_overtime, false);
+  assertEquals(s2.duration_minutes, 300);
+
+  // 3.1.1 -> 3.1.7 daily summary assertions.
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.total_work_minutes, 510);
   assertEquals(summary?.total_overtime_minutes, 0);
-  assertEquals(summary?.first_check_in, '08:30');
-  assertEquals(summary?.last_check_out, '18:00');
   assertEquals(summary?.effective_status, 'present');
   assertEquals(summary?.session_count, 2);
+  assertEquals(summary?.first_check_in, '08:30');
+  assertEquals(summary?.last_check_out, '18:00');
   assertEquals(summary?.is_short_day, false);
 });
 
