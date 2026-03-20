@@ -609,6 +609,32 @@ Deno.test('part 3.5 working day overtime-only yields overtime_only', async () =>
   assertEquals(summary?.effective_status === 'absent', false);
 });
 
+Deno.test('part 3.6 many sessions sum and short-day correctness', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T08:30:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T11:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T13:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T14:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T17:00:00');
+
+  // 3.6.S1/S2/S3 durations: 90 + 120 + 180.
+  assertEquals(mem.sessions.length, 3);
+  const [s1, s2, s3] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.duration_minutes, 90);
+  assertEquals(s2.duration_minutes, 120);
+  assertEquals(s3.duration_minutes, 180);
+  assertEquals(s1.is_overtime, false);
+  assertEquals(s2.is_overtime, false);
+  assertEquals(s3.is_overtime, false);
+
+  // 3.6.1 / 3.6.2 / 3.6.3 summary assertions.
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 390);
+  assertEquals(summary?.is_short_day, true);
+  assertEquals(summary?.session_count, 3);
+});
+
 Deno.test('part 4.1 approved leave with no sessions resolves on_leave', async () => {
   const mem = makeDeps({
     leaveRows: [
