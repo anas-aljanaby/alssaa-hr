@@ -490,6 +490,30 @@ Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   assertEquals(summary?.is_short_day, false);
 });
 
+Deno.test('part 3.2 late first session with late return resolves late', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T13:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T14:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+
+  // 3.2.S1 + 3.2.S2: classification is independent per session check-in.
+  assertEquals(mem.sessions.length, 2);
+  const [s1, s2] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.check_in_time, '09:30');
+  assertEquals(s1.check_out_time, '13:00');
+  assertEquals(s1.status, 'late');
+  assertEquals(s1.is_overtime, false);
+  assertEquals(s2.check_in_time, '14:00');
+  assertEquals(s2.check_out_time, '18:00');
+  assertEquals(s2.status, 'late');
+  assertEquals(s2.is_overtime, false);
+
+  // 3.2.2: no non-overtime present session exists => effective_status is late.
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'late');
+});
+
 Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
   const mem = makeDeps({
     profile: {
