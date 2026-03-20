@@ -597,8 +597,16 @@ Deno.test('part 3.5 working day overtime-only yields overtime_only', async () =>
   assertEquals(body.status, 'present');
   assertEquals(body.is_overtime, true);
 
+  // 3.5.S1: overtime-only session exists on a working day.
+  assertEquals(mem.sessions.length, 1);
+  assertEquals(mem.sessions[0].check_in_time, '20:00');
+  assertEquals(mem.sessions[0].status, 'present');
+  assertEquals(mem.sessions[0].is_overtime, true);
+
+  // 3.5.1 + 3.5.2: overtime_only is distinct from absent.
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'overtime_only');
+  assertEquals(summary?.effective_status === 'absent', false);
 });
 
 Deno.test('part 4.1 approved leave with no sessions resolves on_leave', async () => {

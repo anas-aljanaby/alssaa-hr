@@ -157,6 +157,33 @@ describe('attendance.service', () => {
     expect(stats.lateDays).toBe(1);
   });
 
+  it('calendar maps overtime_only summary to overtime_only status', async () => {
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({
+      data: [{
+        id: 'sum-ot-only',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2025-06-10',
+        first_check_in: '20:00',
+        last_check_out: '22:00',
+        total_work_minutes: 120,
+        total_overtime_minutes: 120,
+        effective_status: 'overtime_only',
+        is_short_day: true,
+        session_count: 1,
+        updated_at: '2025-06-10T22:00:00Z',
+      }],
+      error: null,
+    });
+    sb.queueResult({ data: policyRow, error: null });
+
+    const { getAttendanceMonthly } = await import('./attendance.service');
+    const month = await getAttendanceMonthly('u1', 2025, 5); // June
+    const day = month.find((d) => d.date === '2025-06-10');
+    expect(day?.status).toBe('overtime_only');
+  });
+
   it('checkIn inserts when no existing log', async () => {
     sb.queueResult({ data: null, error: null });
     sb.queueResult({ data: profileShift, error: null });
