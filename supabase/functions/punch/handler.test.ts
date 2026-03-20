@@ -514,6 +514,40 @@ Deno.test('part 3.2 late first session with late return resolves late', async ()
   assertEquals(summary?.effective_status, 'late');
 });
 
+Deno.test('part 3.3 regular session then post-shift overtime session', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T18:10:00');
+  const overtimeIn = await punch(mem.deps, 'check_in', '2025-06-10T18:12:00');
+  assertEquals(overtimeIn.status, 200);
+
+  // 3.3.S1 + 3.3.S2 session-level checks.
+  assertEquals(mem.sessions.length, 2);
+  const [s1, s2] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.check_in_time, '09:00');
+  assertEquals(s1.check_out_time, '18:10');
+  assertEquals(s1.status, 'present');
+  assertEquals(s1.is_overtime, false);
+  assertEquals(s2.check_in_time, '18:12');
+  assertEquals(s2.check_out_time, null);
+  assertEquals(s2.status, 'present');
+  assertEquals(s2.is_overtime, true);
+
+  // 3.3.1: strict overtime threshold after shift end.
+  const overtimeBody = (await json(overtimeIn)) as { status?: 'present' | 'late'; is_overtime?: boolean };
+  assertEquals(overtimeBody.status, 'present');
+  assertEquals(overtimeBody.is_overtime, true);
+
+  // 3.3.2: overtime request auto-created for overtime session.
+  assertEquals(mem.overtimeRequests.length, 1);
+  assertEquals(mem.overtimeRequests[0].session_id, s2.id);
+  assertEquals(mem.overtimeRequests[0].user_id, mem.userId);
+
+  // 3.3.3: effective status remains present due to regular non-overtime present session.
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'present');
+});
+
 Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
   const mem = makeDeps({
     profile: {
