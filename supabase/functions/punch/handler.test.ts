@@ -265,7 +265,7 @@ function makeDeps(opts?: {
             });
             if (typeof limitCount === 'number') rows = rows.slice(0, limitCount);
             data = mode === 'many' ? rows : (rows[0] ?? null);
-          } else if (table === 'overtime_requests' && op === 'insert') {
+          } else if (table === 'overtime_requests' && (op === 'insert' || op === 'upsert')) {
             overtimeRequests.push({
               session_id: String(payload?.session_id ?? ''),
               user_id: String(payload?.user_id ?? ''),
@@ -563,12 +563,30 @@ Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
   await punch(mem.deps, 'check_in', '2025-06-06T15:00:00');
   await punch(mem.deps, 'check_out', '2025-06-06T19:00:00');
 
+  // 3.4.S1 + 3.4.S2: both sessions are off-day overtime sessions.
+  assertEquals(mem.sessions.length, 2);
+  const [s1, s2] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.check_in_time, '10:00');
+  assertEquals(s1.check_out_time, '13:00');
+  assertEquals(s1.status, 'present');
+  assertEquals(s1.is_overtime, true);
+  assertEquals(s1.duration_minutes, 180);
+  assertEquals(s2.check_in_time, '15:00');
+  assertEquals(s2.check_out_time, '19:00');
+  assertEquals(s2.status, 'present');
+  assertEquals(s2.is_overtime, true);
+  assertEquals(s2.duration_minutes, 240);
+
+  // 3.4.1 -> 3.4.4 summary assertions.
   const summary = mem.summaries.find((s) => s.date === '2025-06-06');
   assertEquals(summary?.total_work_minutes, 420);
   assertEquals(summary?.total_overtime_minutes, 420);
   assertEquals(summary?.effective_status, null);
   assertEquals(summary?.session_count, 2);
+
+  // 3.4.6 overtime request per overtime session.
   assertEquals(mem.overtimeRequests.length, 2);
+  assertEquals(mem.overtimeRequests.map((r) => r.session_id).sort(), [s1.id, s2.id].sort());
 });
 
 Deno.test('part 3.5 working day overtime-only yields overtime_only', async () => {
