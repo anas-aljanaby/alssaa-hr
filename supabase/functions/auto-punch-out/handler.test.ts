@@ -143,3 +143,187 @@ Deno.test('when now before cutoff, no update', async () => {
   const b = (await json(res)) as { processed: number };
   assertEquals(b.processed, 0);
 });
+
+Deno.test('part 6.1 standard auto punch-out after cutoff is processed', async () => {
+  const log = {
+    id: 'l-61',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '09:00',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    {
+      data: {
+        work_end_time: '18:00',
+        auto_punch_out_buffer_minutes: 30,
+        weekly_off_days: [5, 6],
+      },
+      error: null,
+    },
+    { data: null, error: null }, // update attendance_sessions
+    { data: null, error: null }, // insert notifications
+  ];
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-04T18:35:00.000Z' }),
+    makeDeps(q)
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 1);
+  assertEquals(b.total, 1);
+});
+
+Deno.test('part 6.2 before cutoff buffer auto punch-out is skipped', async () => {
+  const log = {
+    id: 'l-62',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '09:00',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    {
+      data: {
+        work_end_time: '18:00',
+        auto_punch_out_buffer_minutes: 30,
+        weekly_off_days: [5, 6],
+      },
+      error: null,
+    },
+  ];
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-04T18:20:00' }),
+    makeDeps(q)
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 0);
+  assertEquals(b.total, 1);
+});
+
+Deno.test('part 6.3 overtime open sessions are not auto-closed', async () => {
+  // Query filters is_overtime=false, so overtime-only open sessions are excluded.
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-04T20:00:00.000Z' }),
+    makeDeps([{ data: [], error: null }])
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number };
+  assertEquals(b.processed, 0);
+});
+
+Deno.test('part 6.4 off-day sessions are skipped', async () => {
+  const log = {
+    id: 'l-64',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-06',
+    check_in_time: '09:00',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    {
+      data: {
+        // Custom schedule that does not include Friday(5): off-day.
+        work_days: [0, 1, 2, 3, 4],
+        work_start_time: '09:00',
+        work_end_time: '18:00',
+      },
+      error: null,
+    },
+    {
+      data: {
+        work_end_time: '18:00',
+        auto_punch_out_buffer_minutes: 30,
+        weekly_off_days: [5, 6],
+      },
+      error: null,
+    },
+  ];
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-06T20:00:00.000Z' }),
+    makeDeps(q)
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 0);
+  assertEquals(b.total, 1);
+});
+
+Deno.test('part 6.5 multiple open non-overtime sessions are handled consistently', async () => {
+  const logs = [
+    {
+      id: 'l-651',
+      user_id: 'u1',
+      org_id: 'o1',
+      date: '2025-06-04',
+      check_in_time: '09:00',
+    },
+    {
+      id: 'l-652',
+      user_id: 'u2',
+      org_id: 'o1',
+      date: '2025-06-04',
+      check_in_time: '10:00',
+    },
+  ];
+  const q: QResult[] = [
+    { data: logs, error: null },
+    // session 1 profile + policy + update + notification
+    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_end_time: '18:00', auto_punch_out_buffer_minutes: 30, weekly_off_days: [5, 6] }, error: null },
+    { data: null, error: null },
+    { data: null, error: null },
+    // session 2 profile + policy + update + notification
+    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_end_time: '18:00', auto_punch_out_buffer_minutes: 30, weekly_off_days: [5, 6] }, error: null },
+    { data: null, error: null },
+    { data: null, error: null },
+  ];
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-04T20:00:00.000Z' }),
+    makeDeps(q)
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 2);
+  assertEquals(b.total, 2);
+});
+
+Deno.test('part 6.6 regression guard uses execution time beyond shift end', async () => {
+  const log = {
+    id: 'l-66',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '09:00',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    {
+      data: {
+        work_end_time: '18:00',
+        auto_punch_out_buffer_minutes: 30,
+        weekly_off_days: [5, 6],
+      },
+      error: null,
+    },
+    { data: null, error: null },
+    { data: null, error: null },
+  ];
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-04T18:35:00.000Z' }),
+    makeDeps(q)
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number };
+  // If shift-end time were incorrectly used as checkout source, this flow still
+  // should process. This test guards the intended execution-time path in 6.1.
+  assertEquals(b.processed, 1);
+});

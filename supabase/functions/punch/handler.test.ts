@@ -1012,3 +1012,40 @@ Deno.test('part 5.6 session deletion recalculates summary fields', async () => {
   assertEquals(summary?.effective_status, 'present'); // 5.V3
   assertEquals(summary?.is_short_day, true); // 5.V4
 });
+
+Deno.test('part 6.7 daily summary reflects auto punch-out update', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const session = mem.sessions[0];
+
+  await mem.admin
+    .from('attendance_sessions')
+    .update({
+      check_out_time: '18:35',
+      duration_minutes: 575,
+      is_auto_punch_out: true,
+      needs_review: true,
+    })
+    .eq('id', session.id)
+    .single();
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-10',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 575);
+  assertEquals(summary?.last_check_out, '18:35');
+  assertEquals(summary?.effective_status, 'present');
+});

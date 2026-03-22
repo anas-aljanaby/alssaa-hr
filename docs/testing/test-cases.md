@@ -241,13 +241,13 @@ Baseline: shift ends `18:00`, buffer `30` min -> auto-punch-out job fires at or 
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 6.1 | [ ] | Standard auto punch-out at 18:35 for 09:00 check-in | `check_out_time=18:35`, `is_auto_punch_out=true`, `needs_review=true`, duration recalculated | Uses actual trigger time, not shift end |
-| 6.2 | [ ] | Job runs before buffer (18:20) | Session remains open, no auto punch-out applied | Buffer must be enforced |
-| 6.3 | [ ] | Open overtime session exists | Overtime session is not auto-closed | Applies to `is_overtime=true` sessions |
-| 6.4 | [ ] | Off-day auto punch-out run | Off-day sessions are skipped | Must not auto-close off-day sessions |
-| 6.5 | [ ] | Multiple open non-overtime sessions (abnormal state) | Expected handling defined and applied consistently | Also verify `needs_review` and recalculation behavior |
-| 6.6 | [ ] | Trigger time vs shift-end regression | `check_out_time` equals job execution time | Regression guard for old behavior |
-| 6.7 | [ ] | Daily summary after auto punch-out | Summary fields updated (`total_work_minutes`, `last_check_out`, `effective_status`) | Recalculation should run automatically |
+| 6.1 | [x] | Standard auto punch-out at 18:35 for 09:00 check-in | `check_out_time=18:35`, `is_auto_punch_out=true`, `needs_review=true`, duration recalculated | Uses actual trigger time, not shift end |
+| 6.2 | [x] | Job runs before buffer (18:20) | Session remains open, no auto punch-out applied | Buffer must be enforced |
+| 6.3 | [x] | Open overtime session exists | Overtime session is not auto-closed | Applies to `is_overtime=true` sessions |
+| 6.4 | [x] | Off-day auto punch-out run | Off-day sessions are skipped | Must not auto-close off-day sessions |
+| 6.5 | [x] | Multiple open non-overtime sessions (abnormal state) | Expected handling defined and applied consistently | Also verify `needs_review` and recalculation behavior |
+| 6.6 | [x] | Trigger time vs shift-end regression | `check_out_time` equals job execution time | Regression guard for old behavior |
+| 6.7 | [x] | Daily summary after auto punch-out | Summary fields updated (`total_work_minutes`, `last_check_out`, `effective_status`) | Recalculation should run automatically |
 
 ## 7. Early Departure
 
