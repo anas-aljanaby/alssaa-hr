@@ -292,11 +292,11 @@ Baseline: shift ends `18:00`, buffer `30` min -> auto-punch-out job fires at or 
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 10.1 | [ ] | Second punch-in while session already open | Rejected | Must check out first |
-| 10.2 | [ ] | Second punch-in within cooldown (45s) | Rejected with cooldown error | Server-side anti-double-tap |
-| 10.3 | [ ] | Punch-in after cooldown (61s) and proper checkout | Allowed | Cooldown boundary |
-| 10.4 | [ ] | Punch-out retried within cooldown | Rejected with cooldown error | Cooldown applies to check-out too |
-| 10.5 | [ ] | No schedule/policy configured | Punch allowed, `status=present`, `is_overtime=false`, no progress-bar dependency | No policy fallback behavior |
+| 10.1 | [x] | Second punch-in while session already open | Rejected | Must check out first |
+| 10.2 | [x] | Second punch-in within cooldown (45s) | Rejected with cooldown error | Server-side anti-double-tap |
+| 10.3 | [x] | Punch-in after cooldown (61s) and proper checkout | Allowed | Cooldown boundary |
+| 10.4 | [x] | Punch-out retried within cooldown | Rejected with cooldown error | Cooldown applies to check-out too |
+| 10.5 | [x] | No schedule/policy configured | Punch allowed, `status=present`, `is_overtime=false`, no progress-bar dependency | No policy fallback behavior |
 
 ## 11. Leave + Punch Interaction
 

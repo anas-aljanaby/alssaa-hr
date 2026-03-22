@@ -8,6 +8,7 @@ type Session = {
   date: string;
   check_in_time: string;
   check_out_time: string | null;
+  last_action_at: string;
   status: 'present' | 'late';
   is_overtime: boolean;
   duration_minutes: number;
@@ -62,7 +63,7 @@ function makeDeps(opts?: {
     weekly_off_days: number[];
     early_login_minutes: number;
     minimum_required_minutes: number | null;
-  };
+  } | null;
   leaveRows?: LeaveRow[];
   failOvertimeRequestInsert?: boolean;
 }) {
@@ -73,7 +74,7 @@ function makeDeps(opts?: {
     work_start_time: null,
     work_end_time: null,
   };
-  const policy = opts?.policy ?? {
+  const policyDefault = {
     work_start_time: '09:00',
     work_end_time: '18:00',
     grace_period_minutes: 15,
@@ -81,6 +82,7 @@ function makeDeps(opts?: {
     early_login_minutes: 60,
     minimum_required_minutes: 480,
   };
+  const policy = opts?.policy === undefined ? policyDefault : opts.policy;
 
   const sessions: Session[] = [];
   const summaries: Summary[] = [];
@@ -201,6 +203,7 @@ function makeDeps(opts?: {
               date: String(payload?.date),
               check_in_time: String(payload?.check_in_time),
               check_out_time: (payload?.check_out_time ?? null) as string | null,
+              last_action_at: String(payload?.last_action_at ?? new Date().toISOString()),
               status: (payload?.status ?? 'present') as 'present' | 'late',
               is_overtime: Boolean(payload?.is_overtime),
               duration_minutes: Number(payload?.duration_minutes ?? 0),
@@ -1257,4 +1260,57 @@ Deno.test('part 9.3 is_overtime remains as classified at check-in', async () => 
 
   const stillSame = mem.sessions.find((s) => s.id === created.id);
   assertEquals(stillSame?.is_overtime, true);
+});
+
+Deno.test('part 10.1 second check-in while open session is rejected', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:02:00');
+  assertEquals(res.status, 400);
+  const body = (await json(res)) as { code?: string };
+  assertEquals(body.code, 'ALREADY_CHECKED_IN');
+});
+
+Deno.test('part 10.2 second action within cooldown is rejected', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:00:45');
+  assertEquals(res.status, 400);
+  const body = (await json(res)) as { code?: string };
+  assertEquals(body.code, 'COOLDOWN_ACTIVE');
+});
+
+Deno.test('part 10.3 action after cooldown with proper checkout is allowed', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T10:02:00');
+  assertEquals(res.status, 200);
+});
+
+Deno.test('part 10.4 checkout retry within cooldown is rejected', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
+  const retry = await punch(mem.deps, 'check_out', '2025-06-10T10:00:30');
+  assertEquals(retry.status, 400);
+  const body = (await json(retry)) as { code?: string };
+  assertEquals(body.code, 'COOLDOWN_ACTIVE');
+});
+
+Deno.test('part 10.5 no policy configured still allows punch with defaults', async () => {
+  const mem = makeDeps({
+    policy: null,
+    profile: {
+      org_id: 'o1',
+      work_days: null,
+      work_start_time: null,
+      work_end_time: null,
+    },
+  });
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { status?: string; is_overtime?: boolean };
+  assertEquals(body.status, 'present');
+  assertEquals(body.is_overtime, false);
 });
