@@ -1,5 +1,5 @@
 import { assertEquals } from 'jsr:@std/assert';
-import { handlePunch, recalculateDailySummary, type PunchDeps, type PunchEnv, type PunchServiceClient } from './handler.ts';
+import { handlePunch, recalculateDailySummary, toDateStr, type PunchDeps, type PunchEnv, type PunchServiceClient } from './handler.ts';
 
 type Session = {
   id: string;
@@ -667,6 +667,44 @@ Deno.test('part 4.1 approved leave with no sessions resolves on_leave', async ()
   assertEquals(summary?.effective_status, 'on_leave');
 });
 
+Deno.test('part 4.2 approved leave overrides late session to on_leave', async () => {
+  const mem = makeDeps({
+    leaveRows: [
+      {
+        id: 'l2',
+        user_id: 'u1',
+        status: 'approved',
+        type: 'annual_leave',
+        from_date_time: '2025-06-10T00:00:00',
+        to_date_time: '2025-06-10T23:59:59',
+      },
+    ],
+  });
+  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T10:30:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'on_leave');
+});
+
+Deno.test('part 4.3 one non-overtime present session resolves present', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'present');
+});
+
+Deno.test('part 4.4 only non-overtime late sessions resolve late', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'late');
+});
+
 Deno.test('part 4.5 mixed non-overtime present + late resolves present', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
@@ -687,6 +725,62 @@ Deno.test('part 4.6 overtime present + non-overtime late resolves late', async (
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'late');
+});
+
+Deno.test('part 4.7 working day with only overtime sessions resolves overtime_only', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T07:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T08:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T21:00:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.effective_status, 'overtime_only');
+});
+
+Deno.test('part 4.8 past working day with no sessions resolves absent', async () => {
+  const mem = makeDeps();
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-09',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-09');
+  assertEquals(summary?.effective_status, 'absent');
+});
+
+Deno.test('part 4.9 today with no sessions currently resolves absent', async () => {
+  const mem = makeDeps();
+  const today = toDateStr(new Date());
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: today,
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === today);
+  assertEquals(summary?.effective_status, 'absent');
 });
 
 Deno.test('part 4.10 off-day with no sessions keeps no effective_status', async () => {
