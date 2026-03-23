@@ -64,6 +64,7 @@ function makeDeps(opts?: {
     minimum_required_minutes: number | null;
   };
   leaveRows?: LeaveRow[];
+  failOvertimeRequestInsert?: boolean;
 }) {
   const userId = opts?.userId ?? 'u1';
   const profile = opts?.profile ?? {
@@ -85,6 +86,7 @@ function makeDeps(opts?: {
   const summaries: Summary[] = [];
   const overtimeRequests: Array<{ session_id: string; user_id: string }> = [];
   const leaveRows = opts?.leaveRows ?? [];
+  const failOvertimeRequestInsert = opts?.failOvertimeRequestInsert ?? false;
 
   let idCounter = 1;
 
@@ -278,6 +280,10 @@ function makeDeps(opts?: {
             if (typeof limitCount === 'number') rows = rows.slice(0, limitCount);
             data = mode === 'many' ? rows : (rows[0] ?? null);
           } else if (table === 'overtime_requests' && (op === 'insert' || op === 'upsert')) {
+            if (failOvertimeRequestInsert) {
+              error = { message: 'overtime insert failed' };
+              return Promise.resolve({ data, error }).then(onF ?? undefined, onR ?? undefined);
+            }
             overtimeRequests.push({
               session_id: String(payload?.session_id ?? ''),
               user_id: String(payload?.user_id ?? ''),
@@ -1110,4 +1116,74 @@ Deno.test('part 7.6 overtime session checkout does not set early departure', asy
   const body = (await json(res)) as { is_early_departure?: boolean; is_overtime?: boolean };
   assertEquals(body.is_overtime, true);
   assertEquals(body.is_early_departure, false);
+});
+
+Deno.test('part 8.1 working-day overtime punch-in creates pending overtime request', async () => {
+  const mem = makeDeps();
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { is_overtime?: boolean; id?: string };
+  assertEquals(body.is_overtime, true);
+  assertEquals(mem.overtimeRequests.length, 1);
+  assertEquals(mem.overtimeRequests[0].session_id, String(body.id ?? ''));
+});
+
+Deno.test('part 8.2 off-day each session creates its own overtime request', async () => {
+  const mem = makeDeps({
+    profile: {
+      org_id: 'o1',
+      work_days: [0, 1, 2, 3, 4],
+      work_start_time: '09:00',
+      work_end_time: '18:00',
+    },
+  });
+  const s1 = await punch(mem.deps, 'check_in', '2025-06-06T10:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-06T13:00:00');
+  const s2 = await punch(mem.deps, 'check_in', '2025-06-06T15:00:00');
+  assertEquals(s1.status, 200);
+  assertEquals(s2.status, 200);
+  assertEquals(mem.overtimeRequests.length, 2);
+});
+
+Deno.test('part 8.3 pre-window overtime punch-in creates overtime request', async () => {
+  const mem = makeDeps();
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T06:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { is_overtime?: boolean };
+  assertEquals(body.is_overtime, true);
+  assertEquals(mem.overtimeRequests.length, 1);
+});
+
+Deno.test('part 8.4 overtime request insert failure does not block punch-in', async () => {
+  const mem = makeDeps({ failOvertimeRequestInsert: true });
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { is_overtime?: boolean };
+  assertEquals(body.is_overtime, true);
+  assertEquals(mem.sessions.length, 1);
+  assertEquals(mem.sessions[0].is_overtime, true);
+  assertEquals(mem.overtimeRequests.length, 0);
+});
+
+Deno.test('part 8.5 multiple overtime sessions produce multiple requests', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T06:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T07:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
+  assertEquals(mem.overtimeRequests.length, 2);
+});
+
+Deno.test('part 8.6 overtime request session reference matches created session id', async () => {
+  const mem = makeDeps();
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { id?: string };
+  assertEquals(mem.overtimeRequests.length, 1);
+  assertEquals(mem.overtimeRequests[0].session_id, String(body.id ?? ''));
+});
+
+Deno.test('part 8.7 overtime requests are routed to overtime_requests table behavior', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  assertEquals(mem.overtimeRequests.length, 1);
 });

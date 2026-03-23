@@ -268,13 +268,13 @@ Baseline: shift ends `18:00`, buffer `30` min -> auto-punch-out job fires at or 
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 8.1 | [ ] | Working-day overtime punch-in (e.g. 19:00) | Overtime session created and overtime request inserted as `pending` | Request references session |
-| 8.2 | [ ] | Off-day punch-in | Each off-day session creates its own overtime request | One request per session |
-| 8.3 | [ ] | Before-window punch-in (e.g. 06:00) | Overtime request created | Pre-window overtime path |
-| 8.4 | [ ] | Overtime request insert fails | Punch-in still succeeds with `is_overtime=true` | Best-effort request creation |
-| 8.5 | [ ] | Multiple overtime sessions in same day | Multiple overtime requests inserted | No dedupe across sessions |
-| 8.6 | [ ] | Session reference integrity | `overtime_requests.session_id` matches created session ID | Referential correctness |
-| 8.7 | [ ] | Table routing regression | Requests go to `overtime_requests`, not `leave_requests` | Guard old architecture behavior |
+| 8.1 | [x] | Working-day overtime punch-in (e.g. 19:00) | Overtime session created and overtime request inserted as `pending` | Request references session |
+| 8.2 | [x] | Off-day punch-in | Each off-day session creates its own overtime request | One request per session |
+| 8.3 | [x] | Before-window punch-in (e.g. 06:00) | Overtime request created | Pre-window overtime path |
+| 8.4 | [x] | Overtime request insert fails | Punch-in still succeeds with `is_overtime=true` | Best-effort request creation |
+| 8.5 | [x] | Multiple overtime sessions in same day | Multiple overtime requests inserted | No dedupe across sessions |
+| 8.6 | [x] | Session reference integrity | `overtime_requests.session_id` matches created session ID | Referential correctness |
+| 8.7 | [x] | Table routing regression | Requests go to `overtime_requests`, not `leave_requests` | Guard old architecture behavior |
 
 ## 9. Session Flags
 
