@@ -1187,3 +1187,74 @@ Deno.test('part 8.7 overtime requests are routed to overtime_requests table beha
   await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
   assertEquals(mem.overtimeRequests.length, 1);
 });
+
+Deno.test('part 9.1 needs_review is set by auto punch-out but not manual punch-out', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const manual = await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  assertEquals(manual.status, 200);
+  const manualBody = (await json(manual)) as { needs_review?: boolean };
+  assertEquals(manualBody.needs_review, false);
+
+  await punch(mem.deps, 'check_in', '2025-06-11T09:00:00');
+  const open = mem.sessions.find((s) => s.date === '2025-06-11' && s.check_out_time === null);
+  await mem.admin
+    .from('attendance_sessions')
+    .update({
+      check_out_time: '18:35',
+      duration_minutes: 575,
+      is_auto_punch_out: true,
+      needs_review: true,
+    })
+    .eq('id', open?.id ?? '')
+    .single();
+  const updated = mem.sessions.find((s) => s.id === open?.id);
+  assertEquals(updated?.needs_review, true);
+});
+
+Deno.test('part 9.2 auto and manual punch-out flags stay consistent', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const manual = await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  assertEquals(manual.status, 200);
+  const manualBody = (await json(manual)) as { is_auto_punch_out?: boolean; needs_review?: boolean };
+  assertEquals(manualBody.is_auto_punch_out, false);
+  assertEquals(manualBody.needs_review, false);
+
+  await punch(mem.deps, 'check_in', '2025-06-11T09:00:00');
+  const open = mem.sessions.find((s) => s.date === '2025-06-11' && s.check_out_time === null);
+  await mem.admin
+    .from('attendance_sessions')
+    .update({
+      check_out_time: '18:35',
+      duration_minutes: 575,
+      is_auto_punch_out: true,
+      needs_review: true,
+    })
+    .eq('id', open?.id ?? '')
+    .single();
+  const auto = mem.sessions.find((s) => s.id === open?.id);
+  assertEquals(auto?.is_auto_punch_out, true);
+  assertEquals(auto?.needs_review, true);
+});
+
+Deno.test('part 9.3 is_overtime remains as classified at check-in', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  const created = mem.sessions[0];
+  assertEquals(created.is_overtime, true);
+
+  await mem.admin
+    .from('attendance_policy')
+    .update({
+      work_start_time: '10:00',
+      work_end_time: '17:00',
+      early_login_minutes: 30,
+      grace_period_minutes: 5,
+    })
+    .eq('org_id', 'o1')
+    .single();
+
+  const stillSame = mem.sessions.find((s) => s.id === created.id);
+  assertEquals(stillSame?.is_overtime, true);
+});

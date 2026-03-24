@@ -282,9 +282,9 @@ Baseline: shift ends `18:00`, buffer `30` min -> auto-punch-out job fires at or 
 
 | # | Implemented | Flag behavior | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 9.1 | [ ] | `needs_review` source | Set only by auto punch-out | Manual punch-outs keep `needs_review=false` |
-| 9.2 | [ ] | `is_auto_punch_out` consistency | Auto-closed session has `is_auto_punch_out=true` and `needs_review=true` | Manual close has both false |
-| 9.3 | [ ] | `is_overtime` immutability | Determined at check-in and not retroactively changed by policy updates | Historical consistency |
+| 9.1 | [x] | `needs_review` source | Set only by auto punch-out | Manual punch-outs keep `needs_review=false` |
+| 9.2 | [x] | `is_auto_punch_out` consistency | Auto-closed session has `is_auto_punch_out=true` and `needs_review=true` | Manual close has both false |
+| 9.3 | [x] | `is_overtime` immutability | Determined at check-in and not retroactively changed by policy updates | Historical consistency |
 
 ## 10. Punch-In Availability / Blocking
 
