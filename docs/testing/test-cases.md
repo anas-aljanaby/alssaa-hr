@@ -217,21 +217,21 @@ Each of the following events should trigger a full recalculation of the daily su
 
 | # | Implemented | Trigger | Expected recalculation behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 5.1 | [ ] | New session created (punch-in) | Daily summary is recalculated immediately after session creation | Verify all summary fields refresh from latest sessions |
-| 5.2 | [ ] | Session closed (punch-out) | Daily summary is recalculated immediately after session closure | Recompute worked time and short-day status |
-| 5.3 | [ ] | Auto punch-out fires | Daily summary is recalculated after auto punch-out update | Include auto-closed session end time in totals |
-| 5.4 | [ ] | Manager manually edits a session's check-in/check-out time | Daily summary is recalculated after edit persistence | Recalculation must use corrected time values |
-| 5.5 | [ ] | Correction request approved and applied | Daily summary is recalculated after approved correction is written | Applies to both updates and newly created sessions |
-| 5.6 | [ ] | Session deleted by admin | Daily summary is recalculated after session deletion | Removed session must no longer contribute to totals/status |
+| 5.1 | [x] | New session created (punch-in) | Daily summary is recalculated immediately after session creation | Verify all summary fields refresh from latest sessions |
+| 5.2 | [x] | Session closed (punch-out) | Daily summary is recalculated immediately after session closure | Recompute worked time and short-day status |
+| 5.3 | [x] | Auto punch-out fires | Daily summary is recalculated after auto punch-out update | Include auto-closed session end time in totals |
+| 5.4 | [x] | Manager manually edits a session's check-in/check-out time | Daily summary is recalculated after edit persistence | Recalculation must use corrected time values |
+| 5.5 | [x] | Correction request approved and applied | Daily summary is recalculated after approved correction is written | Applies to both updates and newly created sessions |
+| 5.6 | [x] | Session deleted by admin | Daily summary is recalculated after session deletion | Removed session must no longer contribute to totals/status |
 
 For every trigger above, validate these fields are up to date:
 
 | # | Implemented | Field | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 5.V1 | [ ] | `total_work_minutes` | Reflects latest sum of valid session durations | Includes only remaining/current sessions |
-| 5.V2 | [ ] | `total_overtime_minutes` | Reflects latest overtime-only minute total | Must update when overtime sessions change |
-| 5.V3 | [ ] | `effective_status` | Re-resolved from current day state | Must respect priority rules (`on_leave` … `overtime_only` … `absent`) and session flags |
-| 5.V4 | [ ] | `is_short_day` | Re-evaluated from current total minutes and policy | Must flip when threshold crossing occurs |
+| 5.V1 | [x] | `total_work_minutes` | Reflects latest sum of valid session durations | Includes only remaining/current sessions |
+| 5.V2 | [x] | `total_overtime_minutes` | Reflects latest overtime-only minute total | Must update when overtime sessions change |
+| 5.V3 | [x] | `effective_status` | Re-resolved from current day state | Must respect priority rules (`on_leave` … `overtime_only` … `absent`) and session flags |
+| 5.V4 | [x] | `is_short_day` | Re-evaluated from current total minutes and policy | Must flip when threshold crossing occurs |
 
 ## 6. Auto Punch-Out
 

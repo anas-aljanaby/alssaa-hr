@@ -90,7 +90,7 @@ function makeDeps(opts?: {
 
   const admin: PunchServiceClient = {
     from: (table: string) => {
-      let op: 'select' | 'insert' | 'update' | 'upsert' = 'select';
+      let op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select';
       let payload: Record<string, unknown> | null = null;
       let eqFilters: Record<string, unknown> = {};
       let neqFilters: Record<string, unknown> = {};
@@ -118,7 +118,10 @@ function makeDeps(opts?: {
           payload = (v ?? null) as Record<string, unknown> | null;
           return chain;
         },
-        delete: () => chain,
+        delete: () => {
+          op = 'delete';
+          return chain;
+        },
         eq: (k: unknown, v: unknown) => {
           eqFilters[String(k)] = v;
           return chain;
@@ -215,6 +218,15 @@ function makeDeps(opts?: {
                 ...(payload as Partial<Session>),
               };
               data = sessions[idx];
+            } else {
+              data = null;
+            }
+          } else if (table === 'attendance_sessions' && op === 'delete') {
+            const id = String(eqFilters.id);
+            const idx = sessions.findIndex((s) => s.id === id);
+            if (idx >= 0) {
+              const [deleted] = sessions.splice(idx, 1);
+              data = deleted;
             } else {
               data = null;
             }
@@ -825,4 +837,178 @@ Deno.test('part 4.11 off-day with overtime sessions keeps no effective_status', 
   await punch(mem.deps, 'check_out', '2025-06-06T13:00:00');
   const summary = mem.summaries.find((s) => s.date === '2025-06-06');
   assertEquals(summary?.effective_status, null);
+});
+
+Deno.test('part 5.1 new session creation recalculates summary fields', async () => {
+  const mem = makeDeps();
+  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  assertEquals(res.status, 200);
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 0); // 5.V1
+  assertEquals(summary?.total_overtime_minutes, 0); // 5.V2
+  assertEquals(summary?.effective_status, 'present'); // 5.V3
+  assertEquals(summary?.is_short_day, true); // 5.V4 (0 < 480)
+});
+
+Deno.test('part 5.2 session closure recalculates summary fields', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 180); // 5.V1
+  assertEquals(summary?.total_overtime_minutes, 0); // 5.V2
+  assertEquals(summary?.effective_status, 'present'); // 5.V3
+  assertEquals(summary?.is_short_day, true); // 5.V4
+});
+
+Deno.test('part 5.3 auto punch-out update recalculates summary fields', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const session = mem.sessions[0];
+
+  await mem.admin
+    .from('attendance_sessions')
+    .update({
+      check_out_time: '18:35',
+      duration_minutes: 575,
+      is_auto_punch_out: true,
+      needs_review: true,
+    })
+    .eq('id', session.id)
+    .single();
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-10',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 575); // 5.V1
+  assertEquals(summary?.total_overtime_minutes, 0); // 5.V2
+  assertEquals(summary?.effective_status, 'present'); // 5.V3
+  assertEquals(summary?.is_short_day, false); // 5.V4
+});
+
+Deno.test('part 5.4 manual edit recalculates summary fields with edited times', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+  const session = mem.sessions[0];
+
+  await mem.admin
+    .from('attendance_sessions')
+    .update({
+      check_in_time: '08:30',
+      check_out_time: '13:30',
+      duration_minutes: 300,
+    })
+    .eq('id', session.id)
+    .single();
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-10',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 300); // 5.V1
+  assertEquals(summary?.total_overtime_minutes, 0); // 5.V2
+  assertEquals(summary?.effective_status, 'present'); // 5.V3
+  assertEquals(summary?.is_short_day, true); // 5.V4
+});
+
+Deno.test('part 5.5 correction applied (new session) recalculates summary fields', async () => {
+  const mem = makeDeps();
+  await mem.admin
+    .from('attendance_sessions')
+    .insert({
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2025-06-10',
+      check_in_time: '09:10',
+      check_out_time: '17:10',
+      status: 'present',
+      is_overtime: false,
+      duration_minutes: 480,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+      is_dev: false,
+    })
+    .single();
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-10',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 480); // 5.V1
+  assertEquals(summary?.total_overtime_minutes, 0); // 5.V2
+  assertEquals(summary?.effective_status, 'present'); // 5.V3
+  assertEquals(summary?.is_short_day, false); // 5.V4
+});
+
+Deno.test('part 5.6 session deletion recalculates summary fields', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+  await punch(mem.deps, 'check_in', '2025-06-10T13:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+
+  const target = mem.sessions.find((s) => s.check_in_time === '13:00');
+  await mem.admin.from('attendance_sessions').delete().eq('id', target?.id ?? '').single();
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-10',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 180); // 5.V1
+  assertEquals(summary?.total_overtime_minutes, 0); // 5.V2
+  assertEquals(summary?.effective_status, 'present'); // 5.V3
+  assertEquals(summary?.is_short_day, true); // 5.V4
 });
