@@ -1049,3 +1049,65 @@ Deno.test('part 6.7 daily summary reflects auto punch-out update', async () => {
   assertEquals(summary?.last_check_out, '18:35');
   assertEquals(summary?.effective_status, 'present');
 });
+
+Deno.test('part 7.1 checkout before shift end sets is_early_departure true', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const res = await punch(mem.deps, 'check_out', '2025-06-10T15:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { is_early_departure?: boolean; status?: 'present' | 'late'; duration_minutes?: number };
+  assertEquals(body.is_early_departure, true);
+  assertEquals(body.status, 'present');
+  assertEquals(body.duration_minutes, 360);
+});
+
+Deno.test('part 7.2 checkout exactly at shift end keeps is_early_departure false', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const res = await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { is_early_departure?: boolean };
+  assertEquals(body.is_early_departure, false);
+});
+
+Deno.test('part 7.3 early checkout does not rewrite late status', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  const res = await punch(mem.deps, 'check_out', '2025-06-10T15:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { is_early_departure?: boolean; status?: 'present' | 'late' };
+  assertEquals(body.is_early_departure, true);
+  assertEquals(body.status, 'late');
+});
+
+Deno.test('part 7.4 early departure can yield short day in summary', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T15:00:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 360);
+  assertEquals(summary?.is_short_day, true);
+});
+
+Deno.test('part 7.5 multi-session day above minimum is not short day', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T15:00:00'); // early departure on session 1
+  await punch(mem.deps, 'check_in', '2025-06-10T15:15:00');
+  await punch(mem.deps, 'check_out', '2025-06-10T18:15:00');
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 540);
+  assertEquals(summary?.is_short_day, false);
+});
+
+Deno.test('part 7.6 overtime session checkout does not set early departure', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
+  const res = await punch(mem.deps, 'check_out', '2025-06-10T21:00:00');
+  assertEquals(res.status, 200);
+  const body = (await json(res)) as { is_early_departure?: boolean; is_overtime?: boolean };
+  assertEquals(body.is_overtime, true);
+  assertEquals(body.is_early_departure, false);
+});

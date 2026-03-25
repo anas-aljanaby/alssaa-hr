@@ -255,12 +255,12 @@ Baseline: shift ends `18:00`, buffer `30` min -> auto-punch-out job fires at or 
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 7.1 | [ ] | Check-out before shift end (09:00 -> 15:00) | `is_early_departure=true`, status unchanged, duration computed | Early departure is informational |
-| 7.2 | [ ] | Check-out exactly at shift end (09:00 -> 18:00) | `is_early_departure=false` | Boundary check |
-| 7.3 | [ ] | Late or present session checked out early | `status` remains original (`present`/`late`) | Early departure must not rewrite status |
-| 7.4 | [ ] | Early departure causing short day | `is_short_day=true` when total < minimum | Validate summary update |
-| 7.5 | [ ] | Multiple sessions still meet minimum | `is_short_day=false` | Combined minutes override single-session early departure |
-| 7.6 | [ ] | Overtime session check-out | `is_early_departure=false` | Shift-end comparison should not apply to overtime session |
+| 7.1 | [x] | Check-out before shift end (09:00 -> 15:00) | `is_early_departure=true`, status unchanged, duration computed | Early departure is informational |
+| 7.2 | [x] | Check-out exactly at shift end (09:00 -> 18:00) | `is_early_departure=false` | Boundary check |
+| 7.3 | [x] | Late or present session checked out early | `status` remains original (`present`/`late`) | Early departure must not rewrite status |
+| 7.4 | [x] | Early departure causing short day | `is_short_day=true` when total < minimum | Validate summary update |
+| 7.5 | [x] | Multiple sessions still meet minimum | `is_short_day=false` | Combined minutes override single-session early departure |
+| 7.6 | [x] | Overtime session check-out | `is_early_departure=false` | Shift-end comparison should not apply to overtime session |
 
 ## 8. Overtime Request Creation
 
