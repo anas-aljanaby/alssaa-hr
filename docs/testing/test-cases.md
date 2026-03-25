@@ -140,9 +140,9 @@ Expected daily summary:
 | --- | --- | --- | --- | --- |
 | 3.4.1 | [x] | `total_work_minutes` | `420` | 180 + 240 |
 | 3.4.2 | [x] | `total_overtime_minutes` | `420` | All worked minutes are overtime |
-| 3.4.3 | [ ] | `effective_status` | *(none / null)* | Off-day: no shift to fulfill — policy does not set `effective_status` |
+| 3.4.3 | [x] | `effective_status` | *(none / null)* | Off-day: no shift to fulfill — policy does not set `effective_status` |
 | 3.4.4 | [x] | `session_count` | `2` | Two completed sessions |
-| 3.4.5 | [ ] | Calendar display | Overtime day (purple + overtime badge) | Per policy: off-day with sessions; not green `present` |
+| 3.4.5 | [x] | Calendar display | Overtime day (purple + overtime badge) | Per policy: off-day with sessions; not green `present` |
 | 3.4.6 | [x] | Overtime requests | Separate request per session | Both sessions generate overtime requests |
 
 ### 3.5 No Regular Session - Only Comes In for Overtime After Shift End
@@ -157,9 +157,9 @@ Expected daily summary:
 
 | # | Implemented | Field / Assertion | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.5.1 | [ ] | `effective_status` | `overtime_only` | No non-overtime session — regular shift not fulfilled |
-| 3.5.2 | [ ] | Attendance flag | Not `absent` | `overtime_only` ≠ `absent` (sessions exist) |
-| 3.5.3 | [ ] | Calendar display | Purple / `overtime_only` indicator + overtime context | Not green “present”; aligns with `attendance-policy-new.md` |
+| 3.5.1 | [x] | `effective_status` | `overtime_only` | No non-overtime session — regular shift not fulfilled |
+| 3.5.2 | [x] | Attendance flag | Not `absent` | `overtime_only` ≠ `absent` (sessions exist) |
+| 3.5.3 | [x] | Calendar display | Purple / `overtime_only` indicator + overtime context | Not green “present”; aligns with `attendance-policy-new.md` |
 
 ### 3.6 Many Sessions - Sum Correctness
 
@@ -197,17 +197,17 @@ Notes / definitions used by these test cases:
 
 | # | Implemented | Sessions | Leave? | Expected effective_status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 4.1 | [ ] | None | Yes (approved) | `on_leave` | Leave takes absolute priority over attendance classification |
-| 4.2 | [ ] | One late session | Yes (approved) | `on_leave` | `on_leave` priority over `late` |
-| 4.3 | [ ] | One present session (non-overtime) | No | `present` | On-time arrival during regular hours |
-| 4.4 | [ ] | One late session (non-overtime), no on-time non-overtime session | No | `late` | Only `late` non-overtime sessions |
-| 4.5 | [ ] | One present + one late (non-overtime) | No | `present` | On-time non-overtime session exists → not eligible for `effective_status=late` per policy |
-| 4.6 | [ ] | One present (overtime) + one late (non-overtime) | No | `late` | Overtime `present` does not count; only non-overtime is `late` |
-| 4.7 | [ ] | Only overtime sessions | No | `overtime_only` | Working day, sessions exist, all `is_overtime=true` |
-| 4.8 | [ ] | None, past working day | No | `absent` | Past working day with no sessions => absent |
-| 4.9 | [ ] | None, today (not yet EOD) | No | `absent` (or not yet determined — verify behavior) | Check whether the system should still return `absent` or a non-final state before end-of-day |
-| 4.10 | [ ] | None, off-day | No | No status (not absent) | Off-day without sessions should not be classified as `absent` |
-| 4.11 | [ ] | Sessions on off-day (all overtime) | No | No `effective_status` | Off-day: calendar overtime day; field null/unset like policy |
+| 4.1 | [x] | None | Yes (approved) | `on_leave` | Leave takes absolute priority over attendance classification |
+| 4.2 | [x] | One late session | Yes (approved) | `on_leave` | `on_leave` priority over `late` |
+| 4.3 | [x] | One present session (non-overtime) | No | `present` | On-time arrival during regular hours |
+| 4.4 | [x] | One late session (non-overtime), no on-time non-overtime session | No | `late` | Only `late` non-overtime sessions |
+| 4.5 | [x] | One present + one late (non-overtime) | No | `present` | On-time non-overtime session exists → not eligible for `effective_status=late` per policy |
+| 4.6 | [x] | One present (overtime) + one late (non-overtime) | No | `late` | Overtime `present` does not count; only non-overtime is `late` |
+| 4.7 | [x] | Only overtime sessions | No | `overtime_only` | Working day, sessions exist, all `is_overtime=true` |
+| 4.8 | [x] | None, past working day | No | `absent` | Past working day with no sessions => absent |
+| 4.9 | [x] | None, today (not yet EOD) | No | `absent` (or not yet determined — verify behavior) | Check whether the system should still return `absent` or a non-final state before end-of-day |
+| 4.10 | [x] | None, off-day | No | No status (not absent) | Off-day without sessions should not be classified as `absent` |
+| 4.11 | [x] | Sessions on off-day (all overtime) | No | No `effective_status` | Off-day: calendar overtime day; field null/unset like policy |
 
 ## 5. Daily Summary — Recalculation Triggers
 

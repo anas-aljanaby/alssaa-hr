@@ -184,6 +184,33 @@ describe('attendance.service', () => {
     expect(day?.status).toBe('overtime_only');
   });
 
+  it('calendar maps off-day sessions to overtime_offday indicator', async () => {
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({
+      data: [{
+        id: 'sum-offday-ot',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2025-06-06', // Friday
+        first_check_in: '10:00',
+        last_check_out: '19:00',
+        total_work_minutes: 420,
+        total_overtime_minutes: 420,
+        effective_status: null,
+        is_short_day: false,
+        session_count: 2,
+        updated_at: '2025-06-06T19:00:00Z',
+      }],
+      error: null,
+    });
+    sb.queueResult({ data: policyRow, error: null });
+
+    const { getAttendanceMonthly } = await import('./attendance.service');
+    const month = await getAttendanceMonthly('u1', 2025, 5); // June
+    const day = month.find((d) => d.date === '2025-06-06');
+    expect(day?.status).toBe('overtime_offday');
+  });
+
   it('checkIn inserts when no existing log', async () => {
     sb.queueResult({ data: null, error: null });
     sb.queueResult({ data: profileShift, error: null });
