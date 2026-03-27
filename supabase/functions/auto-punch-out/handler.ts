@@ -3,10 +3,16 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import type { PunchServiceClient } from '../punch/handler.ts';
 
+/** Shifts a UTC Date to org local time (UTC+3) so date/time components are correct. */
+export function toOrgLocalDate(d: Date, offsetHours = 3): Date {
+  return new Date(d.getTime() + offsetHours * 3600 * 1000);
+}
+
 export function toDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const local = toOrgLocalDate(d);
+  const y = local.getUTCFullYear();
+  const m = String(local.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(local.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
@@ -21,7 +27,8 @@ export function formatTimeHHMM(t: string): string {
 }
 
 function nowToTimeHHMM(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const local = toOrgLocalDate(d);
+  return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 function diffMinutes(checkIn: string, checkOut: string): number {
@@ -79,7 +86,8 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     }
 
     const today = toDateStr(effectiveNow);
-    const nowMinutes = effectiveNow.getHours() * 60 + effectiveNow.getMinutes();
+    const localNow = toOrgLocalDate(effectiveNow);
+    const nowMinutes = localNow.getUTCHours() * 60 + localNow.getUTCMinutes();
 
     const admin = deps.createServiceClient();
 
@@ -117,7 +125,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       );
     }
 
-    const dayOfWeek = effectiveNow.getDay();
+    const dayOfWeek = toOrgLocalDate(effectiveNow).getUTCDay();
     let processed = 0;
 
     for (const session of openSessions) {

@@ -91,4 +91,57 @@ describe('TodayStatusCard overtime confirmation', () => {
     expect(onCheckIn).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('تأكيد عمل إضافي')).not.toBeInTheDocument();
   });
+
+  it('increments worked hours after check-in when check_in_time is ISO datetime', () => {
+    vi.useFakeTimers();
+    let mockedNow = new Date('2025-06-10T10:05:00');
+    setNowFn(() => mockedNow);
+
+    const onCheckIn = vi.fn();
+    const onCheckOut = vi.fn();
+
+    const today: TodayRecord = {
+      log: {
+        id: 'log-iso-in',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2025-06-10',
+        check_in_time: '2025-06-10T10:00:00Z',
+        check_out_time: null,
+        check_in_lat: null,
+        check_in_lng: null,
+        check_out_lat: null,
+        check_out_lng: null,
+        status: 'present',
+        is_dev: false,
+        auto_punch_out: false,
+      },
+      punches: [],
+      shift: {
+        workStartTime: '09:00',
+        workEndTime: '18:00',
+        gracePeriodMinutes: 15,
+        bufferMinutesAfterShift: 30,
+        weeklyOffDays: [5, 6],
+      },
+    };
+
+    render(
+      <TodayStatusCard
+        today={today}
+        actionLoading={false}
+        cooldownSecondsLeft={0}
+        onCheckIn={onCheckIn}
+        onCheckOut={onCheckOut}
+      />
+    );
+
+    expect(screen.getByText('05:00')).toBeInTheDocument();
+
+    mockedNow = new Date('2025-06-10T10:06:00');
+    vi.advanceTimersByTime(1000);
+
+    expect(screen.getByText('06:00')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
 });

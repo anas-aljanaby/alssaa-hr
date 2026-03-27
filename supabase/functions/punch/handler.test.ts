@@ -1,5 +1,6 @@
 import { assertEquals } from 'jsr:@std/assert';
 import { handlePunch, recalculateDailySummary, toDateStr, type PunchDeps, type PunchEnv, type PunchServiceClient } from './handler.ts';
+import { corsHeaders } from '../_shared/cors.ts';
 
 type Session = {
   id: string;
@@ -324,6 +325,38 @@ async function punch(deps: PunchDeps, action: 'check_in' | 'check_out', iso: str
     deps
   );
 }
+
+Deno.test('preflight OPTIONS returns ok with CORS headers', async () => {
+  const mem = makeDeps();
+  const res = await handlePunch(
+    new Request('http://x', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'POST',
+      },
+    }),
+    mem.deps
+  );
+
+  assertEquals(res.status, 200);
+  assertEquals(await res.text(), 'ok');
+  assertEquals(res.headers.get('Access-Control-Allow-Origin'), corsHeaders['Access-Control-Allow-Origin']);
+  assertEquals(res.headers.get('Access-Control-Allow-Headers'), corsHeaders['Access-Control-Allow-Headers']);
+});
+
+Deno.test('non-POST method is rejected with CORS headers', async () => {
+  const mem = makeDeps();
+  const res = await handlePunch(
+    new Request('http://x', { method: 'GET' }),
+    mem.deps
+  );
+  assertEquals(res.status, 405);
+  const body = (await json(res)) as { code?: string };
+  assertEquals(body.code, 'METHOD_NOT_ALLOWED');
+  assertEquals(res.headers.get('Access-Control-Allow-Origin'), corsHeaders['Access-Control-Allow-Origin']);
+  assertEquals(res.headers.get('Access-Control-Allow-Headers'), corsHeaders['Access-Control-Allow-Headers']);
+});
 
 Deno.test('part 1.1 grace period boundaries classify check-in correctly', async () => {
   const cases: Array<{

@@ -10,15 +10,22 @@ export interface PunchBody {
   devOverrideTime?: string;
 }
 
+/** Shifts a UTC Date to org local time (UTC+3) so date/time components are correct. */
+export function toOrgLocalDate(d: Date, offsetHours = 3): Date {
+  return new Date(d.getTime() + offsetHours * 3600 * 1000);
+}
+
 export function toDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const local = toOrgLocalDate(d);
+  const y = local.getUTCFullYear();
+  const m = String(local.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(local.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
 export function toTimeStr(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const local = toOrgLocalDate(d);
+  return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 export type PunchEnv = {
@@ -141,7 +148,8 @@ function toSecondsHHMM(timeStr: string): number {
 }
 
 function currentSecondsOfDay(d: Date): number {
-  return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+  const local = toOrgLocalDate(d);
+  return local.getUTCHours() * 3600 + local.getUTCMinutes() * 60 + local.getUTCSeconds();
 }
 
 function fromMinutes(min: number): number {
@@ -176,7 +184,7 @@ function resolveSchedule(profile: ProfileRow, policy: PolicyRow | null, date: Da
     : policy?.work_end_time ?? null;
 
   const hasShift = !!workStartTime && !!workEndTime;
-  const weekday = date.getDay();
+  const weekday = toOrgLocalDate(date).getUTCDay();
   const weeklyOffDays = hasCustomSchedule
     ? [0, 1, 2, 3, 4, 5, 6].filter((d) => !(profile.work_days ?? []).includes(d))
     : policy?.weekly_off_days ?? [5, 6];

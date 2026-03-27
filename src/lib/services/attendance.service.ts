@@ -375,17 +375,44 @@ export interface CheckInResult {
   overtimeRequest: LeaveRequest | null;
 }
 
-export async function checkIn(userId: string): Promise<CheckInResult> {
+type EdgeInvokeResult = {
+  data?: unknown;
+  error?: { message?: string } | null;
+};
+
+async function invokePunchAuthenticated(payload: { action: 'check_in' | 'check_out'; devOverrideTime?: string }): Promise<EdgeInvokeResult | null> {
   const edgeInvoke = (supabase as unknown as { functions?: { invoke?: Function } }).functions?.invoke;
-  if (typeof edgeInvoke === 'function') {
-    const invoked = await supabase.functions.invoke('punch', {
-      body: { action: 'check_in' },
-    });
-    const data = (invoked as { data?: unknown } | undefined)?.data;
-    const error = (invoked as { error?: { message?: string } } | undefined)?.error;
-    if (!invoked) {
-      return checkInLegacy(userId);
-    }
+  if (typeof edgeInvoke !== 'function') return null;
+
+  const getSession = (supabase as unknown as { auth?: { getSession?: Function } }).auth?.getSession;
+  if (typeof getSession !== 'function') {
+    return await supabase.functions.invoke('punch', { body: payload }) as EdgeInvokeResult;
+  }
+
+  const sessionResult = await supabase.auth.getSession();
+  // Test mocks may not provide an auth session shape; fall back to legacy flow.
+  if (!sessionResult || typeof sessionResult !== 'object' || !('data' in sessionResult)) {
+    return null;
+  }
+  const session = sessionResult?.data?.session;
+  const sessionError = sessionResult?.error;
+  if (sessionError || !session?.access_token) {
+    throw new Error('انتهت الجلسة أو أنك غير مسجل الدخول. يرجى تسجيل الدخول مرة أخرى.');
+  }
+
+  return await supabase.functions.invoke('punch', {
+    body: payload,
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  }) as EdgeInvokeResult;
+}
+
+export async function checkIn(userId: string): Promise<CheckInResult> {
+  const invoked = await invokePunchAuthenticated({ action: 'check_in' });
+  if (invoked) {
+    const data = invoked.data;
+    const error = invoked.error;
     if (error) throw new Error(error.message || 'Failed to check in');
 
     const session = data as AttendanceSession;
@@ -473,17 +500,12 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
 }
 
 export async function checkOut(userId: string, checkoutTime?: string): Promise<AttendanceLog> {
-  const edgeInvoke = (supabase as unknown as { functions?: { invoke?: Function } }).functions?.invoke;
-  if (typeof edgeInvoke === 'function') {
-    const payload = checkoutTime
-      ? { action: 'check_out' as const, devOverrideTime: `${todayStr()}T${checkoutTime}:00` }
-      : { action: 'check_out' as const };
-
-    const invoked = await supabase.functions.invoke('punch', { body: payload });
-    if (!invoked) {
-      return checkOutLegacy(userId, checkoutTime);
-    }
-    const error = (invoked as { error?: { message?: string } } | undefined)?.error;
+  const payload = checkoutTime
+    ? { action: 'check_out' as const, devOverrideTime: `${todayStr()}T${checkoutTime}:00` }
+    : { action: 'check_out' as const };
+  const invoked = await invokePunchAuthenticated(payload);
+  if (invoked) {
+    const error = invoked.error;
     if (error) throw new Error(error.message || 'Failed to check out');
 
     const today = await getAttendanceToday(userId);
