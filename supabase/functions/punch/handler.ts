@@ -421,26 +421,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const openSession = openSessionRaw as SessionRow | null;
 
-    const { data: latestActionRaw } = await admin
-      .from('attendance_sessions')
-      .select('last_action_at')
-      .eq('user_id', caller.id)
-      .order('last_action_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const latestAction = latestActionRaw as { last_action_at?: string } | null;
-    if (latestAction?.last_action_at) {
-      const secondsSinceLastAction =
-        Math.floor((effectiveNow.getTime() - new Date(latestAction.last_action_at).getTime()) / 1000);
-      if (secondsSinceLastAction >= 0 && secondsSinceLastAction < 60) {
-        return new Response(
-          JSON.stringify({ error: 'Please wait before the next punch action', code: 'COOLDOWN_ACTIVE' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
     const { data: policyRaw } = await admin
       .from('attendance_policy')
       .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days, early_login_minutes, minimum_required_minutes')
@@ -454,8 +434,8 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
     if (action === 'check_in') {
       if (openSession) {
         return new Response(
-          JSON.stringify({ error: 'Already checked in today', code: 'ALREADY_CHECKED_IN' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify(openSession),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 

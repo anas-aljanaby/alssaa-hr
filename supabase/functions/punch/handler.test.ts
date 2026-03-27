@@ -1295,22 +1295,31 @@ Deno.test('part 9.3 is_overtime remains as classified at check-in', async () => 
   assertEquals(stillSame?.is_overtime, true);
 });
 
-Deno.test('part 10.1 second check-in while open session is rejected', async () => {
+Deno.test('part 10.1 second check-in while open session is idempotent success', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:02:00');
-  assertEquals(res.status, 400);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'ALREADY_CHECKED_IN');
+  const first = await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  assertEquals(first.status, 200);
+  const firstBody = (await json(first)) as { id?: string };
+
+  const second = await punch(mem.deps, 'check_in', '2025-06-10T09:02:00');
+  assertEquals(second.status, 200);
+  const secondBody = (await json(second)) as { id?: string };
+
+  // Repeated check-in returns the same open session instead of failing.
+  assertEquals(secondBody.id, firstBody.id);
+  assertEquals(mem.sessions.length, 1);
 });
 
-Deno.test('part 10.2 second action within cooldown is rejected', async () => {
+Deno.test('part 10.2 second check-in within cooldown is idempotent success', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:00:45');
-  assertEquals(res.status, 400);
-  const body = (await json(res)) as { code?: string };
-  assertEquals(body.code, 'COOLDOWN_ACTIVE');
+  const first = await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  assertEquals(first.status, 200);
+  const firstBody = (await json(first)) as { id?: string };
+
+  const second = await punch(mem.deps, 'check_in', '2025-06-10T09:00:45');
+  assertEquals(second.status, 200);
+  const secondBody = (await json(second)) as { id?: string };
+  assertEquals(secondBody.id, firstBody.id);
 });
 
 Deno.test('part 10.3 action after cooldown with proper checkout is allowed', async () => {
@@ -1321,14 +1330,14 @@ Deno.test('part 10.3 action after cooldown with proper checkout is allowed', asy
   assertEquals(res.status, 200);
 });
 
-Deno.test('part 10.4 checkout retry within cooldown is rejected', async () => {
+Deno.test('part 10.4 checkout retry after completed checkout is rejected as no open check-in', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
   await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
   const retry = await punch(mem.deps, 'check_out', '2025-06-10T10:00:30');
   assertEquals(retry.status, 400);
   const body = (await json(retry)) as { code?: string };
-  assertEquals(body.code, 'COOLDOWN_ACTIVE');
+  assertEquals(body.code, 'NO_CHECK_IN');
 });
 
 Deno.test('part 10.5 no policy configured still allows punch with defaults', async () => {

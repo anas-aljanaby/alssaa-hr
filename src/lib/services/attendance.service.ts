@@ -380,6 +380,20 @@ type EdgeInvokeResult = {
   error?: { message?: string } | null;
 };
 
+function normalizePunchInvokeError(invokeResult: EdgeInvokeResult): Error | null {
+  const edgeError = invokeResult.error;
+  const edgeData = invokeResult.data as { error?: string; code?: string } | null | undefined;
+  if (!edgeError && !edgeData?.error) return null;
+
+  const code = edgeData?.code;
+  const message =
+    edgeData?.error ||
+    edgeError?.message ||
+    'Failed to process attendance action';
+
+  return new Error(code ? `${message} (${code})` : message);
+}
+
 async function invokePunchAuthenticated(payload: { action: 'check_in' | 'check_out'; devOverrideTime?: string }): Promise<EdgeInvokeResult | null> {
   const edgeInvoke = (supabase as unknown as { functions?: { invoke?: Function } }).functions?.invoke;
   if (typeof edgeInvoke !== 'function') return null;
@@ -411,9 +425,9 @@ async function invokePunchAuthenticated(payload: { action: 'check_in' | 'check_o
 export async function checkIn(userId: string): Promise<CheckInResult> {
   const invoked = await invokePunchAuthenticated({ action: 'check_in' });
   if (invoked) {
+    const normalizedError = normalizePunchInvokeError(invoked);
+    if (normalizedError) throw normalizedError;
     const data = invoked.data;
-    const error = invoked.error;
-    if (error) throw new Error(error.message || 'Failed to check in');
 
     const session = data as AttendanceSession;
     const today = await getAttendanceToday(userId);
@@ -505,8 +519,8 @@ export async function checkOut(userId: string, checkoutTime?: string): Promise<A
     : { action: 'check_out' as const };
   const invoked = await invokePunchAuthenticated(payload);
   if (invoked) {
-    const error = invoked.error;
-    if (error) throw new Error(error.message || 'Failed to check out');
+    const normalizedError = normalizePunchInvokeError(invoked);
+    if (normalizedError) throw normalizedError;
 
     const today = await getAttendanceToday(userId);
     if (!today.log) {

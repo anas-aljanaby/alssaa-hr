@@ -29,6 +29,7 @@ export function AttendancePage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const actionInFlightRef = useRef(false);
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
@@ -105,7 +106,8 @@ export function AttendancePage() {
   }, []);
 
   const handleCheckIn = async () => {
-    if (!currentUser || actionLoading || cooldownLeft > 0) return;
+    if (!currentUser || actionInFlightRef.current || cooldownLeft > 0) return;
+    actionInFlightRef.current = true;
     setActionLoading(true);
     try {
       const { log } = await checkIn(currentUser.uid);
@@ -117,12 +119,14 @@ export function AttendancePage() {
     } catch {
       // toast handled by context
     } finally {
+      actionInFlightRef.current = false;
       setActionLoading(false);
     }
   };
 
   const handleCheckOut = async (checkoutTime?: string) => {
-    if (!currentUser || actionLoading) return;
+    if (!currentUser || actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
     setActionLoading(true);
     try {
       const result = await checkOut(currentUser.uid, checkoutTime);
@@ -140,6 +144,7 @@ export function AttendancePage() {
     } catch {
       // toast handled by context
     } finally {
+      actionInFlightRef.current = false;
       setActionLoading(false);
     }
   };

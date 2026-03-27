@@ -20,6 +20,7 @@ export function useQuickPunch({ userId, onLogUpdated }: UseQuickPunchOptions) {
   const [actionLoading, setActionLoading] = useState(false);
   const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const actionInFlightRef = useRef(false);
 
   const refreshToday = useCallback(async () => {
     if (!userId) return;
@@ -64,7 +65,8 @@ export function useQuickPunch({ userId, onLogUpdated }: UseQuickPunchOptions) {
   }, []);
 
   const handleCheckIn = useCallback(async () => {
-    if (!userId || actionLoading || cooldownSecondsLeft > 0) return;
+    if (!userId || actionInFlightRef.current || cooldownSecondsLeft > 0) return;
+    actionInFlightRef.current = true;
     setActionLoading(true);
     try {
       const result = await checkIn(userId);
@@ -73,12 +75,14 @@ export function useQuickPunch({ userId, onLogUpdated }: UseQuickPunchOptions) {
       onLogUpdated?.(result.log);
       await refreshToday();
     } finally {
+      actionInFlightRef.current = false;
       setActionLoading(false);
     }
-  }, [actionLoading, checkIn, cooldownSecondsLeft, onLogUpdated, refreshToday, userId]);
+  }, [checkIn, cooldownSecondsLeft, onLogUpdated, refreshToday, userId]);
 
   const handleCheckOut = useCallback(async () => {
-    if (!userId || actionLoading) return;
+    if (!userId || actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
     setActionLoading(true);
     try {
       const result = await checkOut(userId);
@@ -91,9 +95,10 @@ export function useQuickPunch({ userId, onLogUpdated }: UseQuickPunchOptions) {
         // Keep optimistic log if refresh fails.
       }
     } finally {
+      actionInFlightRef.current = false;
       setActionLoading(false);
     }
-  }, [actionLoading, checkOut, onLogUpdated, refreshToday, userId]);
+  }, [checkOut, onLogUpdated, refreshToday, userId]);
 
   return {
     today,
