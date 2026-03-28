@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TodayStatusCard } from './TodayStatusCard';
 import { setNowFn } from '@/lib/time';
 import type { TodayRecord } from '@/lib/services/attendance.service';
+import { todayRecord24_1, todayRecord24_1a } from '@/lib/services/__fixtures__/todayMultiSession';
 
 const defaultShift = {
   workStartTime: '09:00',
@@ -365,63 +366,7 @@ describe('TodayStatusCard overtime confirmation', () => {
     const onCheckOut = vi.fn();
     setNowFn(() => new Date('2025-06-10T13:20:00'));
 
-    const today: TodayRecord = {
-      log: {
-        id: 'pseudo-two',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '08:30',
-        check_out_time: '12:00',
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'present',
-        is_dev: false,
-        auto_punch_out: false,
-      },
-      punches: [],
-      shift: { ...defaultShift },
-      sessions: [
-        {
-          id: 's1',
-          org_id: 'o1',
-          user_id: 'u1',
-          date: '2025-06-10',
-          check_in_time: '08:30',
-          check_out_time: '12:00',
-          status: 'present',
-          is_overtime: false,
-          is_auto_punch_out: false,
-          is_early_departure: false,
-          needs_review: false,
-          duration_minutes: 210,
-          last_action_at: '2025-06-10T12:00:00Z',
-          is_dev: false,
-          created_at: '2025-06-10T08:30:00Z',
-          updated_at: '2025-06-10T12:00:00Z',
-        },
-        {
-          id: 's2',
-          org_id: 'o1',
-          user_id: 'u1',
-          date: '2025-06-10',
-          check_in_time: '13:00',
-          check_out_time: null,
-          status: 'present',
-          is_overtime: false,
-          is_auto_punch_out: false,
-          is_early_departure: false,
-          needs_review: false,
-          duration_minutes: 0,
-          last_action_at: '2025-06-10T13:00:00Z',
-          is_dev: false,
-          created_at: '2025-06-10T13:00:00Z',
-          updated_at: '2025-06-10T13:00:00Z',
-        },
-      ],
-    };
+    const today = todayRecord24_1a();
 
     render(
       <TodayStatusCard
@@ -446,81 +391,7 @@ describe('TodayStatusCard overtime confirmation', () => {
     const onCheckOut = vi.fn();
     setNowFn(() => new Date('2025-06-10T15:00:00'));
 
-    const today: TodayRecord = {
-      log: {
-        id: 'pseudo-summary',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '08:30',
-        check_out_time: '14:00',
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'present',
-        is_dev: false,
-        auto_punch_out: false,
-      },
-      punches: [],
-      shift: { ...defaultShift },
-      sessions: [
-        {
-          id: 's1',
-          org_id: 'o1',
-          user_id: 'u1',
-          date: '2025-06-10',
-          check_in_time: '08:30',
-          check_out_time: '12:00',
-          status: 'present',
-          is_overtime: false,
-          is_auto_punch_out: false,
-          is_early_departure: false,
-          needs_review: false,
-          duration_minutes: 210,
-          last_action_at: '2025-06-10T12:00:00Z',
-          is_dev: false,
-          created_at: '2025-06-10T08:30:00Z',
-          updated_at: '2025-06-10T12:00:00Z',
-        },
-        {
-          id: 's2',
-          org_id: 'o1',
-          user_id: 'u1',
-          date: '2025-06-10',
-          check_in_time: '13:00',
-          check_out_time: '14:00',
-          status: 'present',
-          is_overtime: false,
-          is_auto_punch_out: false,
-          is_early_departure: false,
-          needs_review: false,
-          duration_minutes: 60,
-          last_action_at: '2025-06-10T14:00:00Z',
-          is_dev: false,
-          created_at: '2025-06-10T13:00:00Z',
-          updated_at: '2025-06-10T14:00:00Z',
-        },
-        {
-          id: 's3',
-          org_id: 'o1',
-          user_id: 'u1',
-          date: '2025-06-10',
-          check_in_time: '14:30',
-          check_out_time: null,
-          status: 'present',
-          is_overtime: false,
-          is_auto_punch_out: false,
-          is_early_departure: false,
-          needs_review: false,
-          duration_minutes: 0,
-          last_action_at: '2025-06-10T14:30:00Z',
-          is_dev: false,
-          created_at: '2025-06-10T14:30:00Z',
-          updated_at: '2025-06-10T14:30:00Z',
-        },
-      ],
-    };
+    const today = todayRecord24_1();
 
     render(
       <TodayStatusCard

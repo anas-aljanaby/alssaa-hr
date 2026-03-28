@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { activeMockSupabase as sb } from '@/test/mocks/active-supabase-mock';
 import { setNowFn } from '../time';
+import { todayRecord24_1, todayRecord24_1a } from './__fixtures__/todayMultiSession';
 
 vi.mock('../supabase');
 vi.mock('./requests.service', () => ({
@@ -388,6 +389,32 @@ describe('attendance.service', () => {
     const { subscribeToUserAttendance } = await import('./attendance.service');
     subscribeToUserAttendance('u1', vi.fn());
     expect(sb.channelInstances.at(-1)?.name).toBe('attendance_logs:user:u1');
+  });
+
+  describe('getTodayPunchUiState / isCheckedInToday (pseudo log + sessions)', () => {
+    it('24.1a treats open second session as checked in despite aggregate log check_out_time', async () => {
+      setNowFn(() => new Date('2025-06-10T13:20:00'));
+      const { getTodayPunchUiState, isCheckedInToday } = await import('./attendance.service');
+      const today = todayRecord24_1a();
+      expect(isCheckedInToday(today)).toBe(true);
+      const ui = getTodayPunchUiState(today);
+      expect(ui.isCheckedIn).toBe(true);
+      expect(ui.activeCheckInWallTime).toBe('13:00');
+      expect(ui.isOvertimeNow).toBe(false);
+      expect(ui.canPunchIn).toBe(true);
+    });
+
+    it('24.1 treats open third session as checked in despite stale aggregate check_out_time', async () => {
+      setNowFn(() => new Date('2025-06-10T15:00:00'));
+      const { getTodayPunchUiState, isCheckedInToday } = await import('./attendance.service');
+      const today = todayRecord24_1();
+      expect(isCheckedInToday(today)).toBe(true);
+      const ui = getTodayPunchUiState(today);
+      expect(ui.isCheckedIn).toBe(true);
+      expect(ui.activeCheckInWallTime).toBe('14:30');
+      expect(ui.isOvertimeNow).toBe(false);
+      expect(ui.canPunchIn).toBe(true);
+    });
   });
 });
 

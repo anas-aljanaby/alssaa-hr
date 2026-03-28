@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { LogIn, LogOut, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import {
   isOvertimeTime,
-  shouldShowShiftCongrats,
   totalWorkedMinutesToday,
   wallTimeHHMM,
   wallTimeToMinutes,
   type TodayRecord,
 } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
+import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
 
 interface Props {
   today: TodayRecord;
@@ -50,16 +50,25 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
   const [workdayElapsedSeconds, setWorkdayElapsedSeconds] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<'overtime' | null>(null);
 
-  const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
+  const punchUi = useTodayPunchUi(today);
+  const {
+    isCheckedIn,
+    activeCheckInWallTime: activeCheckInTime,
+    isOvertimeNow: isOvertime,
+    canPunchIn,
+    showShiftCongrats,
+  } = punchUi;
+
+  const currentNow = now();
 
   // Real elapsed since punch-in (for the main clock and "hours worked")
   useEffect(() => {
-    if (!isCheckedIn || !log?.check_in_time) {
+    if (!isCheckedIn || !activeCheckInTime) {
       setPunchInElapsedSeconds(0);
       return;
     }
     const computePunchInElapsed = () => {
-      const hm = wallTimeHHMM(log.check_in_time!);
+      const hm = wallTimeHHMM(activeCheckInTime);
       if (!hm) return 0;
       const [h, m] = hm.split(':').map(Number);
       const currentDate = now();
@@ -69,7 +78,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
     setPunchInElapsedSeconds(computePunchInElapsed());
     const id = setInterval(() => setPunchInElapsedSeconds(computePunchInElapsed()), 1000);
     return () => clearInterval(id);
-  }, [isCheckedIn, log?.check_in_time]);
+  }, [isCheckedIn, activeCheckInTime]);
 
   // Workday elapsed: for progress bar only, caps at shift duration
   useEffect(() => {
@@ -92,15 +101,6 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
     return () => clearInterval(id);
   }, [isCheckedIn, shift]);
 
-  // Tick every second so current time stays in sync with dev or real clock
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!shift) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [shift]);
-
-  const currentNow = now();
   const currentMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
   const dayOfWeek = currentNow.getDay();
 
@@ -110,10 +110,8 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
     ? shiftEndMinutes - shiftStartMinutes
     : null;
 
-  const isOvertime = shift ? isOvertimeTime(currentMinutes, shift, dayOfWeek) : false;
   const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
   const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
-  const showShiftCongrats = shouldShowShiftCongrats(today, currentNow);
   const totalWorkedMin = totalWorkedMinutesToday(today);
 
   // Progress bar: 0-100%, caps at shift end
@@ -128,9 +126,6 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
     : 0;
 
   const hoursWorkedSeconds = isCheckedIn ? punchInElapsedSeconds : 0;
-
-  // Overtime: always allowed to punch in. Regular: allowed from 1h before shift.
-  const canPunchIn = !shift || isOvertime || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
 
   // Badge logic for first punch: check overtime first (matches service logic), then late
   const firstPunchIsOvertime =
@@ -160,9 +155,10 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
   // Visual state for the clock circle
   const clockIsOvertime =
     isCheckedIn &&
+    !!activeCheckInTime &&
     (isPastShiftEnd ||
       !isWorkingDay ||
-      (shift ? isOvertimeTime(wallTimeToMinutes(log!.check_in_time!), shift, dayOfWeek) : false));
+      (shift ? isOvertimeTime(wallTimeToMinutes(activeCheckInTime), shift, dayOfWeek) : false));
 
   return (
     <>

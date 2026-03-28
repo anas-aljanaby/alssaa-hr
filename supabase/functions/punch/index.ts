@@ -4,6 +4,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { handlePunch, type PunchDeps, type PunchServiceClient, type PunchUserClient } from './handler.ts';
 
+/** Pass JWT into getUser(); header-only auth often returns null in Edge/Deno (supabase-js). */
+function createUserClientForPunch(authHeader: string): PunchUserClient {
+  const url = Deno.env.get('SUPABASE_URL')!;
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const jwt = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const client = createClient(url, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return {
+    auth: {
+      getUser: () => client.auth.getUser(jwt),
+    },
+  } as unknown as PunchUserClient;
+}
+
 function defaultDeps(): PunchDeps {
   return {
     getEnv: () => ({
@@ -12,10 +28,7 @@ function defaultDeps(): PunchDeps {
       serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       isProduction: Deno.env.get('ENVIRONMENT') === 'production',
     }),
-    createUserClient: (authHeader: string) =>
-      createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-        global: { headers: { Authorization: authHeader } },
-      }) as unknown as PunchUserClient,
+    createUserClient: createUserClientForPunch,
     createServiceClient: () =>
       createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!) as unknown as PunchServiceClient,
   };

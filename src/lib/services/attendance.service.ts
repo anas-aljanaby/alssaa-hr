@@ -119,6 +119,61 @@ export function totalWorkedMinutesToday(today: TodayRecord): number {
   return 0;
 }
 
+/** Latest open session's check-in (wall time), or null if none. */
+export function getOpenSessionCheckInTime(today: TodayRecord): string | null {
+  const sessions = today.sessions;
+  if (!sessions?.length) return null;
+  const open = sessions.filter((s) => s.check_out_time == null);
+  if (!open.length) return null;
+  const sorted = [...open].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  return sorted[sorted.length - 1]!.check_in_time;
+}
+
+/** True if the user has an open session, or (legacy) a single open log row with no sessions list. */
+export function isCheckedInToday(today: TodayRecord): boolean {
+  const openIn = getOpenSessionCheckInTime(today);
+  if (openIn) return true;
+  const sessions = today.sessions;
+  if (sessions && sessions.length > 0) return false;
+  const log = today.log;
+  return !!(log?.check_in_time && !log?.check_out_time);
+}
+
+/** Wall time for the current punch-in (open session or legacy open log). */
+export function getActiveCheckInWallTime(today: TodayRecord): string | null {
+  const fromSession = getOpenSessionCheckInTime(today);
+  if (fromSession) return fromSession;
+  const log = today.log;
+  if (log?.check_in_time && !log?.check_out_time) return log.check_in_time;
+  return null;
+}
+
+/** Shared punch CTAs / badges for today card and quick punch (same inputs → same behavior). */
+export interface TodayPunchUiState {
+  isCheckedIn: boolean;
+  activeCheckInWallTime: string | null;
+  isOvertimeNow: boolean;
+  canPunchIn: boolean;
+  showShiftCongrats: boolean;
+}
+
+export function getTodayPunchUiState(today: TodayRecord, at: Date = now()): TodayPunchUiState {
+  const { shift } = today;
+  const currentMinutes = at.getHours() * 60 + at.getMinutes();
+  const dayOfWeek = at.getDay();
+  const isOvertimeNow = shift ? isOvertimeTime(currentMinutes, shift, dayOfWeek) : false;
+  const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
+  const canPunchIn =
+    !shift || isOvertimeNow || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
+  return {
+    isCheckedIn: isCheckedInToday(today),
+    activeCheckInWallTime: getActiveCheckInWallTime(today),
+    isOvertimeNow,
+    canPunchIn,
+    showShiftCongrats: shouldShowShiftCongrats(today, at),
+  };
+}
+
 export function isShiftRequirementMet(shift: ShiftInfo, totalWorkedMinutes: number): boolean {
   const full = shiftDurationMinutes(shift);
   const min = shift.minimumRequiredMinutes;
@@ -131,8 +186,7 @@ export function shouldShowShiftCongrats(today: TodayRecord, at: Date = now()): b
   const dayOfWeek = at.getDay();
   const isWorkingDay = !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek);
   if (!isWorkingDay) return false;
-  const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
-  if (isCheckedIn) return false;
+  if (isCheckedInToday(today)) return false;
   const worked = totalWorkedMinutesToday(today);
   if (worked <= 0) return false;
   const hasClosedSession =

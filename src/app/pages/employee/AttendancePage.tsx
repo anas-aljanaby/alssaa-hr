@@ -148,7 +148,7 @@ export function AttendancePage() {
 
   if (!currentUser) return null;
 
-  const isCheckedIn = !!(today.log?.check_in_time && !today.log?.check_out_time);
+  const isCheckedIn = attendanceService.isCheckedInToday(today);
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4 pb-24">

@@ -1,12 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Clock3, LogIn, LogOut, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { now } from '@/lib/time';
-import {
-  isOvertimeTime,
-  shouldShowShiftCongrats,
-  wallTimeHHMM,
-  type TodayRecord,
-} from '@/lib/services/attendance.service';
+import { wallTimeHHMM, type TodayRecord } from '@/lib/services/attendance.service';
+import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
 
 interface QuickPunchCardProps {
   today: TodayRecord;
@@ -15,11 +10,6 @@ interface QuickPunchCardProps {
   onCheckIn: () => void;
   onCheckOut: () => void;
   onOpenAttendance?: () => void;
-}
-
-function toMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
 }
 
 function formatTime(t?: string | null): string {
@@ -38,41 +28,26 @@ export function QuickPunchCard({
   const { log, shift } = today;
   const [confirmDialog, setConfirmDialog] = useState<'overtime' | null>(null);
 
-  const state = useMemo(() => {
-    const currentNow = now();
-    const currentMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
-    const dayOfWeek = currentNow.getDay();
-
-    const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
-
-    const isOvertimeNow = shift ? isOvertimeTime(currentMinutes, shift, dayOfWeek) : false;
-    const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
-    const canPunchIn =
-      !shift || isOvertimeNow || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
-
-    const showShiftCongrats = shouldShowShiftCongrats(today, currentNow);
-
-    return {
-      isCheckedIn,
-      isOvertimeNow,
-      canPunchIn,
-      showShiftCongrats,
-    };
-  }, [log?.check_in_time, log?.check_out_time, shift, today]);
+  const {
+    isCheckedIn,
+    isOvertimeNow,
+    canPunchIn,
+    showShiftCongrats,
+  } = useTodayPunchUi(today);
 
   if (loading) {
     return <div className="bg-gray-100 rounded-xl h-40 animate-pulse" />;
   }
 
   const buttonDisabled = actionLoading;
-  const statusText = state.showShiftCongrats
+  const statusText = showShiftCongrats
     ? 'استوفيت متطلبات الدوام لهذا اليوم'
-    : state.isCheckedIn
+    : isCheckedIn
       ? 'أنت مسجل حضور الآن'
       : 'غير مسجل حضور';
 
   const handleCheckInClick = () => {
-    if (state.isOvertimeNow) {
+    if (isOvertimeNow) {
       setConfirmDialog('overtime');
       return;
     }
@@ -92,12 +67,12 @@ export function QuickPunchCard({
             <h3 className="text-gray-900 text-sm font-semibold">تسجيل الحضور السريع</h3>
             <p className="text-xs text-gray-500 mt-1">{statusText}</p>
           </div>
-          {state.showShiftCongrats ? (
+          {showShiftCongrats ? (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200">
               <CheckCircle2 className="w-3.5 h-3.5" />
               متطلبات الدوام
             </span>
-          ) : state.isCheckedIn ? (
+          ) : isCheckedIn ? (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-blue-50 text-blue-700 border border-blue-200">
               <Clock3 className="w-3.5 h-3.5" />
               قيد الدوام
@@ -124,7 +99,7 @@ export function QuickPunchCard({
               الدوام: {formatTime(shift.workStartTime)} - {formatTime(shift.workEndTime)}
             </div>
           )}
-          {!log?.check_in_time && state.isOvertimeNow && (
+          {!isCheckedIn && isOvertimeNow && (
             <div className="mt-2 text-[11px] text-amber-600 inline-flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" />
               سيتم احتساب الحضور كعمل إضافي
@@ -133,18 +108,18 @@ export function QuickPunchCard({
         </div>
 
         <div className="flex gap-2">
-          {!state.isCheckedIn ? (
+          {!isCheckedIn ? (
             <button
               onClick={handleCheckInClick}
-              disabled={buttonDisabled || !state.canPunchIn}
+              disabled={buttonDisabled || !canPunchIn}
               className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
             >
               <LogIn className="w-4 h-4" />
               {actionLoading
                 ? 'جاري التسجيل...'
-                : !state.canPunchIn
+                : !canPunchIn
                   ? 'قبل الدوام بساعة'
-                  : state.isOvertimeNow
+                  : isOvertimeNow
                     ? 'حضور إضافي'
                     : 'تسجيل الحضور'}
             </button>

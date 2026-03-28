@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { QuickPunchCard } from './QuickPunchCard';
 import { setNowFn } from '@/lib/time';
 import type { TodayRecord } from '@/lib/services/attendance.service';
+import { todayRecord24_1, todayRecord24_1a } from '@/lib/services/__fixtures__/todayMultiSession';
 
 const defaultShift = {
   workStartTime: '09:00',
@@ -251,5 +252,49 @@ describe('QuickPunchCard overtime confirmation', () => {
 
     expect(screen.getByRole('button', { name: 'تسجيل الانصراف' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'حضور إضافي' })).not.toBeInTheDocument();
+  });
+});
+
+describe('QuickPunchCard multi-session parity with TodayStatusCard', () => {
+  afterEach(() => {
+    setNowFn(() => new Date());
+  });
+
+  it('24.1a shows checkout when aggregate log has check_out but second session is open', () => {
+    const onCheckIn = vi.fn();
+    const onCheckOut = vi.fn();
+    setNowFn(() => new Date('2025-06-10T13:20:00'));
+
+    render(
+      <QuickPunchCard
+        today={todayRecord24_1a()}
+        loading={false}
+        actionLoading={false}
+        onCheckIn={onCheckIn}
+        onCheckOut={onCheckOut}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'تسجيل الانصراف' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^تسجيل الحضور$/ })).not.toBeInTheDocument();
+  });
+
+  it('24.1 shows checkout when third session is open with stale aggregate check_out_time', () => {
+    const onCheckIn = vi.fn();
+    const onCheckOut = vi.fn();
+    setNowFn(() => new Date('2025-06-10T15:00:00'));
+
+    render(
+      <QuickPunchCard
+        today={todayRecord24_1()}
+        loading={false}
+        actionLoading={false}
+        onCheckIn={onCheckIn}
+        onCheckOut={onCheckOut}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'تسجيل الانصراف' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^تسجيل الحضور$/ })).not.toBeInTheDocument();
   });
 });

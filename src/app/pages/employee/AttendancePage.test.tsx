@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AttendancePage } from './AttendancePage';
+import { todayRecord24_1 } from '@/lib/services/__fixtures__/todayMultiSession';
 
 const mockUseAuth = vi.hoisted(() => vi.fn());
 const mockUseApp = vi.hoisted(() => vi.fn());
@@ -28,37 +29,44 @@ vi.mock('sonner', () => ({
   },
 }));
 
-vi.mock('@/lib/services/attendance.service', () => ({
-  getAttendanceToday: (...args: unknown[]) => mockGetAttendanceToday(...args),
-  getAttendanceMonthly: (...args: unknown[]) => mockGetAttendanceMonthly(...args),
-}));
+vi.mock('@/lib/services/attendance.service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/services/attendance.service')>();
+  return {
+    ...actual,
+    getAttendanceToday: (...args: unknown[]) => mockGetAttendanceToday(...args),
+    getAttendanceMonthly: (...args: unknown[]) => mockGetAttendanceMonthly(...args),
+  };
+});
 
-vi.mock('../../components/attendance/TodayStatusCard', () => ({
-  /** Mirrors production: checked-in is derived only from `today.log` (not `sessions`). */
-  TodayStatusCard: (props: any) => {
-    const log = props.today?.log;
-    const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
-    const stateLabel = isCheckedIn ? 'checked-in' : log?.check_out_time ? 'completed' : 'idle';
-    return (
-      <div data-testid="today-status-card">
-        <div data-testid="today-state">{stateLabel}</div>
-        {props.actionLoading ? (
-          <button type="button" disabled>
-            جاري التسجيل...
-          </button>
-        ) : isCheckedIn ? (
-          <button type="button" onClick={() => props.onCheckOut()}>
-            تسجيل الانصراف
-          </button>
-        ) : (
-          <button type="button" onClick={props.onCheckIn}>
-            تسجيل الحضور
-          </button>
-        )}
-      </div>
-    );
-  },
-}));
+vi.mock('../../components/attendance/TodayStatusCard', async () => {
+  const { isCheckedInToday } = await import('@/lib/services/attendance.service');
+  return {
+    /** Mirrors production: session-aware checked-in (same as TodayStatusCard / TodayPunchLog). */
+    TodayStatusCard: (props: any) => {
+      const log = props.today?.log;
+      const isCheckedIn = isCheckedInToday(props.today);
+      const stateLabel = isCheckedIn ? 'checked-in' : log?.check_out_time ? 'completed' : 'idle';
+      return (
+        <div data-testid="today-status-card">
+          <div data-testid="today-state">{stateLabel}</div>
+          {props.actionLoading ? (
+            <button type="button" disabled>
+              جاري التسجيل...
+            </button>
+          ) : isCheckedIn ? (
+            <button type="button" onClick={() => props.onCheckOut()}>
+              تسجيل الانصراف
+            </button>
+          ) : (
+            <button type="button" onClick={props.onCheckIn}>
+              تسجيل الحضور
+            </button>
+          )}
+        </div>
+      );
+    },
+  };
+});
 
 vi.mock('../../components/attendance/TodayPunchLog', () => ({
   TodayPunchLog: () => <div data-testid="today-punch-log" />,
@@ -99,6 +107,8 @@ const openLog = {
   auto_punch_out: false,
 };
 
+const sessionsThreeWithOpenThird = todayRecord24_1().sessions!;
+
 /** Third session open; aggregate `log` matches API row for current session (spec). */
 const todayWithOpenThirdSession = {
   log: {
@@ -124,9 +134,10 @@ const todayWithOpenThirdSession = {
     { id: 'e', timestamp: '14:30', type: 'clock_in' as const, isOvertime: false },
   ],
   shift: defaultShift,
+  sessions: sessionsThreeWithOpenThird,
 };
 
-/** Same punches but pseudo `log` carries last closed checkout — breaks `isCheckedIn` (regression). */
+/** Same punches + sessions but pseudo `log` carries last closed checkout (refresh regression shape). */
 const todayWithBuggyAggregateLog = {
   ...todayWithOpenThirdSession,
   log: {
