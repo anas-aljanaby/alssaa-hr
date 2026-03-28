@@ -66,6 +66,7 @@ const policyRow = {
   annual_leave_per_year: 21,
   sick_leave_per_year: 10,
   auto_punch_out_buffer_minutes: 30,
+  minimum_required_minutes: null as number | null,
 };
 
 describe('attendance.service', () => {
@@ -87,8 +88,100 @@ describe('attendance.service', () => {
       gracePeriodMinutes: 10,
       bufferMinutesAfterShift: 30,
       weeklyOffDays: [5, 6],
+      minimumRequiredMinutes: null,
     };
     expect(isOvertimeTime(9 * 60, shift, 5)).toBe(true);
+  });
+
+  it('wallTimeToMinutes parses ISO and HH:MM', async () => {
+    const { wallTimeToMinutes } = await import('./attendance.service');
+    expect(wallTimeToMinutes('2025-06-10T10:05:00')).toBe(10 * 60 + 5);
+    expect(wallTimeToMinutes('10:05')).toBe(10 * 60 + 5);
+  });
+
+  it('totalWorkedMinutesToday prefers summary then sessions then log span', async () => {
+    const { totalWorkedMinutesToday } = await import('./attendance.service');
+    const shift = {
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      bufferMinutesAfterShift: 30,
+      weeklyOffDays: [5, 6],
+      minimumRequiredMinutes: null,
+    };
+    type TodayRecord = import('./attendance.service').TodayRecord;
+    type ADS = import('./attendance.service').AttendanceDailySummary;
+    const base = { log: null, punches: [], shift } as TodayRecord;
+    expect(
+      totalWorkedMinutesToday({
+        ...base,
+        summary: { total_work_minutes: 99 } as ADS,
+      })
+    ).toBe(99);
+  });
+
+  it('isShiftRequirementMet uses full duration or minimum when set', async () => {
+    const { isShiftRequirementMet } = await import('./attendance.service');
+    const shift = {
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      bufferMinutesAfterShift: 30,
+      weeklyOffDays: [5, 6],
+      minimumRequiredMinutes: 420,
+    };
+    expect(isShiftRequirementMet(shift, 419)).toBe(false);
+    expect(isShiftRequirementMet(shift, 420)).toBe(true);
+    expect(isShiftRequirementMet(shift, 539)).toBe(true);
+    const noMin = { ...shift, minimumRequiredMinutes: null };
+    expect(isShiftRequirementMet(noMin, 539)).toBe(false);
+    expect(isShiftRequirementMet(noMin, 540)).toBe(true);
+  });
+
+  it('shouldShowShiftCongrats only on fulfilled work days when checked out', async () => {
+    const { shouldShowShiftCongrats } = await import('./attendance.service');
+    const shift = {
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      bufferMinutesAfterShift: 30,
+      weeklyOffDays: [5, 6],
+      minimumRequiredMinutes: null,
+    };
+    const tuesday = new Date('2025-06-10T19:00:00');
+    const fulfilled = {
+      log: {
+        id: '1',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2025-06-10',
+        check_in_time: '09:00',
+        check_out_time: '18:00',
+        check_in_lat: null,
+        check_in_lng: null,
+        check_out_lat: null,
+        check_out_lng: null,
+        status: 'present' as const,
+        is_dev: false,
+        auto_punch_out: false,
+      },
+      punches: [],
+      shift,
+      summary: {
+        total_work_minutes: 540,
+      } as import('./attendance.service').AttendanceDailySummary,
+    };
+    expect(shouldShowShiftCongrats(fulfilled, tuesday)).toBe(true);
+
+    const short = { ...fulfilled, summary: { total_work_minutes: 60 } as import('./attendance.service').AttendanceDailySummary };
+    expect(shouldShowShiftCongrats(short, tuesday)).toBe(false);
+
+    const open = {
+      ...fulfilled,
+      log: { ...fulfilled.log, check_out_time: null },
+      summary: { total_work_minutes: 540 } as import('./attendance.service').AttendanceDailySummary,
+    };
+    expect(shouldShowShiftCongrats(open, tuesday)).toBe(false);
   });
 
   it('todayStr formats current day', async () => {
@@ -112,10 +205,12 @@ describe('attendance.service', () => {
     sb.queueResult({ data: logRow, error: null });
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: policyRow, error: null });
+    sb.queueResult({ data: null, error: null });
     const { getAttendanceToday } = await import('./attendance.service');
     const rec = await getAttendanceToday('u1');
     expect(rec.log?.id).toBe('log1');
     expect(rec.shift?.workStartTime).toBe('08:00');
+    expect(rec.shift?.minimumRequiredMinutes).toBeNull();
     expect(rec.punches.length).toBeGreaterThan(0);
   });
 
@@ -144,13 +239,41 @@ describe('attendance.service', () => {
   });
 
   it('getMonthlyStats aggregates statuses', async () => {
+    sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({
       data: [
-        { ...logRow, status: 'present' as const },
-        { ...logRow, id: 'l2', date: '2025-06-10', status: 'late' as const },
+        {
+          id: 's1',
+          org_id: 'o1',
+          user_id: 'u1',
+          date: '2025-06-10',
+          first_check_in: '09:00',
+          last_check_out: '17:00',
+          total_work_minutes: 480,
+          total_overtime_minutes: 0,
+          effective_status: 'late',
+          is_short_day: false,
+          session_count: 1,
+          updated_at: '2025-06-10T17:00:00Z',
+        },
+        {
+          id: 's2',
+          org_id: 'o1',
+          user_id: 'u1',
+          date: '2025-06-11',
+          first_check_in: '08:00',
+          last_check_out: '16:00',
+          total_work_minutes: 480,
+          total_overtime_minutes: 0,
+          effective_status: 'present',
+          is_short_day: false,
+          session_count: 1,
+          updated_at: '2025-06-11T16:00:00Z',
+        },
       ],
       error: null,
     });
+    sb.queueResult({ data: policyRow, error: null });
     const { getMonthlyStats } = await import('./attendance.service');
     const stats = await getMonthlyStats('u1', 2025, 5);
     expect(stats.presentDays).toBe(1);

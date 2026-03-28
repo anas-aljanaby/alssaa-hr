@@ -28,6 +28,8 @@ export interface ShiftInfo {
   bufferMinutesAfterShift: number;
   /** JavaScript getDay() values that are off (e.g. [5, 6] = Fri, Sat). Default [5, 6]. */
   weeklyOffDays: number[];
+  /** Org policy: minimum minutes worked to count shift fulfilled; null = use full scheduled duration only in UI logic. */
+  minimumRequiredMinutes: number | null;
 }
 
 export interface TodayRecord {
@@ -85,6 +87,58 @@ function resolveCalendarStatus(
 function toMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
+}
+
+/** Wall clock minutes from DB time strings (HH:MM or ISO datetime). */
+export function wallTimeToMinutes(time: string | null | undefined): number {
+  if (!time) return NaN;
+  const hm = time.includes('T') ? time.slice(11, 16) : time.slice(0, 5);
+  const [h, m] = hm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** HH:MM for display and parsing from DB (may be ISO or HH:MM). */
+export function wallTimeHHMM(time: string | null | undefined): string | null {
+  if (!time) return null;
+  if (time.includes('T')) return time.slice(11, 16);
+  return time.slice(0, 5);
+}
+
+export function shiftDurationMinutes(shift: ShiftInfo): number {
+  const d = toMinutes(shift.workEndTime) - toMinutes(shift.workStartTime);
+  return d > 0 ? d : 0;
+}
+
+export function totalWorkedMinutesToday(today: TodayRecord): number {
+  if (today.summary?.total_work_minutes != null) return today.summary.total_work_minutes;
+  if (today.sessions?.length) return computeTotalMinutesFromSessions(today.sessions);
+  const log = today.log;
+  if (log?.check_in_time && log?.check_out_time) {
+    return Math.max(0, wallTimeToMinutes(log.check_out_time) - wallTimeToMinutes(log.check_in_time));
+  }
+  return 0;
+}
+
+export function isShiftRequirementMet(shift: ShiftInfo, totalWorkedMinutes: number): boolean {
+  const full = shiftDurationMinutes(shift);
+  const min = shift.minimumRequiredMinutes;
+  return totalWorkedMinutes >= full || (min != null && totalWorkedMinutes >= min);
+}
+
+export function shouldShowShiftCongrats(today: TodayRecord, at: Date = now()): boolean {
+  const { log, shift } = today;
+  if (!shift) return false;
+  const dayOfWeek = at.getDay();
+  const isWorkingDay = !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek);
+  if (!isWorkingDay) return false;
+  const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
+  if (isCheckedIn) return false;
+  const worked = totalWorkedMinutesToday(today);
+  if (worked <= 0) return false;
+  const hasClosedSession =
+    !!log?.check_out_time || (today.sessions?.some((s) => !!s.check_out_time) ?? false);
+  if (!hasClosedSession) return false;
+  return isShiftRequirementMet(shift, worked);
 }
 
 /**
@@ -148,7 +202,9 @@ function normalizeSessions(data: unknown, dateHint: string): AttendanceSession[]
     is_auto_punch_out: Boolean(row.auto_punch_out),
     is_early_departure: false,
     needs_review: false,
-    duration_minutes: row.check_out_time ? Math.max(0, toMinutes(row.check_out_time) - toMinutes(row.check_in_time)) : 0,
+    duration_minutes: row.check_out_time
+      ? Math.max(0, wallTimeToMinutes(row.check_out_time) - wallTimeToMinutes(row.check_in_time!))
+      : 0,
     last_action_at: new Date().toISOString(),
     is_dev: Boolean(row.is_dev),
     created_at: new Date().toISOString(),
@@ -214,7 +270,7 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
   if (hasCustomSchedule) {
     const { data: policy } = await supabase
       .from('attendance_policy')
-      .select('grace_period_minutes, auto_punch_out_buffer_minutes')
+      .select('grace_period_minutes, auto_punch_out_buffer_minutes, minimum_required_minutes')
       .eq('org_id', profile.org_id)
       .limit(1)
       .maybeSingle();
@@ -226,12 +282,15 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
       gracePeriodMinutes: policy?.grace_period_minutes ?? 15,
       bufferMinutesAfterShift: policy?.auto_punch_out_buffer_minutes ?? 30,
       weeklyOffDays,
+      minimumRequiredMinutes: policy?.minimum_required_minutes ?? null,
     };
   }
 
   const { data: policy } = await supabase
     .from('attendance_policy')
-    .select('work_start_time, work_end_time, grace_period_minutes, auto_punch_out_buffer_minutes, weekly_off_days')
+    .select(
+      'work_start_time, work_end_time, grace_period_minutes, auto_punch_out_buffer_minutes, weekly_off_days, minimum_required_minutes'
+    )
     .eq('org_id', profile.org_id)
     .limit(1)
     .maybeSingle();
@@ -243,6 +302,7 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
     gracePeriodMinutes: policy.grace_period_minutes,
     bufferMinutesAfterShift: policy.auto_punch_out_buffer_minutes ?? 30,
     weeklyOffDays: policy.weekly_off_days ?? [5, 6],
+    minimumRequiredMinutes: policy.minimum_required_minutes ?? null,
   };
 }
 

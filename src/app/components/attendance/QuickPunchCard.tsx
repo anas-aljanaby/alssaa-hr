@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Clock3, LogIn, LogOut, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { now } from '@/lib/time';
-import { isOvertimeTime, type TodayRecord } from '@/lib/services/attendance.service';
+import {
+  isOvertimeTime,
+  shouldShowShiftCongrats,
+  wallTimeHHMM,
+  type TodayRecord,
+} from '@/lib/services/attendance.service';
 
 interface QuickPunchCardProps {
   today: TodayRecord;
@@ -20,7 +25,7 @@ function toMinutes(t: string): number {
 
 function formatTime(t?: string | null): string {
   if (!t) return '--:--';
-  return t.slice(0, 5);
+  return wallTimeHHMM(t) ?? '--:--';
 }
 
 export function QuickPunchCard({
@@ -41,28 +46,29 @@ export function QuickPunchCard({
     const dayOfWeek = currentNow.getDay();
 
     const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
-    const isCompleted = !!(log?.check_in_time && log?.check_out_time);
 
     const isOvertimeNow = shift ? isOvertimeTime(currentMinutes, shift, dayOfWeek) : false;
     const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
     const canPunchIn =
       !shift || isOvertimeNow || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
 
+    const showShiftCongrats = shouldShowShiftCongrats(today, currentNow);
+
     return {
       isCheckedIn,
-      isCompleted,
       isOvertimeNow,
       canPunchIn,
+      showShiftCongrats,
     };
-  }, [log?.check_in_time, log?.check_out_time, shift]);
+  }, [log?.check_in_time, log?.check_out_time, shift, today]);
 
   if (loading) {
     return <div className="bg-gray-100 rounded-xl h-40 animate-pulse" />;
   }
 
   const buttonDisabled = actionLoading || cooldownSecondsLeft > 0;
-  const statusText = state.isCompleted
-    ? 'اكتمل دوام اليوم'
+  const statusText = state.showShiftCongrats
+    ? 'استوفيت متطلبات الدوام لهذا اليوم'
     : state.isCheckedIn
       ? 'أنت مسجل حضور الآن'
       : 'غير مسجل حضور';
@@ -88,10 +94,10 @@ export function QuickPunchCard({
             <h3 className="text-gray-900 text-sm font-semibold">تسجيل الحضور السريع</h3>
             <p className="text-xs text-gray-500 mt-1">{statusText}</p>
           </div>
-          {state.isCompleted ? (
+          {state.showShiftCongrats ? (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              مكتمل
+              متطلبات الدوام
             </span>
           ) : state.isCheckedIn ? (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] bg-blue-50 text-blue-700 border border-blue-200">
@@ -142,7 +148,7 @@ export function QuickPunchCard({
                   ? `انتظر ${cooldownSecondsLeft}ث`
                   : !state.canPunchIn
                     ? 'قبل الدوام بساعة'
-                    : state.isCompleted
+                    : state.isOvertimeNow
                       ? 'حضور إضافي'
                       : 'تسجيل الحضور'}
             </button>

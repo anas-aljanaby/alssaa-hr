@@ -131,8 +131,8 @@ export function AttendancePage() {
     try {
       const result = await checkOut(currentUser.uid, checkoutTime);
       if (navigator.vibrate) navigator.vibrate(100);
-      // Always update UI with checkout result so completed (green) state shows immediately.
-      // If getAttendanceToday fails (e.g. network), we still show the completed day.
+      // Always update UI with checkout result so shift-congrats / totals refresh immediately.
+      // If getAttendanceToday fails (e.g. network), we still keep the latest log until next load.
       setToday((prev) => ({ ...prev, log: result }));
       try {
         const updated = await attendanceService.getAttendanceToday(currentUser.uid);

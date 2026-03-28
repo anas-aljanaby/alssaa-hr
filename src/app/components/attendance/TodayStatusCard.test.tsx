@@ -4,17 +4,20 @@ import { TodayStatusCard } from './TodayStatusCard';
 import { setNowFn } from '@/lib/time';
 import type { TodayRecord } from '@/lib/services/attendance.service';
 
+const defaultShift = {
+  workStartTime: '09:00',
+  workEndTime: '18:00',
+  gracePeriodMinutes: 15,
+  bufferMinutesAfterShift: 30,
+  weeklyOffDays: [5, 6] as number[],
+  minimumRequiredMinutes: null as number | null,
+};
+
 function makeToday(weeklyOffDays: number[]): TodayRecord {
   return {
     log: null,
     punches: [],
-    shift: {
-      workStartTime: '09:00',
-      workEndTime: '18:00',
-      gracePeriodMinutes: 15,
-      bufferMinutesAfterShift: 30,
-      weeklyOffDays,
-    },
+    shift: { ...defaultShift, weeklyOffDays },
   };
 }
 
@@ -42,7 +45,7 @@ describe('TodayStatusCard overtime confirmation', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'تسجيل الحضور' }));
+    fireEvent.click(screen.getByRole('button', { name: /تسجيل الحضور \(عمل إضافي\)/ }));
     expect(screen.getByText('تأكيد عمل إضافي')).toBeInTheDocument();
     expect(onCheckIn).not.toHaveBeenCalled();
 
@@ -117,13 +120,7 @@ describe('TodayStatusCard overtime confirmation', () => {
         auto_punch_out: false,
       },
       punches: [],
-      shift: {
-        workStartTime: '09:00',
-        workEndTime: '18:00',
-        gracePeriodMinutes: 15,
-        bufferMinutesAfterShift: 30,
-        weeklyOffDays: [5, 6],
-      },
+      shift: { ...defaultShift },
     };
 
     render(
@@ -175,13 +172,7 @@ describe('TodayStatusCard overtime confirmation', () => {
         auto_punch_out: false,
       },
       punches: [],
-      shift: {
-        workStartTime: '09:00',
-        workEndTime: '18:00',
-        gracePeriodMinutes: 15,
-        bufferMinutesAfterShift: 30,
-        weeklyOffDays: [5, 6],
-      },
+      shift: { ...defaultShift },
     };
 
     render(
@@ -211,7 +202,7 @@ describe('TodayStatusCard overtime confirmation', () => {
     vi.useRealTimers();
   });
 
-  it('does not show overtime-only CTA for a mid-shift completed segment', () => {
+  it('does not show shift congrats or overtime-only CTA for a mid-shift closed segment', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
     setNowFn(() => new Date('2025-06-10T13:20:00')); // Tuesday, before shift end
@@ -233,13 +224,7 @@ describe('TodayStatusCard overtime confirmation', () => {
         auto_punch_out: false,
       },
       punches: [],
-      shift: {
-        workStartTime: '09:00',
-        workEndTime: '18:00',
-        gracePeriodMinutes: 15,
-        bufferMinutesAfterShift: 30,
-        weeklyOffDays: [5, 6],
-      },
+      shift: { ...defaultShift },
     };
 
     render(
@@ -252,13 +237,15 @@ describe('TodayStatusCard overtime confirmation', () => {
       />
     );
 
+    expect(screen.queryByText('أحسنت')).not.toBeInTheDocument();
+    expect(screen.queryByText(/استوفيت متطلبات الدوام/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /عمل إضافي/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^تسجيل الحضور$/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^تسجيل الحضور$/ }));
     expect(screen.queryByText('تأكيد عمل إضافي')).not.toBeInTheDocument();
   });
 
-  it('allows overtime confirmation for completed day after shift end', () => {
+  it('allows overtime confirmation after shift end when between sessions', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
     setNowFn(() => new Date('2025-06-10T18:20:00')); // Tuesday, after shift end
@@ -280,13 +267,7 @@ describe('TodayStatusCard overtime confirmation', () => {
         auto_punch_out: false,
       },
       punches: [],
-      shift: {
-        workStartTime: '09:00',
-        workEndTime: '18:00',
-        gracePeriodMinutes: 15,
-        bufferMinutesAfterShift: 30,
-        weeklyOffDays: [5, 6],
-      },
+      shift: { ...defaultShift },
     };
 
     render(
@@ -325,13 +306,7 @@ describe('TodayStatusCard overtime confirmation', () => {
         auto_punch_out: false,
       },
       punches: [],
-      shift: {
-        workStartTime: '09:00',
-        workEndTime: '18:00',
-        gracePeriodMinutes: 15,
-        bufferMinutesAfterShift: 30,
-        weeklyOffDays: [5, 6],
-      },
+      shift: { ...defaultShift },
       sessions: [
         {
           id: 's1',
@@ -383,6 +358,6 @@ describe('TodayStatusCard overtime confirmation', () => {
     );
 
     expect(screen.getByRole('button', { name: 'تسجيل الانصراف' })).toBeInTheDocument();
-    expect(screen.queryByText('اكتمل اليوم')).not.toBeInTheDocument();
+    expect(screen.queryByText('أحسنت')).not.toBeInTheDocument();
   });
 });
