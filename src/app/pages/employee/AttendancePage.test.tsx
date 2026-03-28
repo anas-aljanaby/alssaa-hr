@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AttendancePage } from './AttendancePage';
 
@@ -34,20 +34,30 @@ vi.mock('@/lib/services/attendance.service', () => ({
 }));
 
 vi.mock('../../components/attendance/TodayStatusCard', () => ({
-  TodayStatusCard: (props: any) => (
-    <div data-testid="today-status-card">
-      <div data-testid="today-state">
-        {props.today?.log?.check_in_time && !props.today?.log?.check_out_time
-          ? 'checked-in'
-          : props.today?.log?.check_out_time
-            ? 'completed'
-            : 'idle'}
+  /** Mirrors production: checked-in is derived only from `today.log` (not `sessions`). */
+  TodayStatusCard: (props: any) => {
+    const log = props.today?.log;
+    const isCheckedIn = !!(log?.check_in_time && !log?.check_out_time);
+    const stateLabel = isCheckedIn ? 'checked-in' : log?.check_out_time ? 'completed' : 'idle';
+    return (
+      <div data-testid="today-status-card">
+        <div data-testid="today-state">{stateLabel}</div>
+        {props.actionLoading ? (
+          <button type="button" disabled>
+            جاري التسجيل...
+          </button>
+        ) : isCheckedIn ? (
+          <button type="button" onClick={() => props.onCheckOut()}>
+            تسجيل الانصراف
+          </button>
+        ) : (
+          <button type="button" onClick={props.onCheckIn}>
+            تسجيل الحضور
+          </button>
+        )}
       </div>
-      <button onClick={props.onCheckIn}>
-        {props.actionLoading ? 'جاري التسجيل...' : 'تسجيل الحضور'}
-      </button>
-    </div>
-  ),
+    );
+  },
 }));
 
 vi.mock('../../components/attendance/TodayPunchLog', () => ({
@@ -63,6 +73,16 @@ vi.mock('../../components/attendance/DayDetailsSheet', () => ({
 }));
 
 const user = { uid: 'u1' };
+
+const defaultShift = {
+  workStartTime: '09:00',
+  workEndTime: '18:00',
+  gracePeriodMinutes: 15,
+  bufferMinutesAfterShift: 30,
+  weeklyOffDays: [5, 6] as number[],
+  minimumRequiredMinutes: null as number | null,
+};
+
 const openLog = {
   id: 'log-open',
   org_id: 'o1',
@@ -77,6 +97,44 @@ const openLog = {
   status: 'late' as const,
   is_dev: false,
   auto_punch_out: false,
+};
+
+/** Third session open; aggregate `log` matches API row for current session (spec). */
+const todayWithOpenThirdSession = {
+  log: {
+    id: 's3',
+    org_id: 'o1',
+    user_id: 'u1',
+    date: '2025-06-10',
+    check_in_time: '14:30',
+    check_out_time: null,
+    check_in_lat: null,
+    check_in_lng: null,
+    check_out_lat: null,
+    check_out_lng: null,
+    status: 'present' as const,
+    is_dev: false,
+    auto_punch_out: false,
+  },
+  punches: [
+    { id: 'a', timestamp: '08:30', type: 'clock_in' as const, isOvertime: false },
+    { id: 'b', timestamp: '12:00', type: 'clock_out' as const, isOvertime: false },
+    { id: 'c', timestamp: '13:00', type: 'clock_in' as const, isOvertime: false },
+    { id: 'd', timestamp: '14:00', type: 'clock_out' as const, isOvertime: false },
+    { id: 'e', timestamp: '14:30', type: 'clock_in' as const, isOvertime: false },
+  ],
+  shift: defaultShift,
+};
+
+/** Same punches but pseudo `log` carries last closed checkout — breaks `isCheckedIn` (regression). */
+const todayWithBuggyAggregateLog = {
+  ...todayWithOpenThirdSession,
+  log: {
+    ...todayWithOpenThirdSession.log,
+    id: 'pseudo',
+    check_in_time: '08:30',
+    check_out_time: '14:00',
+  },
 };
 
 describe('AttendancePage', () => {
@@ -133,5 +191,129 @@ describe('AttendancePage', () => {
 
     await waitFor(() => expect(checkIn).toHaveBeenCalledWith('u1'));
     await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('checked-in'));
+  });
+
+  /**
+   * Doc §24.4: After two breaks + third check-in, a refresh that returns `getAttendanceToday`-style
+   * pseudo `log` (non-null `check_out_time` from last closed session) must not flip UX to punch-in.
+   * Fails while `isCheckedIn` ignores an open latest session / full punch list.
+   */
+  it('24.4 visibility refresh keeps checked-in when third session is open and punches are complete', async () => {
+    const checkIn = vi.fn();
+    const checkOut = vi.fn();
+    mockUseApp.mockReturnValue({ checkIn, checkOut });
+    mockGetAttendanceToday
+      .mockResolvedValueOnce(todayWithOpenThirdSession)
+      .mockResolvedValueOnce(todayWithBuggyAggregateLog);
+
+    render(<AttendancePage />);
+
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('checked-in'));
+    expect(screen.getByRole('button', { name: 'تسجيل الانصراف' })).toBeInTheDocument();
+
+    await act(async () => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        writable: true,
+        value: 'visible',
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() => expect(mockGetAttendanceToday).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByTestId('today-state')).toHaveTextContent('checked-in');
+    expect(screen.getByRole('button', { name: 'تسجيل الانصراف' })).toBeInTheDocument();
+  });
+
+  /**
+   * Doc §24.5: Through two breaks + third check-in, when API returns consistent `log` rows,
+   * the primary action must alternate checkout / check-in correctly (happy path).
+   */
+  it('24.5 multi-step punch cycle: CTA matches each session boundary', async () => {
+    const baseLog = {
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2025-06-10',
+      check_in_lat: null,
+      check_in_lng: null,
+      check_out_lat: null,
+      check_out_lng: null,
+      status: 'present' as const,
+      is_dev: false,
+      auto_punch_out: false,
+    };
+    const open1 = { ...baseLog, id: 's1', check_in_time: '08:30', check_out_time: null };
+    const closed1 = { ...baseLog, id: 's1', check_in_time: '08:30', check_out_time: '12:00' };
+    const open2 = { ...baseLog, id: 's2', check_in_time: '13:00', check_out_time: null };
+    const closed2 = { ...baseLog, id: 's2', check_in_time: '13:00', check_out_time: '14:00' };
+    const open3 = { ...baseLog, id: 's3', check_in_time: '14:30', check_out_time: null };
+
+    const p1 = [{ id: 'a', timestamp: '08:30', type: 'clock_in' as const, isOvertime: false }];
+    const p2 = [
+      ...p1,
+      { id: 'b', timestamp: '12:00', type: 'clock_out' as const, isOvertime: false },
+    ];
+    const p3 = [
+      ...p2,
+      { id: 'c', timestamp: '13:00', type: 'clock_in' as const, isOvertime: false },
+    ];
+    const p4 = [
+      ...p3,
+      { id: 'd', timestamp: '14:00', type: 'clock_out' as const, isOvertime: false },
+    ];
+    const p5 = [
+      ...p4,
+      { id: 'e', timestamp: '14:30', type: 'clock_in' as const, isOvertime: false },
+    ];
+
+    const queue = [
+      { log: null, punches: [], shift: defaultShift },
+      { log: open1, punches: p1, shift: defaultShift },
+      { log: closed1, punches: p2, shift: defaultShift },
+      { log: open2, punches: p3, shift: defaultShift },
+      { log: closed2, punches: p4, shift: defaultShift },
+      { log: open3, punches: p5, shift: defaultShift },
+    ];
+
+    let gi = 0;
+    mockGetAttendanceToday.mockImplementation(() => Promise.resolve(queue[gi++]));
+
+    const checkInLogs = [open1, open2, open3];
+    const checkOutLogs = [closed1, closed2];
+    const checkIn = vi.fn(async () => ({ log: checkInLogs.shift() }));
+    const checkOut = vi.fn(async () => checkOutLogs.shift());
+    mockUseApp.mockReturnValue({ checkIn, checkOut });
+
+    render(<AttendancePage />);
+
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('idle'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'تسجيل الحضور' }));
+    });
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('checked-in'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'تسجيل الانصراف' }));
+    });
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('completed'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'تسجيل الحضور' }));
+    });
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('checked-in'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'تسجيل الانصراف' }));
+    });
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('completed'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'تسجيل الحضور' }));
+    });
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('checked-in'));
+    expect(screen.getByRole('button', { name: 'تسجيل الانصراف' })).toBeInTheDocument();
+    expect(checkIn).toHaveBeenCalledTimes(3);
+    expect(checkOut).toHaveBeenCalledTimes(2);
   });
 });

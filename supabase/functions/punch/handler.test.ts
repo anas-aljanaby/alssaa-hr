@@ -544,6 +544,72 @@ Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   assertEquals(summary?.is_short_day, false);
 });
 
+/** Org wall times via UTC: handler uses UTC+3 for date/time fields (see toTimeStr). */
+const ORG = {
+  /** 08:30 Baghdad */
+  t0830: '2025-06-10T05:30:00.000Z',
+  t1200: '2025-06-10T09:00:00.000Z',
+  t1300: '2025-06-10T10:00:00.000Z',
+  t1400: '2025-06-10T11:00:00.000Z',
+  t1430: '2025-06-10T11:30:00.000Z',
+  t1800: '2025-06-10T15:00:00.000Z',
+} as const;
+
+/** Two short breaks: three closed work segments on a regular working day (doc §3.8). */
+Deno.test('part 3.8 three regular sessions with two breaks aggregate correctly', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', ORG.t0830);
+  await punch(mem.deps, 'check_out', ORG.t1200);
+  await punch(mem.deps, 'check_in', ORG.t1300);
+  await punch(mem.deps, 'check_out', ORG.t1400);
+  await punch(mem.deps, 'check_in', ORG.t1430);
+  await punch(mem.deps, 'check_out', ORG.t1800);
+
+  assertEquals(mem.sessions.length, 3);
+  const [s1, s2, s3] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.check_in_time, '08:30');
+  assertEquals(s1.check_out_time, '12:00');
+  assertEquals(s1.duration_minutes, 210);
+  assertEquals(s2.check_in_time, '13:00');
+  assertEquals(s2.check_out_time, '14:00');
+  assertEquals(s2.duration_minutes, 60);
+  assertEquals(s3.check_in_time, '14:30');
+  assertEquals(s3.check_out_time, '18:00');
+  assertEquals(s3.duration_minutes, 210);
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.session_count, 3);
+  assertEquals(summary?.first_check_in, '08:30');
+  assertEquals(summary?.last_check_out, '18:00');
+  assertEquals(summary?.total_work_minutes, 480);
+  assertEquals(summary?.total_overtime_minutes, 0);
+  assertEquals(summary?.effective_status, 'present');
+  assertEquals(summary?.is_short_day, false);
+});
+
+/** Third check-in with no checkout yet: open session + summary still tracks last completed checkout (doc §3.8). */
+Deno.test('part 3.8b three sessions with third segment open keeps last_check_out from prior session', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', ORG.t0830);
+  await punch(mem.deps, 'check_out', ORG.t1200);
+  await punch(mem.deps, 'check_in', ORG.t1300);
+  await punch(mem.deps, 'check_out', ORG.t1400);
+  const thirdIn = await punch(mem.deps, 'check_in', ORG.t1430);
+  assertEquals(thirdIn.status, 200);
+
+  assertEquals(mem.sessions.length, 3);
+  const [s1, s2, s3] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.check_out_time, '12:00');
+  assertEquals(s2.check_out_time, '14:00');
+  assertEquals(s3.check_in_time, '14:30');
+  assertEquals(s3.check_out_time, null);
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.session_count, 3);
+  assertEquals(summary?.first_check_in, '08:30');
+  assertEquals(summary?.last_check_out, '14:00');
+});
+
 Deno.test('part 3.2 late first session with late return resolves late', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');

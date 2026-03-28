@@ -183,6 +183,40 @@ Expected daily summary:
 | 3.6.2 | [x] | `is_short_day` | `true` | 390 min = 6.5 h, below 8 h minimum |
 | 3.6.3 | [x] | `session_count` | `3` | Three completed sessions |
 
+### 3.8 Three Sessions With Two Short Breaks (Regression / Multi-Break Day)
+
+> Corresponding test file: `supabase/functions/punch/handler.test.ts`  
+> **Deno tests added (Mar 2026):** `part 3.8 three regular sessions with two breaks aggregate correctly`, `part 3.8b three sessions with third segment open keeps last_check_out from prior session`  
+> **Time inputs:** `devOverrideTime` uses explicit UTC instants (e.g. `2025-06-10T05:30:00.000Z`) so stored org wall times match `08:30` etc. (handler applies UTC+3 via `toTimeStr`).
+
+Scenario: Tuesday working day. Employee punches in/out three times with two short breaks (same pattern as UI “third check-in” flows).
+
+#### 3.8.A All three segments closed
+
+| # | Implemented | Session | Check-In | Check-Out | Expected duration | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 3.8.S1 | [x] | 1 | 08:30 | 12:00 | 210 min | First block |
+| 3.8.S2 | [x] | 2 | 13:00 | 14:00 | 60 min | After first break |
+| 3.8.S3 | [x] | 3 | 14:30 | 18:00 | 210 min | After second break |
+
+Expected daily summary:
+
+| # | Implemented | Field | Expected value | Notes |
+| --- | --- | --- | --- | --- |
+| 3.8.1 | [x] | `session_count` | `3` | |
+| 3.8.2 | [x] | `first_check_in` | `08:30` | |
+| 3.8.3 | [x] | `last_check_out` | `18:00` | |
+| 3.8.4 | [x] | `total_work_minutes` | `480` | 210 + 60 + 210 |
+| 3.8.5 | [x] | `effective_status` | `present` | |
+
+#### 3.8.B Third segment open (no third check-out yet)
+
+| # | Implemented | Assertion | Expected value | Notes |
+| --- | --- | --- | --- | --- |
+| 3.8.6 | [x] | Open session | Third row has `check_out_time` null | |
+| 3.8.7 | [x] | `last_check_out` | `14:00` | Last *completed* checkout while third session open |
+| 3.8.8 | [x] | `session_count` | `3` | Includes open session |
+
 ## 4. Daily Summary — Effective Status Resolution
 
 > Corresponding test file: `supabase/functions/punch/handler.test.ts`
