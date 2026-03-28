@@ -440,6 +440,16 @@ type EdgeInvokeResult = {
   error?: { message?: string } | null;
 };
 
+/** UTC instant for devOverrideTime; matches punch handler org wall via toOrgLocalDate (+3). */
+function orgWallToPunchUtcIso(dateStr: string, wallTime: string): string {
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  const parts = wallTime.split(':').map(Number);
+  const h = parts[0] ?? 0;
+  const mi = parts[1] ?? 0;
+  const s = parts[2] ?? 0;
+  return new Date(Date.UTC(y, mo - 1, d, h, mi, s, 0) - 3 * 60 * 60 * 1000).toISOString();
+}
+
 function normalizePunchInvokeError(invokeResult: EdgeInvokeResult): Error | null {
   const edgeError = invokeResult.error;
   const edgeData = invokeResult.data as { error?: string; code?: string } | null | undefined;
@@ -482,8 +492,12 @@ async function invokePunchAuthenticated(payload: { action: 'check_in' | 'check_o
   }) as EdgeInvokeResult;
 }
 
-export async function checkIn(userId: string): Promise<CheckInResult> {
-  const invoked = await invokePunchAuthenticated({ action: 'check_in' });
+export async function checkIn(userId: string, devSimulatedNowIso?: string): Promise<CheckInResult> {
+  const invoked = await invokePunchAuthenticated(
+    import.meta.env.DEV && devSimulatedNowIso
+      ? { action: 'check_in', devOverrideTime: devSimulatedNowIso }
+      : { action: 'check_in' }
+  );
   if (invoked) {
     const normalizedError = normalizePunchInvokeError(invoked);
     if (normalizedError) throw normalizedError;
@@ -573,9 +587,19 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
   return { log, overtimeRequest };
 }
 
-export async function checkOut(userId: string, checkoutTime?: string): Promise<AttendanceLog> {
-  const payload = checkoutTime
-    ? { action: 'check_out' as const, devOverrideTime: `${todayStr()}T${checkoutTime}:00` }
+export async function checkOut(
+  userId: string,
+  checkoutTime?: string,
+  devSimulatedNowIso?: string
+): Promise<AttendanceLog> {
+  let devOverrideTime: string | undefined;
+  if (checkoutTime) {
+    devOverrideTime = orgWallToPunchUtcIso(todayStr(), checkoutTime);
+  } else if (import.meta.env.DEV && devSimulatedNowIso) {
+    devOverrideTime = devSimulatedNowIso;
+  }
+  const payload = devOverrideTime
+    ? { action: 'check_out' as const, devOverrideTime }
     : { action: 'check_out' as const };
   const invoked = await invokePunchAuthenticated(payload);
   if (invoked) {

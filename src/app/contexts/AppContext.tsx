@@ -1,6 +1,7 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
+import { useDevTime } from './DevTimeContext';
 import * as requestsService from '@/lib/services/requests.service';
 import * as notificationsService from '@/lib/services/notifications.service';
 
@@ -21,9 +22,13 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const devTime = useDevTime();
+
   const checkIn = async (userId: string): Promise<CheckInResult> => {
     try {
-      const result = await attendanceService.checkIn(userId);
+      const devIso =
+        import.meta.env.DEV && devTime?.isOverrideActive ? devTime.now().toISOString() : undefined;
+      const result = await attendanceService.checkIn(userId, devIso);
       if (result.overtimeRequest) {
         toast.success('تم تسجيل الحضور — تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة');
       } else {
@@ -39,7 +44,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const checkOut = async (userId: string, checkoutTime?: string): Promise<AttendanceLog> => {
     try {
-      const result = await attendanceService.checkOut(userId, checkoutTime);
+      const devIso =
+        import.meta.env.DEV && devTime?.isOverrideActive && checkoutTime == null
+          ? devTime.now().toISOString()
+          : undefined;
+      const result = await attendanceService.checkOut(userId, checkoutTime, devIso);
       toast.success('تم تسجيل الانصراف بنجاح');
       return result;
     } catch (err: unknown) {

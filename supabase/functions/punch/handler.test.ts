@@ -47,6 +47,17 @@ function json(res: Response): Promise<unknown> {
   return res.json();
 }
 
+/** UTC ISO instant for a calendar date + org wall clock time (handler uses fixed UTC+3 via toOrgLocalDate). */
+function orgInstant(dateStr: string, wallTime: string): string {
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  const parts = wallTime.split(':').map(Number);
+  const h = parts[0] ?? 0;
+  const mi = parts[1] ?? 0;
+  const s = parts[2] ?? 0;
+  const utcMs = Date.UTC(y, mo - 1, d, h, mi, s, 0) - 3 * 60 * 60 * 1000;
+  return new Date(utcMs).toISOString();
+}
+
 const baseEnv: PunchEnv = {
   supabaseUrl: 'https://x.supabase.co',
   supabaseAnonKey: 'anon',
@@ -365,13 +376,13 @@ Deno.test('part 1.1 grace period boundaries classify check-in correctly', async 
     expectedStatus: 'present' | 'late';
     expectedOvertime: boolean;
   }> = [
-    { id: '1.1.1', iso: '2025-06-10T09:00:00', expectedStatus: 'present', expectedOvertime: false },
-    { id: '1.1.2', iso: '2025-06-10T09:14:00', expectedStatus: 'present', expectedOvertime: false },
-    { id: '1.1.3', iso: '2025-06-10T09:15:00', expectedStatus: 'present', expectedOvertime: false },
-    { id: '1.1.4', iso: '2025-06-10T09:16:00', expectedStatus: 'late', expectedOvertime: false },
-    { id: '1.1.5', iso: '2025-06-10T09:30:00', expectedStatus: 'late', expectedOvertime: false },
-    { id: '1.1.6', iso: '2025-06-10T17:59:00', expectedStatus: 'late', expectedOvertime: false },
-    { id: '1.1.7', iso: '2025-06-10T18:00:00', expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.1.1', iso: orgInstant('2025-06-10', '09:00:00'), expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.1.2', iso: orgInstant('2025-06-10', '09:14:00'), expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.1.3', iso: orgInstant('2025-06-10', '09:15:00'), expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.1.4', iso: orgInstant('2025-06-10', '09:16:00'), expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.1.5', iso: orgInstant('2025-06-10', '09:30:00'), expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.1.6', iso: orgInstant('2025-06-10', '17:59:00'), expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.1.7', iso: orgInstant('2025-06-10', '18:00:00'), expectedStatus: 'late', expectedOvertime: false },
   ];
 
   for (const testCase of cases) {
@@ -395,11 +406,11 @@ Deno.test('part 1.2 early login window boundaries classify check-in correctly', 
     expectedStatus: 'present' | 'late';
     expectedOvertime: boolean;
   }> = [
-    { id: '1.2.1', iso: '2025-06-10T08:00:00', expectedStatus: 'present', expectedOvertime: false },
-    { id: '1.2.2', iso: '2025-06-10T08:01:00', expectedStatus: 'present', expectedOvertime: false },
-    { id: '1.2.3', iso: '2025-06-10T08:59:00', expectedStatus: 'present', expectedOvertime: false },
-    { id: '1.2.4', iso: '2025-06-10T07:59:00', expectedStatus: 'present', expectedOvertime: true },
-    { id: '1.2.5', iso: '2025-06-10T07:00:00', expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.2.1', iso: orgInstant('2025-06-10', '08:00:00'), expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.2.2', iso: orgInstant('2025-06-10', '08:01:00'), expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.2.3', iso: orgInstant('2025-06-10', '08:59:00'), expectedStatus: 'present', expectedOvertime: false },
+    { id: '1.2.4', iso: orgInstant('2025-06-10', '07:59:00'), expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.2.5', iso: orgInstant('2025-06-10', '07:00:00'), expectedStatus: 'present', expectedOvertime: true },
   ];
 
   for (const testCase of cases) {
@@ -423,10 +434,10 @@ Deno.test('part 1.3 post-shift overtime boundaries classify check-in correctly',
     expectedStatus: 'present' | 'late';
     expectedOvertime: boolean;
   }> = [
-    { id: '1.3.1', iso: '2025-06-10T18:00:00', expectedStatus: 'late', expectedOvertime: false },
-    { id: '1.3.2', iso: '2025-06-10T18:01:00', expectedStatus: 'present', expectedOvertime: true },
-    { id: '1.3.3', iso: '2025-06-10T20:00:00', expectedStatus: 'present', expectedOvertime: true },
-    { id: '1.3.4', iso: '2025-06-10T23:59:00', expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.3.1', iso: orgInstant('2025-06-10', '18:00:00'), expectedStatus: 'late', expectedOvertime: false },
+    { id: '1.3.2', iso: orgInstant('2025-06-10', '18:01:00'), expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.3.3', iso: orgInstant('2025-06-10', '20:00:00'), expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.3.4', iso: orgInstant('2025-06-10', '23:59:00'), expectedStatus: 'present', expectedOvertime: true },
   ];
 
   for (const testCase of cases) {
@@ -450,9 +461,9 @@ Deno.test('part 1.4 overnight and very-early check-ins classify as overtime', as
     expectedStatus: 'present' | 'late';
     expectedOvertime: boolean;
   }> = [
-    { id: '1.4.1', iso: '2025-06-10T00:00:00', expectedStatus: 'present', expectedOvertime: true },
-    { id: '1.4.2', iso: '2025-06-10T02:00:00', expectedStatus: 'present', expectedOvertime: true },
-    { id: '1.4.3', iso: '2025-06-10T07:59:00', expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.4.1', iso: orgInstant('2025-06-10', '00:00:00'), expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.4.2', iso: orgInstant('2025-06-10', '02:00:00'), expectedStatus: 'present', expectedOvertime: true },
+    { id: '1.4.3', iso: orgInstant('2025-06-10', '07:59:00'), expectedStatus: 'present', expectedOvertime: true },
   ];
 
   for (const testCase of cases) {
@@ -474,11 +485,11 @@ Deno.test('part 2.1 off-day punch-in is always present + overtime', async () => 
     id: string;
     iso: string;
   }> = [
-    { id: '2.1', iso: '2025-06-06T10:00:00' },
-    { id: '2.2', iso: '2025-06-07T09:00:00' },
-    { id: '2.3', iso: '2025-06-06T08:00:00' },
-    { id: '2.4', iso: '2025-06-06T00:01:00' },
-    { id: '2.5', iso: '2025-06-06T23:59:00' },
+    { id: '2.1', iso: orgInstant('2025-06-06', '10:00:00') },
+    { id: '2.2', iso: orgInstant('2025-06-07', '09:00:00') },
+    { id: '2.3', iso: orgInstant('2025-06-06', '08:00:00') },
+    { id: '2.4', iso: orgInstant('2025-06-06', '00:01:00') },
+    { id: '2.5', iso: orgInstant('2025-06-06', '23:59:00') },
   ];
 
   for (const testCase of defaultOffDayCases) {
@@ -502,7 +513,7 @@ Deno.test('part 2.1 off-day punch-in is always present + overtime', async () => 
       work_end_time: '18:00',
     },
   });
-  const customRes = await punch(customOffDay.deps, 'check_in', '2025-06-06T10:00:00');
+  const customRes = await punch(customOffDay.deps, 'check_in', orgInstant('2025-06-06', '10:00:00'));
   assertEquals(customRes.status, 200, '2.6 should accept custom off-day check-in');
   const customBody = (await json(customRes)) as { status?: 'present' | 'late'; is_overtime?: boolean };
   assertEquals(customBody.status, 'present', '2.6 status mismatch');
@@ -514,10 +525,10 @@ Deno.test('part 2.1 off-day punch-in is always present + overtime', async () => 
 
 Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T08:30:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T13:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '08:30:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '12:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '13:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:00:00'));
 
   // 3.1.S1 + 3.1.S2 session-level assertions.
   assertEquals(mem.sessions.length, 2);
@@ -612,10 +623,10 @@ Deno.test('part 3.8b three sessions with third segment open keeps last_check_out
 
 Deno.test('part 3.2 late first session with late return resolves late', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T13:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T14:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '13:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '14:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:00:00'));
 
   // 3.2.S1 + 3.2.S2: classification is independent per session check-in.
   assertEquals(mem.sessions.length, 2);
@@ -636,9 +647,9 @@ Deno.test('part 3.2 late first session with late return resolves late', async ()
 
 Deno.test('part 3.3 regular session then post-shift overtime session', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T18:10:00');
-  const overtimeIn = await punch(mem.deps, 'check_in', '2025-06-10T18:12:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:10:00'));
+  const overtimeIn = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '18:12:00'));
   assertEquals(overtimeIn.status, 200);
 
   // 3.3.S1 + 3.3.S2 session-level checks.
@@ -678,10 +689,10 @@ Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
     },
   });
 
-  await punch(mem.deps, 'check_in', '2025-06-06T10:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-06T13:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-06T15:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-06T19:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-06', '10:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-06', '13:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-06', '15:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-06', '19:00:00'));
 
   // 3.4.S1 + 3.4.S2: both sessions are off-day overtime sessions.
   assertEquals(mem.sessions.length, 2);
@@ -711,7 +722,7 @@ Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
 
 Deno.test('part 3.5 working day overtime-only yields overtime_only', async () => {
   const mem = makeDeps();
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '20:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_overtime?: boolean; status?: string };
   assertEquals(body.status, 'present');
@@ -731,12 +742,12 @@ Deno.test('part 3.5 working day overtime-only yields overtime_only', async () =>
 
 Deno.test('part 3.6 many sessions sum and short-day correctness', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T08:30:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T11:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T13:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T14:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T17:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '08:30:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '10:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '11:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '13:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '14:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '17:00:00'));
 
   // 3.6.S1/S2/S3 durations: 90 + 120 + 180.
   assertEquals(mem.sessions.length, 3);
@@ -757,11 +768,11 @@ Deno.test('part 3.6 many sessions sum and short-day correctness', async () => {
 
 Deno.test('part 3.7 early checkout then mid-shift re-check-in stays non-overtime', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T13:15:00');
-  const earlyOut = await punch(mem.deps, 'check_out', '2025-06-10T13:16:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '13:15:00'));
+  const earlyOut = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '13:16:00'));
   assertEquals(earlyOut.status, 200);
 
-  const secondIn = await punch(mem.deps, 'check_in', '2025-06-10T13:17:00');
+  const secondIn = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '13:17:00'));
   assertEquals(secondIn.status, 200);
   const secondInBody = (await json(secondIn)) as { status?: 'present' | 'late'; is_overtime?: boolean; check_out_time?: string | null };
   assertEquals(secondInBody.status, 'late');
@@ -823,8 +834,8 @@ Deno.test('part 4.2 approved leave overrides late session to on_leave', async ()
       },
     ],
   });
-  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T10:30:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '10:30:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'on_leave');
@@ -832,8 +843,8 @@ Deno.test('part 4.2 approved leave overrides late session to on_leave', async ()
 
 Deno.test('part 4.3 one non-overtime present session resolves present', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '12:00:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'present');
@@ -841,8 +852,8 @@ Deno.test('part 4.3 one non-overtime present session resolves present', async ()
 
 Deno.test('part 4.4 only non-overtime late sessions resolve late', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '12:00:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'late');
@@ -850,10 +861,10 @@ Deno.test('part 4.4 only non-overtime late sessions resolve late', async () => {
 
 Deno.test('part 4.5 mixed non-overtime present + late resolves present', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T11:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '10:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '11:00:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'present');
@@ -861,10 +872,10 @@ Deno.test('part 4.5 mixed non-overtime present + late resolves present', async (
 
 Deno.test('part 4.6 overtime present + non-overtime late resolves late', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T07:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T08:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '07:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '08:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '10:00:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'late');
@@ -872,10 +883,10 @@ Deno.test('part 4.6 overtime present + non-overtime late resolves late', async (
 
 Deno.test('part 4.7 working day with only overtime sessions resolves overtime_only', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T07:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T08:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T21:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '07:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '08:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '20:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '21:00:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'overtime_only');
@@ -964,15 +975,15 @@ Deno.test('part 4.11 off-day with overtime sessions keeps no effective_status', 
       work_end_time: '18:00',
     },
   });
-  await punch(mem.deps, 'check_in', '2025-06-06T10:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-06T13:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-06', '10:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-06', '13:00:00'));
   const summary = mem.summaries.find((s) => s.date === '2025-06-06');
   assertEquals(summary?.effective_status, null);
 });
 
 Deno.test('part 5.1 new session creation recalculates summary fields', async () => {
   const mem = makeDeps();
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
   assertEquals(res.status, 200);
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
@@ -984,8 +995,8 @@ Deno.test('part 5.1 new session creation recalculates summary fields', async () 
 
 Deno.test('part 5.2 session closure recalculates summary fields', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '12:00:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.total_work_minutes, 180); // 5.V1
@@ -996,7 +1007,7 @@ Deno.test('part 5.2 session closure recalculates summary fields', async () => {
 
 Deno.test('part 5.3 auto punch-out update recalculates summary fields', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
   const session = mem.sessions[0];
 
   await mem.admin
@@ -1034,8 +1045,8 @@ Deno.test('part 5.3 auto punch-out update recalculates summary fields', async ()
 
 Deno.test('part 5.4 manual edit recalculates summary fields with edited times', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '12:00:00'));
   const session = mem.sessions[0];
 
   await mem.admin
@@ -1114,10 +1125,10 @@ Deno.test('part 5.5 correction applied (new session) recalculates summary fields
 
 Deno.test('part 5.6 session deletion recalculates summary fields', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T12:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T13:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '12:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '13:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:00:00'));
 
   const target = mem.sessions.find((s) => s.check_in_time === '13:00');
   await mem.admin.from('attendance_sessions').delete().eq('id', target?.id ?? '').single();
@@ -1146,7 +1157,7 @@ Deno.test('part 5.6 session deletion recalculates summary fields', async () => {
 
 Deno.test('part 6.7 daily summary reflects auto punch-out update', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
   const session = mem.sessions[0];
 
   await mem.admin
@@ -1183,8 +1194,8 @@ Deno.test('part 6.7 daily summary reflects auto punch-out update', async () => {
 
 Deno.test('part 7.1 checkout before shift end sets is_early_departure true', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  const res = await punch(mem.deps, 'check_out', '2025-06-10T15:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '15:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_early_departure?: boolean; status?: 'present' | 'late'; duration_minutes?: number };
   assertEquals(body.is_early_departure, true);
@@ -1194,8 +1205,8 @@ Deno.test('part 7.1 checkout before shift end sets is_early_departure true', asy
 
 Deno.test('part 7.2 checkout exactly at shift end keeps is_early_departure false', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  const res = await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_early_departure?: boolean };
   assertEquals(body.is_early_departure, false);
@@ -1203,8 +1214,8 @@ Deno.test('part 7.2 checkout exactly at shift end keeps is_early_departure false
 
 Deno.test('part 7.3 early checkout does not rewrite late status', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
-  const res = await punch(mem.deps, 'check_out', '2025-06-10T15:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
+  const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '15:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_early_departure?: boolean; status?: 'present' | 'late' };
   assertEquals(body.is_early_departure, true);
@@ -1213,8 +1224,8 @@ Deno.test('part 7.3 early checkout does not rewrite late status', async () => {
 
 Deno.test('part 7.4 early departure can yield short day in summary', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T15:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '15:00:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.total_work_minutes, 360);
@@ -1223,10 +1234,10 @@ Deno.test('part 7.4 early departure can yield short day in summary', async () =>
 
 Deno.test('part 7.5 multi-session day above minimum is not short day', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T15:00:00'); // early departure on session 1
-  await punch(mem.deps, 'check_in', '2025-06-10T15:15:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T18:15:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '15:00:00')); // early departure on session 1
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '15:15:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:15:00'));
 
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.total_work_minutes, 540);
@@ -1235,8 +1246,8 @@ Deno.test('part 7.5 multi-session day above minimum is not short day', async () 
 
 Deno.test('part 7.6 overtime session checkout does not set early departure', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
-  const res = await punch(mem.deps, 'check_out', '2025-06-10T21:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '20:00:00'));
+  const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '21:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_early_departure?: boolean; is_overtime?: boolean };
   assertEquals(body.is_overtime, true);
@@ -1245,7 +1256,7 @@ Deno.test('part 7.6 overtime session checkout does not set early departure', asy
 
 Deno.test('part 8.1 working-day overtime punch-in creates pending overtime request', async () => {
   const mem = makeDeps();
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '19:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_overtime?: boolean; id?: string };
   assertEquals(body.is_overtime, true);
@@ -1262,9 +1273,9 @@ Deno.test('part 8.2 off-day each session creates its own overtime request', asyn
       work_end_time: '18:00',
     },
   });
-  const s1 = await punch(mem.deps, 'check_in', '2025-06-06T10:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-06T13:00:00');
-  const s2 = await punch(mem.deps, 'check_in', '2025-06-06T15:00:00');
+  const s1 = await punch(mem.deps, 'check_in', orgInstant('2025-06-06', '10:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-06', '13:00:00'));
+  const s2 = await punch(mem.deps, 'check_in', orgInstant('2025-06-06', '15:00:00'));
   assertEquals(s1.status, 200);
   assertEquals(s2.status, 200);
   assertEquals(mem.overtimeRequests.length, 2);
@@ -1272,7 +1283,7 @@ Deno.test('part 8.2 off-day each session creates its own overtime request', asyn
 
 Deno.test('part 8.3 pre-window overtime punch-in creates overtime request', async () => {
   const mem = makeDeps();
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T06:00:00');
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '06:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_overtime?: boolean };
   assertEquals(body.is_overtime, true);
@@ -1281,7 +1292,7 @@ Deno.test('part 8.3 pre-window overtime punch-in creates overtime request', asyn
 
 Deno.test('part 8.4 overtime request insert failure does not block punch-in', async () => {
   const mem = makeDeps({ failOvertimeRequestInsert: true });
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '19:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { is_overtime?: boolean };
   assertEquals(body.is_overtime, true);
@@ -1292,15 +1303,15 @@ Deno.test('part 8.4 overtime request insert failure does not block punch-in', as
 
 Deno.test('part 8.5 multiple overtime sessions produce multiple requests', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T06:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T07:00:00');
-  await punch(mem.deps, 'check_in', '2025-06-10T20:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '06:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '07:00:00'));
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '20:00:00'));
   assertEquals(mem.overtimeRequests.length, 2);
 });
 
 Deno.test('part 8.6 overtime request session reference matches created session id', async () => {
   const mem = makeDeps();
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '19:00:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { id?: string };
   assertEquals(mem.overtimeRequests.length, 1);
@@ -1309,19 +1320,19 @@ Deno.test('part 8.6 overtime request session reference matches created session i
 
 Deno.test('part 8.7 overtime requests are routed to overtime_requests table behavior', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '19:00:00'));
   assertEquals(mem.overtimeRequests.length, 1);
 });
 
 Deno.test('part 9.1 needs_review is set by auto punch-out but not manual punch-out', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  const manual = await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  const manual = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:00:00'));
   assertEquals(manual.status, 200);
   const manualBody = (await json(manual)) as { needs_review?: boolean };
   assertEquals(manualBody.needs_review, false);
 
-  await punch(mem.deps, 'check_in', '2025-06-11T09:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-11', '09:00:00'));
   const open = mem.sessions.find((s) => s.date === '2025-06-11' && s.check_out_time === null);
   await mem.admin
     .from('attendance_sessions')
@@ -1339,14 +1350,14 @@ Deno.test('part 9.1 needs_review is set by auto punch-out but not manual punch-o
 
 Deno.test('part 9.2 auto and manual punch-out flags stay consistent', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  const manual = await punch(mem.deps, 'check_out', '2025-06-10T18:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  const manual = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:00:00'));
   assertEquals(manual.status, 200);
   const manualBody = (await json(manual)) as { is_auto_punch_out?: boolean; needs_review?: boolean };
   assertEquals(manualBody.is_auto_punch_out, false);
   assertEquals(manualBody.needs_review, false);
 
-  await punch(mem.deps, 'check_in', '2025-06-11T09:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-11', '09:00:00'));
   const open = mem.sessions.find((s) => s.date === '2025-06-11' && s.check_out_time === null);
   await mem.admin
     .from('attendance_sessions')
@@ -1365,7 +1376,7 @@ Deno.test('part 9.2 auto and manual punch-out flags stay consistent', async () =
 
 Deno.test('part 9.3 is_overtime remains as classified at check-in', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T19:00:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '19:00:00'));
   const created = mem.sessions[0];
   assertEquals(created.is_overtime, true);
 
@@ -1386,11 +1397,11 @@ Deno.test('part 9.3 is_overtime remains as classified at check-in', async () => 
 
 Deno.test('part 10.1 second check-in while open session is idempotent success', async () => {
   const mem = makeDeps();
-  const first = await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const first = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
   assertEquals(first.status, 200);
   const firstBody = (await json(first)) as { id?: string };
 
-  const second = await punch(mem.deps, 'check_in', '2025-06-10T09:02:00');
+  const second = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:02:00'));
   assertEquals(second.status, 200);
   const secondBody = (await json(second)) as { id?: string };
 
@@ -1401,11 +1412,11 @@ Deno.test('part 10.1 second check-in while open session is idempotent success', 
 
 Deno.test('part 10.2 second check-in shortly after first is idempotent success', async () => {
   const mem = makeDeps();
-  const first = await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
+  const first = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
   assertEquals(first.status, 200);
   const firstBody = (await json(first)) as { id?: string };
 
-  const second = await punch(mem.deps, 'check_in', '2025-06-10T09:00:45');
+  const second = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:45'));
   assertEquals(second.status, 200);
   const secondBody = (await json(second)) as { id?: string };
   assertEquals(secondBody.id, firstBody.id);
@@ -1413,17 +1424,17 @@ Deno.test('part 10.2 second check-in shortly after first is idempotent success',
 
 Deno.test('part 10.3 check-in after checkout is allowed', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T10:02:00');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '10:00:00'));
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '10:02:00'));
   assertEquals(res.status, 200);
 });
 
 Deno.test('part 10.4 checkout retry after completed checkout is rejected as no open check-in', async () => {
   const mem = makeDeps();
-  await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
-  await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');
-  const retry = await punch(mem.deps, 'check_out', '2025-06-10T10:00:30');
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '10:00:00'));
+  const retry = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '10:00:30'));
   assertEquals(retry.status, 400);
   const body = (await json(retry)) as { code?: string };
   assertEquals(body.code, 'NO_CHECK_IN');
@@ -1439,7 +1450,7 @@ Deno.test('part 10.5 no policy configured still allows punch with defaults', asy
       work_end_time: null,
     },
   });
-  const res = await punch(mem.deps, 'check_in', '2025-06-10T09:30:00');
+  const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
   assertEquals(res.status, 200);
   const body = (await json(res)) as { status?: string; is_overtime?: boolean };
   assertEquals(body.status, 'present');
