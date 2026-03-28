@@ -36,12 +36,12 @@ This document tracks attendance frontend/UI test coverage for the web app and cl
 | 22.1 | [x] | Day contains two sessions where first is closed and second is open | Card must render as checked-in state (checkout action visible), not completed-day state | Regression target for pseudo-log/open-session mismatch |
 | 22.2 | [x] | `AttendancePage` refresh after successful check-in returns open current session | Page should keep checked-in UX and should not revert to completed-day overtime CTA | Covers the reported "returns to overtime button" symptom |
 
-## 23. Cooldown and Loading Interaction
+## 23. Check-in loading and post-check-in state
 
 > Corresponding test file: `src/app/pages/employee/AttendancePage.test.tsx`
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 23.1 | [x] | After successful check-in, cooldown starts at 60 seconds | Action text shows cooldown (`انتظر Nث`) and decrements each second | Mirrors `COOLDOWN_SECONDS = 60` behavior |
-| 23.2 | [x] | During in-flight check-in request | Action text shows loading (`جاري التسجيل...`) before cooldown appears | Covered by `shows check-in loading text before cooldown after click (23.2)` in `AttendancePage.test.tsx` |
-| 23.3 | [x] | Server response already indicates user is checked in | UX should not look like a failed punch or loop back to overtime prompt after cooldown | Ensures post-check-in state stability |
+| 23.1 | [x] | During in-flight check-in request | Action text shows loading (`جاري التسجيل...`) until the request completes | Covered by `shows check-in loading then checked-in state after check-in resolves` |
+| 23.2 | [x] | After check-in resolves | Today state shows checked-in (`today-state` / refreshed today record) | No post-check-in timer lockout on the button |
+| 23.3 | [x] | Server response already indicates user is checked in | UX should not look like a failed punch or loop back to overtime prompt | Ensures post-check-in state stability |

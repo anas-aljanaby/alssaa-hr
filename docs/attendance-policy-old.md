@@ -90,9 +90,9 @@ For **pure overtime punch-ins** (off-day, before `shiftStart - 60min`, or after 
 
 There is no hard time-based block on punch-in. Before `shiftStart - 60min`, the punch is treated as overtime and shows overtime confirmation.
 
-### Anti Double-Tap Cooldown
+### Double-tap / repeat requests
 
-After a successful punch-in, the UI starts a **60-second cooldown** before allowing another punch-in action.
+Repeat **check_in** calls while a session is already open are handled idempotently on the server (same session returned). The check-in button is disabled only while a punch request is in flight.
 
 ## Timer Display
 

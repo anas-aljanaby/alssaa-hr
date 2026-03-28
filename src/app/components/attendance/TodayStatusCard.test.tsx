@@ -39,7 +39,6 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={makeToday([5, 6])}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -63,13 +62,12 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={makeToday([1])}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'تسجيل الحضور' }));
+    fireEvent.click(screen.getByRole('button', { name: /تسجيل الحضور \(عمل إضافي\)/ }));
     expect(screen.getByText('تأكيد عمل إضافي')).toBeInTheDocument();
     expect(onCheckIn).not.toHaveBeenCalled();
   });
@@ -84,7 +82,6 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={makeToday([5, 6])}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -95,7 +92,7 @@ describe('TodayStatusCard overtime confirmation', () => {
     expect(screen.queryByText('تأكيد عمل إضافي')).not.toBeInTheDocument();
   });
 
-  it('increments worked hours after check-in when check_in_time is ISO datetime', () => {
+  it('increments worked hours after check-in when check_in_time is ISO datetime', async () => {
     vi.useFakeTimers();
     let mockedNow = new Date('2025-06-10T10:05:00');
     setNowFn(() => mockedNow);
@@ -127,18 +124,19 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={today}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
     );
 
-    expect(screen.getByText('05:00')).toBeInTheDocument();
+    expect(screen.getAllByText('05:00').length).toBeGreaterThanOrEqual(1);
 
     mockedNow = new Date('2025-06-10T10:06:00');
-    vi.advanceTimersByTime(1000);
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
 
-    expect(screen.getByText('06:00')).toBeInTheDocument();
+    expect(screen.getAllByText('06:00').length).toBeGreaterThanOrEqual(1);
     vi.useRealTimers();
   });
 
@@ -179,7 +177,6 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={today}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -231,7 +228,6 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={today}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -274,7 +270,6 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={today}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -351,7 +346,6 @@ describe('TodayStatusCard overtime confirmation', () => {
       <TodayStatusCard
         today={today}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />

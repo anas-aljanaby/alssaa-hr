@@ -251,7 +251,6 @@ export function ManagerDashboard() {
         today={quickPunch.today}
         loading={quickPunch.loading}
         actionLoading={quickPunch.actionLoading}
-        cooldownSecondsLeft={quickPunch.cooldownSecondsLeft}
         onCheckIn={quickPunch.handleCheckIn}
         onCheckOut={quickPunch.handleCheckOut}
         onOpenAttendance={() => navigate('/attendance')}

@@ -11,8 +11,6 @@ import { TodayPunchLog } from '../../components/attendance/TodayPunchLog';
 import { MonthCalendarHeatmap } from '../../components/attendance/MonthCalendarHeatmap';
 import { DayDetailsSheet } from '../../components/attendance/DayDetailsSheet';
 
-const COOLDOWN_SECONDS = 60;
-
 export function AttendancePage() {
   const { currentUser } = useAuth();
   const { checkIn, checkOut } = useApp();
@@ -27,8 +25,6 @@ export function AttendancePage() {
   const [monthlyLoading, setMonthlyLoading] = useState(true);
 
   const [actionLoading, setActionLoading] = useState(false);
-  const [cooldownLeft, setCooldownLeft] = useState(0);
-  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const actionInFlightRef = useRef(false);
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -84,35 +80,13 @@ export function AttendancePage() {
     }
   }, [devTime?.override?.date, loadToday, currentUser]);
 
-  const startCooldown = () => {
-    setCooldownLeft(COOLDOWN_SECONDS);
-    if (cooldownRef.current) clearInterval(cooldownRef.current);
-    cooldownRef.current = setInterval(() => {
-      setCooldownLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(cooldownRef.current!);
-          cooldownRef.current = null;
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (cooldownRef.current) clearInterval(cooldownRef.current);
-    };
-  }, []);
-
   const handleCheckIn = async () => {
-    if (!currentUser || actionInFlightRef.current || cooldownLeft > 0) return;
+    if (!currentUser || actionInFlightRef.current) return;
     actionInFlightRef.current = true;
     setActionLoading(true);
     try {
       const { log } = await checkIn(currentUser.uid);
       if (navigator.vibrate) navigator.vibrate(100);
-      startCooldown();
       const updated = await attendanceService.getAttendanceToday(currentUser.uid);
       setToday({ ...updated, log });
       loadMonthly();
@@ -187,7 +161,6 @@ export function AttendancePage() {
         <TodayStatusCard
           today={today}
           actionLoading={actionLoading}
-          cooldownSecondsLeft={cooldownLeft}
           onCheckIn={handleCheckIn}
           onCheckOut={handleCheckOut}
         />

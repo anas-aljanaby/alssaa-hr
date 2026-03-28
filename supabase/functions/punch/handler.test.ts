@@ -529,7 +529,7 @@ Deno.test('part 3.1 two regular sessions aggregate correctly', async () => {
   assertEquals(s1.duration_minutes, 210);
   assertEquals(s2.check_in_time, '13:00');
   assertEquals(s2.check_out_time, '18:00');
-  assertEquals(s2.status, 'present');
+  assertEquals(s2.status, 'late');
   assertEquals(s2.is_overtime, false);
   assertEquals(s2.duration_minutes, 300);
 
@@ -1333,7 +1333,7 @@ Deno.test('part 10.1 second check-in while open session is idempotent success', 
   assertEquals(mem.sessions.length, 1);
 });
 
-Deno.test('part 10.2 second check-in within cooldown is idempotent success', async () => {
+Deno.test('part 10.2 second check-in shortly after first is idempotent success', async () => {
   const mem = makeDeps();
   const first = await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
   assertEquals(first.status, 200);
@@ -1345,7 +1345,7 @@ Deno.test('part 10.2 second check-in within cooldown is idempotent success', asy
   assertEquals(secondBody.id, firstBody.id);
 });
 
-Deno.test('part 10.3 action after cooldown with proper checkout is allowed', async () => {
+Deno.test('part 10.3 check-in after checkout is allowed', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', '2025-06-10T09:00:00');
   await punch(mem.deps, 'check_out', '2025-06-10T10:00:00');

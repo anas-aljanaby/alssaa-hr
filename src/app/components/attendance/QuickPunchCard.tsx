@@ -12,7 +12,6 @@ interface QuickPunchCardProps {
   today: TodayRecord;
   loading: boolean;
   actionLoading: boolean;
-  cooldownSecondsLeft: number;
   onCheckIn: () => void;
   onCheckOut: () => void;
   onOpenAttendance?: () => void;
@@ -32,7 +31,6 @@ export function QuickPunchCard({
   today,
   loading,
   actionLoading,
-  cooldownSecondsLeft,
   onCheckIn,
   onCheckOut,
   onOpenAttendance,
@@ -66,7 +64,7 @@ export function QuickPunchCard({
     return <div className="bg-gray-100 rounded-xl h-40 animate-pulse" />;
   }
 
-  const buttonDisabled = actionLoading || cooldownSecondsLeft > 0;
+  const buttonDisabled = actionLoading;
   const statusText = state.showShiftCongrats
     ? 'استوفيت متطلبات الدوام لهذا اليوم'
     : state.isCheckedIn
@@ -144,13 +142,11 @@ export function QuickPunchCard({
               <LogIn className="w-4 h-4" />
               {actionLoading
                 ? 'جاري التسجيل...'
-                : cooldownSecondsLeft > 0
-                  ? `انتظر ${cooldownSecondsLeft}ث`
-                  : !state.canPunchIn
-                    ? 'قبل الدوام بساعة'
-                    : state.isOvertimeNow
-                      ? 'حضور إضافي'
-                      : 'تسجيل الحضور'}
+                : !state.canPunchIn
+                  ? 'قبل الدوام بساعة'
+                  : state.isOvertimeNow
+                    ? 'حضور إضافي'
+                    : 'تسجيل الحضور'}
             </button>
           ) : (
             <button

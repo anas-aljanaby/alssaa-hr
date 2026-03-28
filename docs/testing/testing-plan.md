@@ -181,7 +181,7 @@ Test: state initialization, key state transitions.
 ### Task 4.3 — `src/app/hooks/useQuickPunch.ts`
 **Priority: 🟠 High**
 
-Test: calls attendance service correctly, manages loading/error/success states, debounce/double-tap protection.
+Test: calls attendance service correctly, manages loading/error/success states, in-flight guard against parallel punch requests.
 
 ### Task 4.4 — `src/lib/hooks/useRealtimeSubscription.ts`
 **Priority: 🟡 Medium**

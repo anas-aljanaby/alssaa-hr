@@ -198,13 +198,14 @@ Early departure is informational — it does not change the session's `status`. 
 | After shift end (overtime) | Yes, with overtime confirmation | Overtime session created |
 | No shift configured | Yes, always | Status = `present`, no overtime tagging |
 | Already checked in (active session) | No | Must check out first |
-| Last punch-in < 60 seconds ago | No (server-enforced) | Rejected with cooldown message |
 
 There is no hard time-based block on punch-in. Before the early login window, the punch is treated as overtime and shows overtime confirmation.
 
-### Anti Double-Tap Cooldown
+### Repeat check-in while a session is open
 
-A **60-second cooldown** is enforced at the server level. Any punch-in or punch-out attempt within 60 seconds of the employee's last punch action is rejected. The UI also enforces this with a disabled state and countdown, but the server is the source of truth.
+If the client sends **check_in** while an open session already exists for that day, the punch handler responds with **200** and the **same session** (idempotent). No second row is inserted. The UI should still present a single checked-in state and route the user to check-out when they intend to end the session.
+
+There is **no** server-side time-based cooldown between punch actions. Accidental double taps are mitigated on the client by disabling the button while a request is in flight.
 
 ---
 
@@ -331,8 +332,8 @@ The audit log is append-only. Rows are never updated or deleted. It provides a c
 | Works until 6:10 PM, punches out, punches in again at 6:12 PM | 6:12 PM punch-in is overtime (`> shiftEnd`). A new overtime session is created and an overtime request is auto-created. |
 | Forgets to check out, auto-punch-out fires | Only regular sessions are auto-closed, at the job trigger time. Overtime sessions are excluded. Flagged `needs_review`. |
 | Manager corrects auto-punch-out time | Session updated, audit log records old and new values. Daily summary recalculated. |
-| Punches in twice within 60 seconds | Second punch rejected (server-side cooldown). |
-| Tries to punch in while already checked in | Rejected. Must check out current session first. |
+| Punches in twice in quick succession while session is open | Second request succeeds with **200** and returns the **same** open session (idempotent). |
+| Tries to punch in while already checked in | Same as above: API is idempotent; UX should show checked-in and check-out. |
 | No shift configured for user or org | Punch allowed at any time, status = `present`, no overtime tagging, no progress bar. |
 | Shift spanning midnight (10 PM – 6 AM) | Not currently supported. All time math uses minutes-since-midnight. Designed as a future extension point — the session model supports it but classification logic does not yet handle it. |
 | Employee on approved leave | `effective_status = 'on_leave'`. If the employee punches in despite being on leave, the session is recorded but the daily status remains `on_leave` (leave takes priority). |

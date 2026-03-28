@@ -39,13 +39,12 @@ describe('QuickPunchCard overtime confirmation', () => {
         today={makeToday([5, 6])}
         loading={false}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'تسجيل الحضور' }));
+    fireEvent.click(screen.getByRole('button', { name: 'حضور إضافي' }));
     expect(screen.getByText('تأكيد عمل إضافي')).toBeInTheDocument();
     expect(onCheckIn).not.toHaveBeenCalled();
 
@@ -64,13 +63,12 @@ describe('QuickPunchCard overtime confirmation', () => {
         today={makeToday([1])}
         loading={false}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'تسجيل الحضور' }));
+    fireEvent.click(screen.getByRole('button', { name: 'حضور إضافي' }));
     expect(screen.getByText('تأكيد عمل إضافي')).toBeInTheDocument();
     expect(onCheckIn).not.toHaveBeenCalled();
   });
@@ -86,7 +84,6 @@ describe('QuickPunchCard overtime confirmation', () => {
         today={makeToday([5, 6])}
         loading={false}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -127,7 +124,6 @@ describe('QuickPunchCard overtime confirmation', () => {
         today={today}
         loading={false}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -171,7 +167,6 @@ describe('QuickPunchCard overtime confirmation', () => {
         today={today}
         loading={false}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />
@@ -249,7 +244,6 @@ describe('QuickPunchCard overtime confirmation', () => {
         today={today}
         loading={false}
         actionLoading={false}
-        cooldownSecondsLeft={0}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
       />

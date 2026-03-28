@@ -13,7 +13,6 @@ import { now } from '@/lib/time';
 interface Props {
   today: TodayRecord;
   actionLoading: boolean;
-  cooldownSecondsLeft: number;
   onCheckIn: () => void;
   onCheckOut: (checkoutTime?: string) => void;
 }
@@ -44,7 +43,7 @@ function todayArabicDate(): string {
   });
 }
 
-export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onCheckIn, onCheckOut }: Props) {
+export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }: Props) {
   const { log, shift } = today;
 
   const [punchInElapsedSeconds, setPunchInElapsedSeconds] = useState(0);
@@ -156,7 +155,7 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
     onCheckIn();
   };
 
-  const buttonDisabled = actionLoading || cooldownSecondsLeft > 0;
+  const buttonDisabled = actionLoading;
 
   // Visual state for the clock circle
   const clockIsOvertime =
@@ -320,13 +319,11 @@ export function TodayStatusCard({ today, actionLoading, cooldownSecondsLeft, onC
               <LogIn className="w-5 h-5" />
               {actionLoading
                 ? 'جاري التسجيل...'
-                : cooldownSecondsLeft > 0
-                  ? `انتظر ${cooldownSecondsLeft}ث`
-                  : !canPunchIn
-                    ? 'يمكنك التسجيل قبل ساعة من بدء الدوام'
-                    : isOvertime
-                      ? 'تسجيل الحضور (عمل إضافي)'
-                      : 'تسجيل الحضور'}
+                : !canPunchIn
+                  ? 'يمكنك التسجيل قبل ساعة من بدء الدوام'
+                  : isOvertime
+                    ? 'تسجيل الحضور (عمل إضافي)'
+                    : 'تسجيل الحضور'}
             </button>
           )}
           {isCheckedIn && (

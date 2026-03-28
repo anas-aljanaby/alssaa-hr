@@ -44,11 +44,7 @@ vi.mock('../../components/attendance/TodayStatusCard', () => ({
             : 'idle'}
       </div>
       <button onClick={props.onCheckIn}>
-        {props.actionLoading
-          ? 'جاري التسجيل...'
-          : props.cooldownSecondsLeft > 0
-            ? `انتظر ${props.cooldownSecondsLeft}ث`
-            : 'تسجيل الحضور'}
+        {props.actionLoading ? 'جاري التسجيل...' : 'تسجيل الحضور'}
       </button>
     </div>
   ),
@@ -94,25 +90,7 @@ describe('AttendancePage', () => {
     vi.clearAllMocks();
   });
 
-  it('starts a 60-second cooldown after successful check-in', async () => {
-    const checkIn = vi.fn().mockResolvedValue({ log: openLog });
-    const checkOut = vi.fn();
-    mockUseApp.mockReturnValue({ checkIn, checkOut });
-    mockGetAttendanceToday
-      .mockResolvedValueOnce({ log: null, punches: [], shift: null })
-      .mockResolvedValueOnce({ log: openLog, punches: [], shift: null });
-
-    render(<AttendancePage />);
-
-    await waitFor(() => expect(screen.getByText('تسجيل الحضور')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('تسجيل الحضور'));
-
-    await waitFor(() => expect(screen.getByText('انتظر 60ث')).toBeInTheDocument());
-    await new Promise((resolve) => setTimeout(resolve, 1100));
-    expect(screen.getByText('انتظر 59ث')).toBeInTheDocument();
-  });
-
-  it('shows check-in loading text before cooldown after click (23.2)', async () => {
+  it('shows check-in loading then checked-in state after check-in resolves', async () => {
     let releaseCheckIn: (value: { log: typeof openLog }) => void;
     const checkIn = vi.fn(
       () =>
@@ -136,7 +114,8 @@ describe('AttendancePage', () => {
     releaseCheckIn!({ log: openLog });
 
     await waitFor(() => expect(screen.queryByText('جاري التسجيل...')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('انتظر 60ث')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('today-state')).toHaveTextContent('checked-in'));
+    expect(checkIn).toHaveBeenCalledWith('u1');
   });
 
   it('keeps checked-in state when refreshed today record has an open session', async () => {
