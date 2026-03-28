@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,37 +8,46 @@ import { useApp } from '../../contexts/AppContext';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as requestsService from '@/lib/services/requests.service';
+import * as overtimeRequestsService from '@/lib/services/overtime-requests.service';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
-import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
+import type { OvertimeRequestWithSessionAndReviewer } from '@/lib/services/overtime-requests.service';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { ListPageSkeleton } from '../../components/skeletons';
-import {
-  CheckCircle2,
-  XCircle,
-  Timer,
-  Calendar,
-  MessageSquare,
-  X,
-  FileText,
-} from 'lucide-react';
+import { X, FileText } from 'lucide-react';
 import { PageLayout } from '../../components/layout/PageLayout';
 import { FilterChips } from '../../components/shared/FilterChips';
 import { RequestCard } from '../../components/shared/RequestCard';
+import { OvertimeRequestCard } from '../../components/shared/OvertimeRequestCard';
 import { EmptyState } from '../../components/shared/EmptyState';
 
 const PAGE_SIZE = 10;
 
+type ApprovalKind = 'leave' | 'overtime';
+
+type MergedApprovalRow =
+  | { kind: 'leave'; id: string; created_at: string; status: LeaveRequest['status']; leave: LeaveRequest }
+  | {
+      kind: 'overtime';
+      id: string;
+      created_at: string;
+      status: OvertimeRequestWithSessionAndReviewer['status'];
+      overtime: OvertimeRequestWithSessionAndReviewer;
+    };
+
 export function ApprovalsPage() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const { updateRequestStatus } = useApp();
+  const { updateRequestStatus, updateOvertimeRequestStatus } = useApp();
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequestWithSessionAndReviewer[]>([]);
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'leave' | 'overtime'>('all');
   const [actionModal, setActionModal] = useState<{
+    kind: ApprovalKind;
     requestId: string;
     action: 'approve' | 'reject';
   } | null>(null);
@@ -53,10 +62,41 @@ export function ApprovalsPage() {
 
   const isAdmin = currentUser?.role === 'admin';
 
+  const loadData = useCallback(async () => {
+    if (!currentUser) return;
+    if (!isAdmin && !currentUser.departmentId) return;
+    try {
+      setLoading(true);
+      if (isAdmin) {
+        const [profs, reqs, ot] = await Promise.all([
+          profilesService.listUsers(),
+          requestsService.getAllRequests(),
+          overtimeRequestsService.getAllOvertimeRequests(),
+        ]);
+        setEmployees(profs);
+        setRequests(reqs);
+        setOvertimeRequests(ot);
+      } else {
+        const [emps, reqs, ot] = await Promise.all([
+          profilesService.getDepartmentEmployees(currentUser.departmentId!),
+          requestsService.getDepartmentRequests(currentUser.departmentId!),
+          overtimeRequestsService.getDepartmentOvertimeRequests(currentUser.departmentId!),
+        ]);
+        setEmployees(emps);
+        setRequests(reqs);
+        setOvertimeRequests(ot);
+      }
+    } catch {
+      toast.error('فشل تحميل البيانات');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, isAdmin]);
+
   useEffect(() => {
     if (!currentUser) return;
-    loadData();
-  }, [currentUser?.uid, currentUser?.role]);
+    void loadData();
+  }, [currentUser?.uid, currentUser?.role, loadData]);
 
   useRealtimeSubscription(
     () => {
@@ -76,32 +116,17 @@ export function ApprovalsPage() {
     [currentUser?.uid, isAdmin, employees.length, employeeIds]
   );
 
-  async function loadData() {
-    if (!currentUser) return;
-    if (!isAdmin && !currentUser.departmentId) return;
-    try {
-      setLoading(true);
-      if (isAdmin) {
-        const [profs, reqs] = await Promise.all([
-          profilesService.listUsers(),
-          requestsService.getAllRequests(),
-        ]);
-        setEmployees(profs);
-        setRequests(reqs);
-      } else {
-        const [emps, reqs] = await Promise.all([
-          profilesService.getDepartmentEmployees(currentUser.departmentId!),
-          requestsService.getDepartmentRequests(currentUser.departmentId!),
-        ]);
-        setEmployees(emps);
-        setRequests(reqs);
-      }
-    } catch {
-      toast.error('فشل تحميل البيانات');
-    } finally {
-      setLoading(false);
-    }
-  }
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser) return undefined;
+      if (!isAdmin && employees.length === 0) return undefined;
+      return overtimeRequestsService.subscribeToAllOvertimeRequests((event) => {
+        if (!isAdmin && !employeeIds.has(event.new.user_id)) return;
+        void loadData();
+      });
+    },
+    [currentUser?.uid, isAdmin, employees.length, employeeIds, loadData]
+  );
 
   const profilesMap = useMemo(
     () => new Map(employees.map((e) => [e.id, e])),
@@ -110,21 +135,52 @@ export function ApprovalsPage() {
 
   if (!currentUser) return null;
 
-  const filteredRequests = requests
-    .filter((r) => filter === 'all' || r.status === filter)
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const mergedRows: MergedApprovalRow[] = useMemo(() => {
+    const leaveRows: MergedApprovalRow[] = requests.map((r) => ({
+      kind: 'leave',
+      id: r.id,
+      created_at: r.created_at,
+      status: r.status,
+      leave: r,
+    }));
+    const otRows: MergedApprovalRow[] = overtimeRequests.map((r) => ({
+      kind: 'overtime',
+      id: r.id,
+      created_at: r.created_at,
+      status: r.status,
+      overtime: r,
+    }));
+    return [...leaveRows, ...otRows].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [requests, overtimeRequests]);
+
+  const filteredRequests = useMemo(() => {
+    return mergedRows.filter((row) => {
+      if (filter !== 'all' && row.status !== filter) return false;
+      if (typeFilter === 'leave' && row.kind !== 'leave') return false;
+      if (typeFilter === 'overtime' && row.kind !== 'overtime') return false;
+      return true;
+    });
+  }, [mergedRows, filter, typeFilter]);
 
   const { paginatedItems, currentPage, totalItems, pageSize, setCurrentPage } =
     usePagination(filteredRequests, PAGE_SIZE);
 
-  const pendingCount = requests.filter((r) => r.status === 'pending').length;
+  const pendingCount =
+    requests.filter((r) => r.status === 'pending').length +
+    overtimeRequests.filter((r) => r.status === 'pending').length;
 
   const handleAction = async (data: ApprovalFormData) => {
     if (!actionModal) return;
     setActionLoading(true);
     try {
       const status = actionModal.action === 'approve' ? 'approved' : 'rejected';
-      await updateRequestStatus(actionModal.requestId, status, currentUser.uid, data.comment || '');
+      if (actionModal.kind === 'leave') {
+        await updateRequestStatus(actionModal.requestId, status, currentUser.uid, data.comment || '');
+      } else {
+        await updateOvertimeRequestStatus(actionModal.requestId, status, currentUser.uid, data.comment || '');
+      }
       setActionModal(null);
       approvalForm.reset();
       await loadData();
@@ -142,6 +198,12 @@ export function ApprovalsPage() {
     { value: 'all' as const, label: 'الكل' },
   ];
 
+  const typeTabs = [
+    { value: 'all' as const, label: 'كل الأنواع' },
+    { value: 'leave' as const, label: 'إجازات وأذونات' },
+    { value: 'overtime' as const, label: 'عمل إضافي' },
+  ];
+
   return (
     <PageLayout title="الموافقات">
       <FilterChips
@@ -153,6 +215,17 @@ export function ApprovalsPage() {
         }}
       />
 
+      <div className="mt-3">
+        <FilterChips
+          tabs={typeTabs}
+          activeValue={typeFilter}
+          onChange={(value) => {
+            setTypeFilter(value);
+            setCurrentPage(1);
+          }}
+        />
+      </div>
+
       {loading ? (
         <ListPageSkeleton count={3} />
       ) : filteredRequests.length === 0 ? (
@@ -163,21 +236,36 @@ export function ApprovalsPage() {
       ) : (
         <>
           <div className="space-y-3">
-            {paginatedItems.map((req) => (
-              <RequestCard
-                key={req.id}
-                request={req}
-                profilesMap={profilesMap}
-                onUserClick={(uid) => navigate(`/user-details/${uid}`)}
-                onApprove={() =>
-                  setActionModal({ requestId: req.id, action: 'approve' })
-                }
-                onReject={() =>
-                  setActionModal({ requestId: req.id, action: 'reject' })
-                }
-                decisionNoteLabel="ملاحظة القرار:"
-              />
-            ))}
+            {paginatedItems.map((row) =>
+              row.kind === 'leave' ? (
+                <RequestCard
+                  key={`leave-${row.id}`}
+                  request={row.leave}
+                  profilesMap={profilesMap}
+                  onUserClick={(uid) => navigate(`/user-details/${uid}`)}
+                  onApprove={() =>
+                    setActionModal({ kind: 'leave', requestId: row.id, action: 'approve' })
+                  }
+                  onReject={() =>
+                    setActionModal({ kind: 'leave', requestId: row.id, action: 'reject' })
+                  }
+                  decisionNoteLabel="ملاحظة القرار:"
+                />
+              ) : (
+                <OvertimeRequestCard
+                  key={`ot-${row.id}`}
+                  request={row.overtime}
+                  profilesMap={profilesMap}
+                  onUserClick={(uid) => navigate(`/user-details/${uid}`)}
+                  onApprove={() =>
+                    setActionModal({ kind: 'overtime', requestId: row.id, action: 'approve' })
+                  }
+                  onReject={() =>
+                    setActionModal({ kind: 'overtime', requestId: row.id, action: 'reject' })
+                  }
+                />
+              )
+            )}
           </div>
 
           <Pagination

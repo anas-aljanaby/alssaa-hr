@@ -47,6 +47,19 @@ function json(res: Response): Promise<unknown> {
   return res.json();
 }
 
+/** Late-stay split returns `{ session, late_stay_overtime_session_id }`; otherwise the body is the session row. */
+async function jsonCheckout(res: Response): Promise<{ session: Session; late_stay_overtime_session_id: string | null }> {
+  const body = await json(res);
+  if (body && typeof body === 'object' && body !== null && 'session' in body) {
+    const o = body as { session: Session; late_stay_overtime_session_id?: string | null };
+    return {
+      session: o.session,
+      late_stay_overtime_session_id: o.late_stay_overtime_session_id ?? null,
+    };
+  }
+  return { session: body as Session, late_stay_overtime_session_id: null };
+}
+
 /** UTC ISO instant for a calendar date + org wall clock time (handler uses fixed UTC+3 via toOrgLocalDate). */
 function orgInstant(dateStr: string, wallTime: string): string {
   const [y, mo, d] = dateStr.split('-').map(Number);
@@ -648,31 +661,42 @@ Deno.test('part 3.2 late first session with late return resolves late', async ()
 Deno.test('part 3.3 regular session then post-shift overtime session', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
-  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:10:00'));
+  const lateStayOut = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:10:00'));
+  assertEquals(lateStayOut.status, 200);
+  const lateStayBody = await jsonCheckout(lateStayOut);
+  assertEquals(lateStayBody.late_stay_overtime_session_id !== null, true);
+
   const overtimeIn = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '18:12:00'));
   assertEquals(overtimeIn.status, 200);
 
-  // 3.3.S1 + 3.3.S2 session-level checks.
-  assertEquals(mem.sessions.length, 2);
-  const [s1, s2] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  // Checkout past shift end splits: regular [09:00,18:00] + OT [18:00,18:10]; then new OT session at 18:12.
+  assertEquals(mem.sessions.length, 3);
+  const sorted = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const s1 = sorted[0]!;
+  const s2 = sorted[1]!;
+  const s3 = sorted[2]!;
   assertEquals(s1.check_in_time, '09:00');
-  assertEquals(s1.check_out_time, '18:10');
+  assertEquals(s1.check_out_time, '18:00');
   assertEquals(s1.status, 'present');
   assertEquals(s1.is_overtime, false);
-  assertEquals(s2.check_in_time, '18:12');
-  assertEquals(s2.check_out_time, null);
+  assertEquals(s2.check_in_time, '18:00');
+  assertEquals(s2.check_out_time, '18:10');
   assertEquals(s2.status, 'present');
   assertEquals(s2.is_overtime, true);
+  assertEquals(s3.check_in_time, '18:12');
+  assertEquals(s3.check_out_time, null);
+  assertEquals(s3.status, 'present');
+  assertEquals(s3.is_overtime, true);
 
   // 3.3.1: strict overtime threshold after shift end.
   const overtimeBody = (await json(overtimeIn)) as { status?: 'present' | 'late'; is_overtime?: boolean };
   assertEquals(overtimeBody.status, 'present');
   assertEquals(overtimeBody.is_overtime, true);
 
-  // 3.3.2: overtime request auto-created for overtime session.
-  assertEquals(mem.overtimeRequests.length, 1);
-  assertEquals(mem.overtimeRequests[0].session_id, s2.id);
-  assertEquals(mem.overtimeRequests[0].user_id, mem.userId);
+  // 3.3.2: overtime request for split segment + second OT punch-in.
+  assertEquals(mem.overtimeRequests.length, 2);
+  assertEquals(mem.overtimeRequests.some((r) => r.session_id === s2.id), true);
+  assertEquals(mem.overtimeRequests.some((r) => r.session_id === s3.id), true);
 
   // 3.3.3: effective status remains present due to regular non-overtime present session.
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
@@ -1322,6 +1346,24 @@ Deno.test('part 8.7 overtime requests are routed to overtime_requests table beha
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '19:00:00'));
   assertEquals(mem.overtimeRequests.length, 1);
+});
+
+Deno.test('part 8.8 late-stay checkout past shift end splits session and creates overtime request', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '19:00:00'));
+  assertEquals(res.status, 200);
+  const { session, late_stay_overtime_session_id } = await jsonCheckout(res);
+  assertEquals(session.check_out_time, '18:00');
+  assertEquals(session.is_overtime, false);
+  assertEquals(late_stay_overtime_session_id !== null, true);
+  assertEquals(mem.sessions.length, 2);
+  const ot = mem.sessions.find((s) => s.id === late_stay_overtime_session_id);
+  assertEquals(ot?.check_in_time, '18:00');
+  assertEquals(ot?.check_out_time, '19:00');
+  assertEquals(ot?.is_overtime, true);
+  assertEquals(mem.overtimeRequests.length, 1);
+  assertEquals(mem.overtimeRequests[0].session_id, late_stay_overtime_session_id);
 });
 
 Deno.test('part 9.1 needs_review is set by auto punch-out but not manual punch-out', async () => {

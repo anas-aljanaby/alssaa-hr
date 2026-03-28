@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables } from '../database.types';
 import { now } from '../time';
-import type { LeaveRequest } from './requests.service';
+import type { OvertimeRequest } from './overtime-requests.service';
 
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
@@ -486,13 +486,38 @@ export async function getTodayLog(userId: string): Promise<AttendanceLog | null>
 
 export interface CheckInResult {
   log: AttendanceLog;
-  overtimeRequest: LeaveRequest | null;
+  overtimeRequest: OvertimeRequest | null;
+}
+
+export interface CheckOutResult {
+  log: AttendanceLog;
+  overtimeRequest: OvertimeRequest | null;
 }
 
 type EdgeInvokeResult = {
   data?: unknown;
   error?: { message?: string } | null;
 };
+
+function parsePunchCheckoutPayload(data: unknown): {
+  session: AttendanceSession;
+  lateStayOvertimeSessionId: string | null;
+} {
+  if (data && typeof data === 'object' && data !== null && 'session' in data) {
+    const o = data as {
+      session: AttendanceSession;
+      late_stay_overtime_session_id?: string | null;
+    };
+    return {
+      session: o.session,
+      lateStayOvertimeSessionId: o.late_stay_overtime_session_id ?? null,
+    };
+  }
+  return {
+    session: data as AttendanceSession,
+    lateStayOvertimeSessionId: null,
+  };
+}
 
 /** UTC instant for devOverrideTime; matches punch handler org wall via toOrgLocalDate (+3). */
 function orgWallToPunchUtcIso(dateStr: string, wallTime: string): string {
@@ -564,7 +589,7 @@ export async function checkIn(userId: string, devSimulatedNowIso?: string): Prom
       throw new Error('Unable to build check-in result');
     }
 
-    let overtimeRequest: LeaveRequest | null = null;
+    let overtimeRequest: OvertimeRequest | null = null;
     if (session?.is_overtime) {
       try {
         const { data: req } = await supabase
@@ -572,7 +597,7 @@ export async function checkIn(userId: string, devSimulatedNowIso?: string): Prom
           .select('*')
           .eq('session_id', session.id)
           .maybeSingle();
-        overtimeRequest = req as unknown as LeaveRequest | null;
+        overtimeRequest = (req ?? null) as OvertimeRequest | null;
       } catch {
         overtimeRequest = null;
       }
@@ -632,7 +657,7 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
     log = inserted;
   }
 
-  let overtimeRequest: LeaveRequest | null = null;
+  let overtimeRequest: OvertimeRequest | null = null;
   if (isOvertimePunch || !isWorkingDay) {
     // Legacy mode cannot create session-linked overtime_requests safely.
     overtimeRequest = null;
@@ -645,7 +670,7 @@ export async function checkOut(
   userId: string,
   checkoutTime?: string,
   devSimulatedNowIso?: string
-): Promise<AttendanceLog> {
+): Promise<CheckOutResult> {
   let devOverrideTime: string | undefined;
   if (checkoutTime) {
     devOverrideTime = orgWallToPunchUtcIso(todayStr(), checkoutTime);
@@ -660,14 +685,33 @@ export async function checkOut(
     const normalizedError = normalizePunchInvokeError(invoked);
     if (normalizedError) throw normalizedError;
 
+    const checkoutPayload = parsePunchCheckoutPayload(invoked.data);
+    let overtimeRequest: OvertimeRequest | null = null;
+    const otSessionId =
+      checkoutPayload.lateStayOvertimeSessionId ||
+      (checkoutPayload.session?.is_overtime ? checkoutPayload.session.id : null);
+    if (otSessionId) {
+      try {
+        const { data: req } = await supabase
+          .from('overtime_requests')
+          .select('*')
+          .eq('session_id', otSessionId)
+          .maybeSingle();
+        overtimeRequest = (req ?? null) as OvertimeRequest | null;
+      } catch {
+        overtimeRequest = null;
+      }
+    }
+
     const today = await getAttendanceToday(userId);
     if (!today.log) {
       throw new Error('Unable to load updated attendance log');
     }
-    return today.log;
+    return { log: today.log, overtimeRequest };
   }
 
-  return checkOutLegacy(userId, checkoutTime);
+  const log = await checkOutLegacy(userId, checkoutTime);
+  return { log, overtimeRequest: null };
 }
 
 async function checkOutLegacy(userId: string, checkoutTime?: string): Promise<AttendanceLog> {

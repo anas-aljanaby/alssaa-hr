@@ -292,8 +292,11 @@ describe('AttendancePage', () => {
 
     const checkInLogs = [open1, open2, open3];
     const checkOutLogs = [closed1, closed2];
-    const checkIn = vi.fn(async () => ({ log: checkInLogs.shift() }));
-    const checkOut = vi.fn(async () => checkOutLogs.shift());
+    const checkIn = vi.fn(async () => ({ log: checkInLogs.shift()!, overtimeRequest: null }));
+    const checkOut = vi.fn(async () => {
+      const log = checkOutLogs.shift();
+      return { log: log!, overtimeRequest: null };
+    });
     mockUseApp.mockReturnValue({ checkIn, checkOut });
 
     render(<AttendancePage />);

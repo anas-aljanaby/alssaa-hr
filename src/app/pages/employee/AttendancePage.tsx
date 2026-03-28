@@ -107,10 +107,10 @@ export function AttendancePage() {
       if (navigator.vibrate) navigator.vibrate(100);
       // Always update UI with checkout result so shift-congrats / totals refresh immediately.
       // If getAttendanceToday fails (e.g. network), we still keep the latest log until next load.
-      setToday((prev) => ({ ...prev, log: result }));
+      setToday((prev) => ({ ...prev, log: result.log }));
       try {
         const updated = await attendanceService.getAttendanceToday(currentUser.uid);
-        setToday({ ...updated, log: result });
+        setToday({ ...updated, log: result.log });
       } catch {
         // Keep today with result log; punches may be stale until next load
       }

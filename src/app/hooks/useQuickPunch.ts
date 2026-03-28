@@ -61,8 +61,8 @@ export function useQuickPunch({ userId, onLogUpdated }: UseQuickPunchOptions) {
     try {
       const result = await checkOut(userId);
       if (navigator.vibrate) navigator.vibrate(100);
-      setToday((prev) => ({ ...prev, log: result }));
-      onLogUpdated?.(result);
+      setToday((prev) => ({ ...prev, log: result.log }));
+      onLogUpdated?.(result.log);
       try {
         await refreshToday();
       } catch {

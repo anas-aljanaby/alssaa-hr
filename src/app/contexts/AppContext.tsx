@@ -3,18 +3,27 @@ import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import { useDevTime } from './DevTimeContext';
 import * as requestsService from '@/lib/services/requests.service';
+import * as overtimeRequestsService from '@/lib/services/overtime-requests.service';
 import * as notificationsService from '@/lib/services/notifications.service';
 
 type AttendanceLog = attendanceService.AttendanceLog;
 type CheckInResult = attendanceService.CheckInResult;
+type CheckOutResult = attendanceService.CheckOutResult;
 type LeaveRequest = requestsService.LeaveRequest;
 type LeaveRequestInsert = requestsService.LeaveRequestInsert;
+type OvertimeRequest = overtimeRequestsService.OvertimeRequest;
 
 interface AppContextType {
   checkIn: (userId: string) => Promise<CheckInResult>;
-  checkOut: (userId: string, checkoutTime?: string) => Promise<AttendanceLog>;
+  checkOut: (userId: string, checkoutTime?: string) => Promise<CheckOutResult>;
   submitRequest: (request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>) => Promise<LeaveRequest>;
   updateRequestStatus: (requestId: string, status: 'approved' | 'rejected', approverId: string, note: string) => Promise<LeaveRequest>;
+  updateOvertimeRequestStatus: (
+    requestId: string,
+    status: 'approved' | 'rejected',
+    reviewerId: string,
+    note: string
+  ) => Promise<OvertimeRequest>;
   markNotificationRead: (notifId: string) => Promise<void>;
   markAllNotificationsRead: (userId: string) => Promise<void>;
 }
@@ -42,14 +51,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const checkOut = async (userId: string, checkoutTime?: string): Promise<AttendanceLog> => {
+  const checkOut = async (userId: string, checkoutTime?: string): Promise<CheckOutResult> => {
     try {
       const devIso =
         import.meta.env.DEV && devTime?.isOverrideActive && checkoutTime == null
           ? devTime.now().toISOString()
           : undefined;
       const result = await attendanceService.checkOut(userId, checkoutTime, devIso);
-      toast.success('تم تسجيل الانصراف بنجاح');
+      if (result.overtimeRequest) {
+        toast.success('تم تسجيل الانصراف — تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة');
+      } else {
+        toast.success('تم تسجيل الانصراف بنجاح');
+      }
       return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'فشل تسجيل الانصراف';
@@ -87,6 +100,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateOvertimeRequestStatus = async (
+    requestId: string,
+    status: 'approved' | 'rejected',
+    reviewerId: string,
+    note: string
+  ): Promise<OvertimeRequest> => {
+    try {
+      const result = await overtimeRequestsService.updateOvertimeRequestStatus(
+        requestId,
+        status,
+        reviewerId,
+        note
+      );
+      toast.success(status === 'approved' ? 'تمت الموافقة على طلب العمل الإضافي' : 'تم رفض طلب العمل الإضافي');
+      return result;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'فشل تحديث طلب العمل الإضافي';
+      toast.error(message);
+      throw err;
+    }
+  };
+
   const markNotificationRead = async (notifId: string): Promise<void> => {
     try {
       await notificationsService.markAsRead(notifId);
@@ -110,6 +145,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         checkOut,
         submitRequest,
         updateRequestStatus,
+        updateOvertimeRequestStatus,
         markNotificationRead,
         markAllNotificationsRead,
       }}

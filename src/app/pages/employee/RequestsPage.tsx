@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { leaveRequestSchema, type LeaveRequestFormData } from '@/lib/validations';
@@ -6,11 +6,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { toast } from 'sonner';
 import * as requestsService from '@/lib/services/requests.service';
+import * as overtimeRequestsService from '@/lib/services/overtime-requests.service';
 import * as storageService from '@/lib/services/storage.service';
 import * as policyService from '@/lib/services/policy.service';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import type { LeaveRequest, RequestType } from '@/lib/services/requests.service';
+import type { OvertimeRequestWithSessionAndReviewer } from '@/lib/services/overtime-requests.service';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { ListPageSkeleton } from '../../components/skeletons';
 import {
@@ -30,9 +32,20 @@ import {
 import { PageLayout } from '../../components/layout/PageLayout';
 import { FilterChips } from '../../components/shared/FilterChips';
 import { RequestCard } from '../../components/shared/RequestCard';
+import { OvertimeRequestCard } from '../../components/shared/OvertimeRequestCard';
 import { EmptyState } from '../../components/shared/EmptyState';
 
 const PAGE_SIZE = 10;
+
+type EmployeeRequestRow =
+  | { kind: 'leave'; id: string; created_at: string; status: LeaveRequest['status']; leave: LeaveRequest }
+  | {
+      kind: 'overtime';
+      id: string;
+      created_at: string;
+      status: OvertimeRequestWithSessionAndReviewer['status'];
+      overtime: OvertimeRequestWithSessionAndReviewer;
+    };
 
 export function RequestsPage() {
   const { currentUser } = useAuth();
@@ -40,6 +53,7 @@ export function RequestsPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequestWithSessionAndReviewer[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -73,10 +87,37 @@ export function RequestsPage() {
     });
   }, [form, isTimeAdjustment]);
 
+  const loadOvertimeRequests = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const data = await overtimeRequestsService.getOvertimeRequestsForUser(currentUser.uid);
+      setOvertimeRequests(data);
+    } catch {
+      toast.error('فشل تحميل طلبات العمل الإضافي');
+    }
+  }, [currentUser]);
+
+  const loadRequests = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      setLoading(true);
+      const [data, ot] = await Promise.all([
+        requestsService.getUserRequests(currentUser.uid),
+        overtimeRequestsService.getOvertimeRequestsForUser(currentUser.uid),
+      ]);
+      setRequests(data);
+      setOvertimeRequests(ot);
+    } catch {
+      toast.error('فشل تحميل الطلبات');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
   useEffect(() => {
     if (!currentUser) return;
-    loadRequests();
-  }, [currentUser?.uid]);
+    void loadRequests();
+  }, [currentUser?.uid, loadRequests]);
 
   useRealtimeSubscription(
     () => {
@@ -94,24 +135,42 @@ export function RequestsPage() {
     [currentUser?.uid]
   );
 
-  async function loadRequests() {
-    if (!currentUser) return;
-    try {
-      setLoading(true);
-      const data = await requestsService.getUserRequests(currentUser.uid);
-      setRequests(data);
-    } catch {
-      toast.error('فشل تحميل الطلبات');
-    } finally {
-      setLoading(false);
-    }
-  }
+  useRealtimeSubscription(
+    () => {
+      if (!currentUser) return undefined;
+      return overtimeRequestsService.subscribeToUserOvertimeRequests(currentUser.uid, () => {
+        void loadOvertimeRequests();
+      });
+    },
+    [currentUser?.uid, loadOvertimeRequests]
+  );
 
   if (!currentUser) return null;
 
-  const filteredRequests = requests
-    .filter((r) => filter === 'all' || r.status === filter)
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const mergedRows: EmployeeRequestRow[] = useMemo(() => {
+    const leaveRows: EmployeeRequestRow[] = requests.map((r) => ({
+      kind: 'leave',
+      id: r.id,
+      created_at: r.created_at,
+      status: r.status,
+      leave: r,
+    }));
+    const otRows: EmployeeRequestRow[] = overtimeRequests.map((r) => ({
+      kind: 'overtime',
+      id: r.id,
+      created_at: r.created_at,
+      status: r.status,
+      overtime: r,
+    }));
+    return [...leaveRows, ...otRows].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [requests, overtimeRequests]);
+
+  const filteredRequests = useMemo(
+    () => mergedRows.filter((row) => filter === 'all' || row.status === filter),
+    [mergedRows, filter]
+  );
 
   const { paginatedItems, currentPage, totalItems, pageSize, setCurrentPage } =
     usePagination(filteredRequests, PAGE_SIZE);
@@ -222,9 +281,13 @@ export function RequestsPage() {
       ) : (
         <>
           <div className="space-y-3">
-            {paginatedItems.map((req) => (
-              <RequestCard key={req.id} request={req} />
-            ))}
+            {paginatedItems.map((row) =>
+              row.kind === 'leave' ? (
+                <RequestCard key={`leave-${row.id}`} request={row.leave} />
+              ) : (
+                <OvertimeRequestCard key={`ot-${row.id}`} request={row.overtime} showApproverInfo />
+              )
+            )}
           </div>
 
           <Pagination

@@ -4,23 +4,6 @@ import { setNowFn } from '../time';
 import { todayRecord24_1, todayRecord24_1a } from './__fixtures__/todayMultiSession';
 
 vi.mock('../supabase');
-vi.mock('./requests.service', () => ({
-  submitRequest: vi.fn().mockResolvedValue({
-    id: 'lr1',
-    org_id: 'o1',
-    user_id: 'u1',
-    type: 'overtime',
-    from_date_time: '2025-06-11T10:00:00',
-    to_date_time: '2025-06-11T16:00:00',
-    note: '',
-    status: 'pending',
-    approver_id: null,
-    decision_note: null,
-    attachment_url: null,
-    created_at: '2025-06-11T10:00:00Z',
-    decided_at: null,
-  }),
-}));
 
 const logRow = {
   id: 'log1',
@@ -341,11 +324,182 @@ describe('attendance.service', () => {
     sb.queueResult({ data: policyRow, error: null });
     sb.queueResult({ data: { ...logRow, check_in_time: '10:00' }, error: null });
     const { checkIn } = await import('./attendance.service');
-    const { submitRequest } = await import('./requests.service');
-    vi.mocked(submitRequest).mockClear();
     const r = await checkIn('u1');
     expect(r.log.check_in_time).toBe('10:00');
-    expect(submitRequest).not.toHaveBeenCalled();
+  });
+
+  describe('checkIn (Edge Function punch path)', () => {
+    const otSession = {
+      id: 'sess-ot-1',
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2025-06-11',
+      check_in_time: '18:30',
+      check_out_time: null as string | null,
+      status: 'present' as const,
+      is_overtime: true,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+      duration_minutes: 0,
+      last_action_at: '2025-06-11T18:30:00Z',
+      is_dev: false,
+      created_at: '2025-06-11T18:30:00Z',
+      updated_at: '2025-06-11T18:30:00Z',
+    };
+
+    function queueGetAttendanceTodayForPunch(sessions: unknown[]) {
+      sb.queueResult({ data: sessions, error: null });
+      sb.queueResult({ data: profileShift, error: null });
+      sb.queueResult({ data: policyRow, error: null });
+      sb.queueResult({ data: null, error: null });
+    }
+
+    beforeEach(() => {
+      vi.mocked(sb.auth.getSession).mockResolvedValue({
+        data: { session: { access_token: 'test-access-token' } },
+        error: null,
+      } as never);
+    });
+
+    afterEach(() => {
+      vi.mocked(sb.auth.getSession).mockReset();
+      vi.mocked(sb.functions.invoke).mockReset();
+    });
+
+    it('returns overtimeRequest after punch when session is overtime', async () => {
+      vi.mocked(sb.functions.invoke).mockResolvedValue({
+        data: otSession,
+        error: null,
+      } as never);
+      queueGetAttendanceTodayForPunch([otSession]);
+      sb.queueResult({
+        data: {
+          id: 'or1',
+          org_id: 'o1',
+          user_id: 'u1',
+          session_id: 'sess-ot-1',
+          status: 'pending',
+        },
+        error: null,
+      });
+
+      const { checkIn } = await import('./attendance.service');
+      const r = await checkIn('u1');
+
+      expect(sb.functions.invoke).toHaveBeenCalledWith(
+        'punch',
+        expect.objectContaining({
+          body: expect.objectContaining({ action: 'check_in' }),
+          headers: { Authorization: 'Bearer test-access-token' },
+        })
+      );
+      expect(r.overtimeRequest).not.toBeNull();
+      expect((r.overtimeRequest as { session_id?: string })?.session_id).toBe('sess-ot-1');
+      expect(r.log.check_in_time).toBe('18:30');
+    });
+
+    it('does not query overtime_requests when session is not overtime', async () => {
+      const regularSession = { ...otSession, id: 'sess-reg-1', is_overtime: false };
+      vi.mocked(sb.functions.invoke).mockResolvedValue({
+        data: regularSession,
+        error: null,
+      } as never);
+      queueGetAttendanceTodayForPunch([regularSession]);
+      sb.from.mockClear();
+
+      const { checkIn } = await import('./attendance.service');
+      const r = await checkIn('u1');
+
+      expect(r.overtimeRequest).toBeNull();
+      expect(sb.from.mock.calls.some((c) => c[0] === 'overtime_requests')).toBe(false);
+    });
+
+    it('throws when punch invoke returns an error payload', async () => {
+      vi.mocked(sb.functions.invoke).mockResolvedValue({
+        data: { error: 'Already checked in', code: 'conflict' },
+        error: null,
+      } as never);
+
+      const { checkIn } = await import('./attendance.service');
+      await expect(checkIn('u1')).rejects.toThrow(/Already checked in/);
+    });
+  });
+
+  describe('checkOut (Edge Function punch path)', () => {
+    const closedRegular = {
+      id: 'sess-reg',
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2025-06-11',
+      check_in_time: '09:00',
+      check_out_time: '18:00',
+      status: 'present' as const,
+      is_overtime: false,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+      duration_minutes: 540,
+      last_action_at: '2025-06-11T19:00:00Z',
+      is_dev: false,
+      created_at: '2025-06-11T09:00:00Z',
+      updated_at: '2025-06-11T19:00:00Z',
+    };
+
+    beforeEach(() => {
+      vi.mocked(sb.auth.getSession).mockResolvedValue({
+        data: { session: { access_token: 'test-access-token' } },
+        error: null,
+      } as never);
+    });
+
+    afterEach(() => {
+      vi.mocked(sb.auth.getSession).mockReset();
+      vi.mocked(sb.functions.invoke).mockReset();
+    });
+
+    it('returns overtimeRequest after late-stay split checkout', async () => {
+      vi.mocked(sb.functions.invoke).mockResolvedValue({
+        data: {
+          session: closedRegular,
+          late_stay_overtime_session_id: 'sess-ot-split',
+        },
+        error: null,
+      } as never);
+      sb.queueResult({
+        data: {
+          id: 'or-split',
+          org_id: 'o1',
+          user_id: 'u1',
+          session_id: 'sess-ot-split',
+          status: 'pending',
+          reviewed_by: null,
+          note: null,
+          created_at: '2025-06-11T19:00:00Z',
+          updated_at: '2025-06-11T19:00:00Z',
+        },
+        error: null,
+      });
+      const otSplit = {
+        ...closedRegular,
+        id: 'sess-ot-split',
+        check_in_time: '18:00',
+        check_out_time: '19:00',
+        is_overtime: true,
+        duration_minutes: 60,
+      };
+      sb.queueResult({ data: [closedRegular, otSplit], error: null });
+      sb.queueResult({ data: profileShift, error: null });
+      sb.queueResult({ data: policyRow, error: null });
+      sb.queueResult({ data: null, error: null });
+
+      const { checkOut } = await import('./attendance.service');
+      const r = await checkOut('u1');
+
+      expect(r.overtimeRequest).not.toBeNull();
+      expect(r.overtimeRequest?.session_id).toBe('sess-ot-split');
+      expect(r.log.check_out_time).toBeDefined();
+    });
   });
 
   it('checkIn throws when already checked in without checkout', async () => {
@@ -367,7 +521,7 @@ describe('attendance.service', () => {
       error: null,
     });
     const { checkOut } = await import('./attendance.service');
-    const log = await checkOut('u1');
+    const { log } = await checkOut('u1');
     expect(log.check_out_time).toBe('17:00');
   });
 

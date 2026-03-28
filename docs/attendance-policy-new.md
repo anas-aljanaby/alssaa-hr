@@ -167,13 +167,19 @@ For pure overtime sessions (off-day, before early login window, or after shift e
 
 ### Late-Stay Overtime (Expected Flow)
 
-When an employee stays after `shiftEnd` on a working day, the expected behavior is:
-- Their regular session is closed at/after shift end (either by the employee punching out, or by the auto-punch-out job)
-- To start overtime, they punch in again after `shiftEnd`
-- That new punch-in is classified as an overtime session (`is_overtime = true`)
-- An overtime request is automatically created for that overtime session
+When an employee stays after `shiftEnd` on a working day, the system handles overtime in two equivalent ways:
 
-Example: employee works until 6:10 PM, punches out, then punches back in at 6:12 PM. The first session remains regular. The 6:12 PM session is overtime and gets its own auto-created overtime request.
+**Automatic split on checkout (primary flow)**  
+If the employee checked in during regular hours (`is_overtime = false` for that session) and punches out at a time **strictly after** `shiftEnd`, the punch handler **splits** the session at checkout:
+- **Regular segment:** from original check-in time through `shiftEnd` (closed at `shiftEnd`)
+- **Overtime segment:** from `shiftEnd` through the actual checkout time (`is_overtime = true`)
+
+An `overtime_requests` row is auto-created (pending) for the overtime segment. The employee does **not** need to punch out and back in for this to occur.
+
+**Separate overtime punch-in (still supported)**  
+Alternatively, the employee may close the regular session at or before `shiftEnd`, then punch in again after `shiftEnd`. That new punch-in is classified as an overtime session and also receives an auto-created overtime request.
+
+Example (split): employee checks in at 9:00 AM and checks out at 7:00 PM with shift end 6:00 PM → one regular session 9:00–18:00 and one overtime session 18:00–19:00, plus a pending overtime request for the latter.
 
 ---
 
@@ -329,6 +335,7 @@ The audit log is append-only. Rows are never updated or deleted. It provides a c
 | Non-working day punch-in | All sessions are overtime. Confirmation shown. Calendar shows overtime day. No `effective_status` set (it is not a working day). |
 | Works 8 AM – 12 PM, returns 2 PM – 6 PM | Two non-overtime sessions. `effective_status` based on first session's arrival classification (`present` or `late`). |
 | Works regular shift, leaves, returns at 8 PM | Regular session + overtime session. `effective_status` is determined by the regular session alone (`present` or `late`). The overtime session contributes only to `total_overtime_minutes`. |
+| Works until 7:00 PM with shift end 6:00 PM (single continuous session) | Checkout splits into regular [check-in, 18:00] + overtime [18:00, 19:00]; overtime request created for the overtime segment. |
 | Works until 6:10 PM, punches out, punches in again at 6:12 PM | 6:12 PM punch-in is overtime (`> shiftEnd`). A new overtime session is created and an overtime request is auto-created. |
 | Forgets to check out, auto-punch-out fires | Only regular sessions are auto-closed, at the job trigger time. Overtime sessions are excluded. Flagged `needs_review`. |
 | Manager corrects auto-punch-out time | Session updated, audit log records old and new values. Daily summary recalculated. |

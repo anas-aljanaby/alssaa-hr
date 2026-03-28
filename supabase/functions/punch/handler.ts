@@ -169,6 +169,20 @@ function diffMinutes(checkInTime: string, checkOutTime: string): number {
   return minutes > 0 ? minutes : 0;
 }
 
+/** Late-stay: regular session extends past shift end → split into regular [check_in, shiftEnd] + OT [shiftEnd, checkout]. */
+function shouldSplitLateStayCheckout(
+  schedule: ResolvedSchedule,
+  openSession: SessionRow,
+  checkoutTime: string
+): boolean {
+  if (!schedule.hasShift || !schedule.isWorkingDay) return false;
+  if (!schedule.workEndTime) return false;
+  if (openSession.is_overtime) return false;
+  const endMin = toMinutes(schedule.workEndTime);
+  if (toMinutes(checkoutTime) <= endMin) return false;
+  return toMinutes(openSession.check_in_time) < endMin;
+}
+
 function resolveSchedule(profile: ProfileRow, policy: PolicyRow | null, date: Date): ResolvedSchedule {
   const hasCustomSchedule =
     Array.isArray(profile.work_days) &&
@@ -501,12 +515,92 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
     }
 
     const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
+    const shiftEnd = schedule.workEndTime ?? null;
+
+    if (shouldSplitLateStayCheckout(schedule, openSession, time) && shiftEnd) {
+      const regularDuration = diffMinutes(openSession.check_in_time, shiftEnd);
+      const otDuration = diffMinutes(shiftEnd, time);
+
+      const { data: updatedRegular, error: errRegular } = await admin
+        .from('attendance_sessions')
+        .update({
+          check_out_time: shiftEnd,
+          duration_minutes: regularDuration,
+          is_early_departure: false,
+          is_auto_punch_out: false,
+          needs_review: false,
+          last_action_at: effectiveNow.toISOString(),
+          is_dev: isDev,
+        })
+        .eq('id', openSession.id)
+        .select()
+        .single();
+
+      if (errRegular) {
+        return new Response(
+          JSON.stringify({ error: errMsg(errRegular), code: 'UPDATE_FAILED' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: insertedOt, error: errOt } = await admin
+        .from('attendance_sessions')
+        .insert({
+          org_id: orgId,
+          user_id: caller.id,
+          date: today,
+          check_in_time: shiftEnd,
+          check_out_time: time,
+          status: 'present',
+          is_overtime: true,
+          duration_minutes: otDuration,
+          last_action_at: effectiveNow.toISOString(),
+          is_dev: isDev,
+        })
+        .select()
+        .single();
+
+      if (errOt) {
+        return new Response(
+          JSON.stringify({ error: errMsg(errOt), code: 'INSERT_FAILED' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const otSession = insertedOt as SessionRow;
+
+      await admin
+        .from('overtime_requests')
+        .upsert({
+          org_id: orgId,
+          user_id: caller.id,
+          session_id: otSession.id,
+          status: 'pending',
+        }, { onConflict: 'session_id' });
+
+      await recalculateDailySummary(admin, {
+        orgId,
+        userId: caller.id,
+        dateStr: today,
+        schedule,
+      });
+
+      return new Response(
+        JSON.stringify({
+          session: updatedRegular,
+          late_stay_overtime_session_id: otSession.id,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const durationMinutes = diffMinutes(openSession.check_in_time, time);
     const isEarlyDeparture =
       schedule.hasShift &&
       schedule.isWorkingDay &&
       !openSession.is_overtime &&
-      toMinutes(time) < toMinutes(schedule.workEndTime!);
+      schedule.workEndTime != null &&
+      toMinutes(time) < toMinutes(schedule.workEndTime);
 
     const { data: updated, error } = await admin
       .from('attendance_sessions')
