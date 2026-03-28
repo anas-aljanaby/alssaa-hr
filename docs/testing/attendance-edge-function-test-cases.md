@@ -417,3 +417,13 @@ Baseline: shift ends `18:00`, buffer `30` min -> auto-punch-out job fires at or 
 | 19.6 | [ ] | Single daily log row only | `attendance_daily_summary` is maintained separately | Summary-model regression guard |
 | 19.7 | [ ] | Overtime-only working day showed `effective_status=present` | Working day with only overtime sessions → `overtime_only` | Aligns with `attendance-policy-new.md` |
 
+## 20. Early Checkout Then Mid-Shift Re-Check-In
+
+> Corresponding test file: `supabase/functions/punch/handler.test.ts`
+
+| # | Implemented | Scenario | Expected behavior | Notes |
+| --- | --- | --- | --- | --- |
+| 20.1 | [x] | Working day (`09:00`-`18:00`): check-in `13:15`, check-out `13:16`, then check-in `13:17` | Third punch creates a new session with `is_overtime=false` | Covered by `part 3.7` |
+| 20.2 | [x] | Same scenario as 20.1 | Third punch keeps session-level status based on grace logic (for this case: `late`) | Covered by `part 3.7` |
+| 20.3 | [x] | Same scenario as 20.1 | Second session remains open (`check_out_time=null`) until explicit check-out | Covered by `part 3.7` |
+

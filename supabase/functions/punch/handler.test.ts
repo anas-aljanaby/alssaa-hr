@@ -689,6 +689,29 @@ Deno.test('part 3.6 many sessions sum and short-day correctness', async () => {
   assertEquals(summary?.session_count, 3);
 });
 
+Deno.test('part 3.7 early checkout then mid-shift re-check-in stays non-overtime', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', '2025-06-10T13:15:00');
+  const earlyOut = await punch(mem.deps, 'check_out', '2025-06-10T13:16:00');
+  assertEquals(earlyOut.status, 200);
+
+  const secondIn = await punch(mem.deps, 'check_in', '2025-06-10T13:17:00');
+  assertEquals(secondIn.status, 200);
+  const secondInBody = (await json(secondIn)) as { status?: 'present' | 'late'; is_overtime?: boolean; check_out_time?: string | null };
+  assertEquals(secondInBody.status, 'late');
+  assertEquals(secondInBody.is_overtime, false);
+  assertEquals(secondInBody.check_out_time, null);
+
+  assertEquals(mem.sessions.length, 2);
+  const [s1, s2] = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(s1.check_in_time, '13:15');
+  assertEquals(s1.check_out_time, '13:16');
+  assertEquals(s2.check_in_time, '13:17');
+  assertEquals(s2.check_out_time, null);
+  assertEquals(s2.status, 'late');
+  assertEquals(s2.is_overtime, false);
+});
+
 Deno.test('part 4.1 approved leave with no sessions resolves on_leave', async () => {
   const mem = makeDeps({
     leaveRows: [
