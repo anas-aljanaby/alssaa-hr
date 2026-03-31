@@ -131,7 +131,6 @@ export function MobileLayout() {
       '/attendance-policy',
       '/security-privacy',
       '/terms-conditions',
-      '/help-support',
       '/reports',
       '/departments',
       '/transfer-general-manager',

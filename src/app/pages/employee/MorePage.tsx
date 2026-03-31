@@ -8,7 +8,6 @@ import {
   User,
   Settings,
   Shield,
-  HelpCircle,
   LogOut,
   ChevronLeft,
   Bell,
@@ -82,13 +81,6 @@ export function MorePage() {
     {
       title: 'الدعم',
       items: [
-        {
-          icon: HelpCircle,
-          label: 'المساعدة والدعم',
-          color: 'text-amber-500',
-          bgColor: 'bg-amber-50',
-          href: '/help-support',
-        },
         {
           icon: Clock,
           label: 'سياسة الحضور',

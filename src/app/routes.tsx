@@ -25,7 +25,6 @@ const UserDetailsPage = React.lazy(() => import('./pages/admin/UserDetailsPage')
 const SecurityPrivacyPage = React.lazy(() => import('./pages/employee/SecurityPrivacyPage').then(m => ({ default: m.SecurityPrivacyPage })));
 const TermsPage = React.lazy(() => import('./pages/employee/TermsPage').then(m => ({ default: m.TermsPage })));
 const AttendancePolicyPage = React.lazy(() => import('./pages/employee/AttendancePolicyPage').then(m => ({ default: m.AttendancePolicyPage })));
-const HelpSupportPage = React.lazy(() => import('./pages/employee/HelpSupportPage').then(m => ({ default: m.HelpSupportPage })));
 
 function Lazy({ children }: { children: React.ReactNode }) {
   return (
@@ -74,7 +73,6 @@ export const router = createBrowserRouter([
           { path: 'attendance-policy', element: <Lazy><AttendancePolicyPage /></Lazy> },
           { path: 'security-privacy', element: <Lazy><SecurityPrivacyPage /></Lazy> },
           { path: 'terms-conditions', element: <Lazy><TermsPage /></Lazy> },
-          { path: 'help-support', element: <Lazy><HelpSupportPage /></Lazy> },
           { path: 'approvals', element: <Lazy><ApprovalsPage /></Lazy> },
           { path: 'users', element: <Lazy><RequireAdmin><UsersPage /></RequireAdmin></Lazy> },
           { path: 'departments', element: <Lazy><RequireAdmin><DepartmentsPage /></RequireAdmin></Lazy> },
