@@ -59,12 +59,15 @@ function resolveCalendarStatus(
   dateStr: string,
   isOffDay: boolean,
   summary: AttendanceDailySummary | undefined,
-  todayStr_: string
+  todayStr_: string,
+  joinDate?: string | null
 ): CalendarStatus {
   const isFuture = dateStr > todayStr_;
   const isToday = dateStr === todayStr_;
+  const isBeforeJoinDate = !!joinDate && dateStr < joinDate;
 
   if (isFuture) return 'future';
+  if (isBeforeJoinDate) return null;
   if (summary?.effective_status === 'present') return 'present';
   if (summary?.effective_status === 'late') return 'late';
   if (summary?.effective_status === 'absent') return 'absent';
@@ -416,6 +419,17 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
   return { log, punches, shift, totalMinutesWorked, sessions, summary };
 }
 
+async function getUserJoinDate(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('join_date')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.join_date ?? null;
+}
+
 export async function getAttendanceSessions(
   userId: string,
   date?: string
@@ -446,7 +460,7 @@ export async function getAttendanceMonthly(
   const lastDay = new Date(year, month + 1, 0).getDate();
   const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  const [summariesRes, shift] = await Promise.all([
+  const [summariesRes, shift, joinDate] = await Promise.all([
     supabase
       .from('attendance_daily_summary')
       .select('*')
@@ -454,6 +468,7 @@ export async function getAttendanceMonthly(
       .gte('date', from)
       .lte('date', to),
     getEffectiveShiftForUser(userId),
+    getUserJoinDate(userId),
   ]);
 
   if (summariesRes.error) throw summariesRes.error;
@@ -470,7 +485,7 @@ export async function getAttendanceMonthly(
     const dayOfWeek = new Date(dateStr).getDay();
     const isOffDay = offDays.includes(dayOfWeek);
     const summary = summaryMap.get(dateStr);
-    const status = resolveCalendarStatus(dateStr, isOffDay, summary, todayStr_);
+    const status = resolveCalendarStatus(dateStr, isOffDay, summary, todayStr_, joinDate);
 
     summaries.push({
       date: dateStr,
@@ -808,7 +823,7 @@ export async function getMonthlyStats(
     lateDays: summaries.filter((d) => d.status === 'late').length,
     absentDays: summaries.filter((d) => d.status === 'absent').length,
     leaveDays: summaries.filter((d) => d.status === 'on_leave').length,
-    totalWorkingDays: summaries.filter((d) => d.status !== 'future' && d.status !== 'weekend').length,
+    totalWorkingDays: summaries.filter((d) => d.status != null && d.status !== 'future' && d.status !== 'weekend').length,
   };
 }
 

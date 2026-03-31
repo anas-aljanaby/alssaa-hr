@@ -8,6 +8,8 @@ interface DashboardHeaderProps {
    * Right-side circle or icon content.
    */
   avatar: React.ReactNode;
+  avatarOnClick?: () => void;
+  avatarAriaLabel?: string;
   /**
    * Optional footer content inside the header card (e.g. small stat row).
    */
@@ -20,6 +22,8 @@ export function DashboardHeader({
   title,
   subtitle,
   avatar,
+  avatarOnClick,
+  avatarAriaLabel,
   footer,
   helperText,
 }: DashboardHeaderProps) {
@@ -31,9 +35,20 @@ export function DashboardHeader({
           <h2 className="text-white">{title}</h2>
           {subtitle && <p className="text-sm opacity-80">{subtitle}</p>}
         </div>
-        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-          {avatar}
-        </div>
+        {avatarOnClick ? (
+          <button
+            type="button"
+            onClick={avatarOnClick}
+            aria-label={avatarAriaLabel ?? 'Open profile'}
+            className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center transition-colors hover:bg-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          >
+            {avatar}
+          </button>
+        ) : (
+          <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+            {avatar}
+          </div>
+        )}
       </div>
       {footer && <div className="bg-white/10 rounded-xl p-3">{footer}</div>}
     </div>

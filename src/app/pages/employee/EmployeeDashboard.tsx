@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
@@ -30,6 +31,7 @@ import { useQuickPunch } from '../../hooks/useQuickPunch';
 
 export function EmployeeDashboard() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
   const [stats, setStats] = useState<MonthlyStats | null>(null);
@@ -120,6 +122,8 @@ export function EmployeeDashboard() {
         title={currentUser.nameAr}
         subtitle={department?.name_ar}
         avatar={<span className="text-xl">{currentUser.nameAr.charAt(0)}</span>}
+        avatarOnClick={() => navigate(`/user-details/${currentUser.uid}`)}
+        avatarAriaLabel="الملف الشخصي"
         helperText={greeting}
         footer={
           <div className="flex items-center justify-between">

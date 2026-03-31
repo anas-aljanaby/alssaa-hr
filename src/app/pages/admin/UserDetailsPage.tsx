@@ -32,6 +32,8 @@ import {
   Phone,
   Calendar,
   Clock,
+  LogIn,
+  LogOut,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -48,6 +50,7 @@ import {
   Download,
   UserCheck,
 } from 'lucide-react';
+import { getStatusTheme } from '../../components/attendance/attendanceStatusTheme';
 
 /** Calendar day YYYY-MM-DD in local time (matches leave form date pickers). */
 function calendarDayKeyFromIso(iso: string): string {
@@ -86,6 +89,51 @@ function calculateLateMinutes(
   const checkMinutes = checkHour * 60 + checkMin;
   const startMinutes = startHour * 60 + startMin + gracePeriod;
   return Math.max(0, checkMinutes - startMinutes);
+}
+
+function formatWallTime(t: string | null): string {
+  if (!t) return '--:--';
+  return t.includes('T') ? t.slice(11, 16) : t.slice(0, 5);
+}
+
+function formatDayAndMonth(date: string) {
+  const d = new Date(`${date}T00:00:00`);
+  const day = new Intl.DateTimeFormat('en-US', { day: '2-digit', numberingSystem: 'latn' }).format(d);
+  const AR_GREGORIAN_MONTHS = [
+    'يناير',
+    'فبراير',
+    'مارس',
+    'ابريل',
+    'مايو',
+    'يونيو',
+    'يوليو',
+    'اغسطس',
+    'سبتمبر',
+    'اكتوبر',
+    'نوفمبر',
+    'ديسمبر',
+  ];
+  const month = AR_GREGORIAN_MONTHS[d.getMonth()] ?? '';
+  return { day, month };
+}
+
+function formatWeekday(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('ar-IQ', {
+    weekday: 'long',
+  });
+}
+
+function getAttendanceLogTheme(status: AttendanceLog['status']) {
+  switch (status) {
+    case 'present':
+      return getStatusTheme('present');
+    case 'late':
+      return getStatusTheme('late');
+    case 'on_leave':
+      return getStatusTheme('on_leave');
+    default:
+      return getStatusTheme('absent');
+  }
 }
 
 export function UserDetailsPage() {
@@ -749,7 +797,7 @@ export function UserDetailsPage() {
       {activeTab === 'attendance' && (
         <div className="space-y-3">
           {/* Work schedule card: show days and times; admin can edit */}
-          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium text-gray-700">جدول العمل</h3>
               {currentUser?.role === 'admin' && (
@@ -788,7 +836,7 @@ export function UserDetailsPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700">الفترة</h3>
               {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
@@ -831,82 +879,56 @@ export function UserDetailsPage() {
           <div className="space-y-2">
             {attendanceLogs.length > 0 ? (
               attendanceLogs.map((log) => {
-                const lateMinutes = log.check_in_time
-                  ? calculateLateMinutes(log.check_in_time)
-                  : 0;
-                const linkedLeave =
-                  log.status === 'on_leave'
-                    ? findApprovedLeaveForLogDate(String(log.date), userRequests)
-                    : null;
+                const statusTheme = getAttendanceLogTheme(log.status);
+                const openSession = !log.check_out_time;
+                const dateParts = formatDayAndMonth(log.date);
                 return (
                   <div
                     key={log.id}
-                    className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm"
+                    className="relative bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.08)] p-4 pt-8 border-r-4"
+                    style={statusTheme.accentStyle}
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="text-sm text-gray-800" dir="ltr">
-                          {log.date}
-                        </p>
-                        <span
-                          className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs ${
-                            log.status === 'present'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : log.status === 'late'
-                                ? 'bg-amber-100 text-amber-700'
-                                : log.status === 'on_leave'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-red-100 text-red-700'
-                          }`}
-                        >
-                          {getAttendanceStatusAr(log.status)}
-                        </span>
-                        {linkedLeave && (
-                          <button
-                            type="button"
-                            aria-label="الانتقال إلى طلب الإجازة المرتبط بهذا اليوم"
-                            onClick={() =>
-                              navigate(
-                                `/user-details/${userId}?request=${encodeURIComponent(linkedLeave.id)}`
-                              )
-                            }
-                            className="mt-2 flex w-full max-w-full items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1.5 text-left text-[11px] text-violet-900 transition-colors hover:bg-violet-100"
-                          >
-                            <UserCheck className="h-3.5 w-3.5 shrink-0 text-violet-600" aria-hidden />
-                            <span className="min-w-0 truncate">
-                              {linkedLeave.approver_profile?.name_ar?.trim()
-                                ? `تمت الموافقة بواسطة: ${linkedLeave.approver_profile.name_ar.trim()}`
-                                : 'طلب إجازة معتمد — عرض التفاصيل'}
-                            </span>
-                          </button>
-                        )}
+                    <span
+                      className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium font-['IBM_Plex_Sans_Arabic',_sans-serif]"
+                      style={statusTheme.badgeSolidStyle}
+                    >
+                      {statusTheme.label}
+                    </span>
+
+                    <div className="flex items-center gap-5">
+                      <div className="min-w-[78px] text-center">
+                        <p className="text-[12px] font-normal text-[#94A3B8] font-['IBM_Plex_Sans_Arabic',_sans-serif]">{formatWeekday(log.date)}</p>
+                        <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900 font-['IBM_Plex_Sans_Arabic',_sans-serif]">
+                          <span className="text-[20px] font-bold leading-none">{dateParts.day}</span>
+                          <span className="text-[13px] font-bold leading-none">{dateParts.month}</span>
+                        </div>
                       </div>
-                      {lateMinutes > 0 && (
-                        <span className="text-xs text-amber-600">تأخير {lateMinutes} د</span>
-                      )}
+
+                      <div className="h-12 w-px bg-gray-200" />
+
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <div className="flex items-center gap-3 text-gray-800">
+                          <LogIn className="w-4 h-4 text-teal-700" />
+                          <span className="text-[15px] font-medium text-[#334155] font-['IBM_Plex_Mono',_monospace] tabular-nums">
+                            {formatWallTime(log.check_in_time)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-gray-800">
+                          <LogOut className="w-4 h-4 text-gray-500" />
+                          <span className={`text-[15px] font-medium font-['IBM_Plex_Mono',_monospace] tabular-nums ${openSession ? 'text-gray-300' : 'text-[#334155]'}`}>
+                            {formatWallTime(log.check_out_time)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    {(log.check_in_time || log.check_out_time) && (
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <span className="text-gray-500">الدخول:</span>
-                          <span className="text-gray-700 mr-2" dir="ltr">
-                            {log.check_in_time || '—'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">الخروج:</span>
-                          <span className="text-gray-700 mr-2" dir="ltr">
-                            {log.check_out_time || '—'}
-                          </span>
-                          {log.auto_punch_out && (
-                            <span className="mr-1 px-1.5 py-0.5 text-amber-600 bg-amber-100 rounded text-[10px] border border-amber-200">
-                              انصراف تلقائي
-                            </span>
-                          )}
-                        </div>
+
+                    {log.auto_punch_out && (
+                      <div className="mt-3 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 inline-flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        انصراف تلقائي
                       </div>
                     )}
-                    {/* Location details removed: location tracking disabled */}
                   </div>
                 );
               })

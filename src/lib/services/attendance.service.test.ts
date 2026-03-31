@@ -224,6 +224,7 @@ describe('attendance.service', () => {
 
   it('getMonthlyStats aggregates statuses', async () => {
     sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
     sb.queueResult({
       data: [
         {
@@ -266,6 +267,7 @@ describe('attendance.service', () => {
 
   it('calendar maps overtime_only summary to overtime_only status', async () => {
     sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
     sb.queueResult({
       data: [{
         id: 'sum-ot-only',
@@ -293,6 +295,7 @@ describe('attendance.service', () => {
 
   it('calendar maps off-day sessions to overtime_offday indicator', async () => {
     sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
     sb.queueResult({
       data: [{
         id: 'sum-offday-ot',
@@ -316,6 +319,20 @@ describe('attendance.service', () => {
     const month = await getAttendanceMonthly('u1', 2025, 5); // June
     const day = month.find((d) => d.date === '2025-06-06');
     expect(day?.status).toBe('overtime_offday');
+  });
+
+  it('calendar does not mark pre-join working days as absent', async () => {
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: { join_date: '2025-06-05' }, error: null });
+    sb.queueResult({ data: [], error: null });
+    sb.queueResult({ data: policyRow, error: null });
+
+    const { getAttendanceMonthly } = await import('./attendance.service');
+    const month = await getAttendanceMonthly('u1', 2025, 5); // June
+    const preJoinDay = month.find((d) => d.date === '2025-06-03');
+    const postJoinWorkday = month.find((d) => d.date === '2025-06-10');
+    expect(preJoinDay?.status).toBeNull();
+    expect(postJoinWorkday?.status).toBe('absent');
   });
 
   it('checkIn inserts when no existing log', async () => {
