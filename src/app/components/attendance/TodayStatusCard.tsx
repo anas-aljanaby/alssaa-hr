@@ -9,6 +9,7 @@ import {
 } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
+import { getStatusTheme } from './attendanceStatusTheme';
 
 interface Props {
   today: TodayRecord;
@@ -34,6 +35,20 @@ function formatTime(t: string): string {
   return wallTimeHHMM(t) ?? '--:--';
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '');
+  const isShortHex = normalized.length === 3;
+  const expanded = isShortHex
+    ? normalized.split('').map((ch) => ch + ch).join('')
+    : normalized;
+
+  const r = parseInt(expanded.slice(0, 2), 16);
+  const g = parseInt(expanded.slice(2, 4), 16);
+  const b = parseInt(expanded.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function todayArabicDate(): string {
   return now().toLocaleDateString('ar-IQ', {
     weekday: 'long',
@@ -45,6 +60,8 @@ function todayArabicDate(): string {
 
 export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }: Props) {
   const { log, shift } = today;
+  const overtimeColor = getStatusTheme('overtime_only').color;
+  const overtimeClockColor = '#D97706';
 
   const [punchInElapsedSeconds, setPunchInElapsedSeconds] = useState(0);
   const [workdayElapsedSeconds, setWorkdayElapsedSeconds] = useState(0);
@@ -125,8 +142,6 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
     ? Math.max(0, (currentMinutes - shiftEndMinutes!) * 60 + currentNow.getSeconds())
     : 0;
 
-  const hoursWorkedSeconds = isCheckedIn ? punchInElapsedSeconds : 0;
-
   // Badge logic for first punch: check overtime first (matches service logic), then late
   const firstPunchIsOvertime =
     log?.check_in_time && shift
@@ -173,35 +188,41 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
           )}
         </div>
 
-        {/* Round clock: blue during regular hours, amber during overtime */}
+        {/* Round clock: blue during regular hours, overtime color during overtime */}
         <div
           className={`w-28 h-28 mx-auto rounded-full flex flex-col items-center justify-center mb-5 ${
             !isCheckedIn && showShiftCongrats
-              ? 'bg-emerald-50 border-4 border-emerald-200'
+              ? 'bg-[#0D9488]/10 border-4 border-[#0D9488]/20'
               : isCheckedIn && clockIsOvertime
-                ? 'bg-amber-50 border-4 border-amber-300 animate-pulse'
+                ? 'border-4 animate-pulse'
                 : isCheckedIn
                   ? 'bg-blue-50 border-4 border-blue-200 animate-pulse'
                   : 'bg-gray-50 border-4 border-gray-200'
           }`}
+          style={isCheckedIn && clockIsOvertime
+            ? {
+              backgroundColor: hexToRgba(overtimeClockColor, 0.1),
+              borderColor: hexToRgba(overtimeClockColor, 0.3),
+            }
+            : undefined}
         >
           {!isCheckedIn && showShiftCongrats ? (
             <>
-              <CheckCircle2 className="w-7 h-7 text-emerald-500 mb-0.5" />
-              <span className="text-xs text-emerald-600 font-medium text-center leading-tight px-1">
+              <CheckCircle2 className="w-7 h-7 text-[#0D9488] mb-0.5" />
+              <span className="text-xs text-[#0D9488] font-medium text-center leading-tight px-1">
                 أحسنت
               </span>
-              <span className="text-[10px] text-emerald-600/90 text-center leading-tight px-1 mt-0.5">
+              <span className="text-[10px] text-[#0D9488]/90 text-center leading-tight px-1 mt-0.5">
                 استوفيت متطلبات الدوام
               </span>
             </>
           ) : isCheckedIn ? (
             <>
-              <Clock className={`w-7 h-7 mb-0.5 ${clockIsOvertime ? 'text-amber-500' : 'text-blue-500'}`} />
-              <span className={`text-xs font-mono tabular-nums font-semibold leading-tight ${clockIsOvertime ? 'text-amber-700' : 'text-blue-700'}`}>
+              <Clock className={`w-7 h-7 mb-0.5 ${clockIsOvertime ? '' : 'text-blue-500'}`} style={clockIsOvertime ? { color: overtimeClockColor } : undefined} />
+              <span className={`text-xs font-mono tabular-nums font-semibold leading-tight ${clockIsOvertime ? '' : 'text-blue-700'}`} style={clockIsOvertime ? { color: overtimeClockColor } : undefined}>
                 {formatElapsed(punchInElapsedSeconds)}
               </span>
-              <span className={`text-xs ${clockIsOvertime ? 'text-amber-500' : 'text-blue-500'}`}>
+              <span className={`text-xs ${clockIsOvertime ? '' : 'text-blue-500'}`} style={clockIsOvertime ? { color: overtimeClockColor } : undefined}>
                 {clockIsOvertime ? 'عمل إضافي' : 'في العمل'}
               </span>
             </>
@@ -221,11 +242,20 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
               <div className="flex items-center gap-1.5">
                 <p className="text-gray-800 font-medium">{formatTime(log.check_in_time)}</p>
                 {firstPunchIsOvertime ? (
-                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">عمل إضافي</span>
+                  <span
+                    className="px-1.5 py-0.5 text-xs rounded-full border"
+                    style={{
+                      backgroundColor: hexToRgba(overtimeColor, 0.1),
+                      color: overtimeColor,
+                      borderColor: hexToRgba(overtimeColor, 0.2),
+                    }}
+                  >
+                    عمل إضافي
+                  </span>
                 ) : firstPunchIsLate ? (
-                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200">متأخر</span>
+                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-[#D97706]/10 text-[#D97706] border border-[#D97706]/20">متأخر</span>
                 ) : (
-                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">في الوقت</span>
+                  <span className="px-1.5 py-0.5 text-xs rounded-full bg-[#0D9488]/10 text-[#0D9488] border border-[#0D9488]/20">في الوقت</span>
                 )}
               </div>
             </div>
@@ -257,8 +287,8 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
         {/* Overtime elapsed indicator when working past shift end */}
         {isCheckedIn && isPastShiftEnd && isWorkingDay && !firstPunchIsOvertime && (
           <div className="text-center mb-4">
-            <span className="text-sm text-amber-600">
-              عمل إضافي: <span className="font-semibold text-amber-700">{formatElapsed(overtimeElapsedSeconds)}</span>
+            <span className="text-sm" style={{ color: overtimeColor }}>
+              عمل إضافي: <span className="font-semibold" style={{ color: overtimeColor }}>{formatElapsed(overtimeElapsedSeconds)}</span>
             </span>
           </div>
         )}
@@ -292,13 +322,13 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
           </div>
         )}
         {!isCheckedIn && isOvertime && (
-          <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-amber-500">
+          <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-amber-600">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>سيتم احتساب هذا كعمل إضافي وإنشاء طلب تلقائياً</span>
           </div>
         )}
         {!isCheckedIn && log?.check_in_time && firstPunchIsOvertime && (
-          <div className="flex items-center gap-1.5 justify-center mb-3 text-xs text-amber-500">
+          <div className="flex items-center gap-1.5 justify-center mb-3 text-xs" style={{ color: overtimeColor }}>
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة</span>
           </div>
@@ -339,8 +369,11 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
       {confirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl text-center">
-            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
-              <AlertTriangle className="w-6 h-6 text-amber-500" />
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
+              style={{ backgroundColor: hexToRgba(overtimeColor, 0.12) }}
+            >
+              <AlertTriangle className="w-6 h-6" style={{ color: overtimeColor }} />
             </div>
             <h3 className="text-gray-800 font-semibold mb-2">تأكيد عمل إضافي</h3>
             <p className="text-sm text-gray-500 mb-5">

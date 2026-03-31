@@ -416,6 +416,27 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
   return { log, punches, shift, totalMinutesWorked, sessions, summary };
 }
 
+export async function getAttendanceSessions(
+  userId: string,
+  date?: string
+): Promise<AttendanceSession[]> {
+  let query = supabase
+    .from('attendance_sessions')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (date) {
+    query = query.eq('date', date);
+  }
+
+  const { data, error } = await query
+    .order('date', { ascending: false })
+    .order('check_in_time', { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getAttendanceMonthly(
   userId: string,
   year: number,

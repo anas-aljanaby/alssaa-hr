@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Drawer,
   DrawerContent,
@@ -8,30 +8,13 @@ import {
 import { LogIn, LogOut, Clock } from 'lucide-react';
 import type { DayRecord, PunchEntry } from '@/lib/services/attendance.service';
 import { getAttendanceDay } from '@/lib/services/attendance.service';
+import { getStatusTheme } from './attendanceStatusTheme';
 
 interface Props {
   userId: string;
   date: string | null;
   onClose: () => void;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  present: 'حاضر',
-  late: 'متأخر',
-  absent: 'غائب',
-  on_leave: 'إجازة',
-  overtime_only: 'عمل إضافي فقط',
-  overtime_offday: 'عمل إضافي (يوم عطلة)',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  present: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  late: 'bg-amber-100 text-amber-700 border-amber-200',
-  absent: 'bg-red-100 text-red-700 border-red-200',
-  on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
-  overtime_only: 'bg-violet-100 text-violet-700 border-violet-200',
-  overtime_offday: 'bg-violet-100 text-violet-700 border-violet-200',
-};
 
 function formatDateAr(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('ar-IQ', {
@@ -104,6 +87,10 @@ export function DayDetailsSheet({ userId, date, onClose }: Props) {
   const open = !!date;
   const displayStatus = record?.summary?.effective_status
     ?? (((record?.summary?.session_count ?? 0) > 0 && !record?.summary?.effective_status) ? 'overtime_offday' : record?.log?.status);
+  const displayStatusTheme = displayStatus
+    && (displayStatus === 'present' || displayStatus === 'late' || displayStatus === 'absent' || displayStatus === 'on_leave' || displayStatus === 'overtime_only' || displayStatus === 'overtime_offday')
+    ? getStatusTheme(displayStatus)
+    : null;
 
   const sessionMap = new Map((record?.sessions ?? []).map((s) => [s.id, s]));
 
@@ -136,8 +123,11 @@ export function DayDetailsSheet({ userId, date, onClose }: Props) {
               {/* Status + total hours */}
               <div className="flex items-center gap-3 mb-4">
                 {displayStatus && (
-                  <span className={`px-2.5 py-1 text-xs rounded-full border ${STATUS_COLORS[displayStatus] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                    {STATUS_LABELS[displayStatus] ?? displayStatus}
+                  <span
+                    className="px-2.5 py-1 text-xs rounded-full border bg-gray-100 text-gray-600 border-gray-200"
+                    style={displayStatusTheme?.badgeSoftStyle}
+                  >
+                    {displayStatusTheme?.label ?? displayStatus}
                   </span>
                 )}
                 {record.totalMinutesWorked > 0 && (

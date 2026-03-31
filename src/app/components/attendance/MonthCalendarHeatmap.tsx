@@ -1,7 +1,8 @@
-import React from 'react';
 import { ChevronRight, ChevronLeft, Calendar } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import type { MonthDaySummary } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
+import { CALENDAR_LEGEND_STATUSES, getCalendarDotClass, getStatusTheme } from './attendanceStatusTheme';
 
 interface Props {
   year: number;
@@ -21,22 +22,6 @@ const MONTH_NAMES = [
 // Arabic day abbreviations, Sunday-first
 const DAY_HEADERS = ['أح', 'إث', 'ثل', 'أر', 'خم', 'جم', 'سب'];
 
-function dotColor(status: MonthDaySummary['status']): string | null {
-  switch (status) {
-    case 'present': return 'bg-emerald-500';
-    case 'late': return 'bg-amber-500';
-    case 'absent': return 'bg-red-500';
-    case 'on_leave': return 'bg-blue-400';
-    case 'overtime_only':
-    case 'overtime_offday':
-      return 'bg-violet-500';
-    case 'weekend':
-    case 'future':
-    case null: return null;
-    default: return null;
-  }
-}
-
 export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMonth, onNextMonth, onDayTap }: Props) {
   const today = now();
   const currentYear = today.getFullYear();
@@ -50,6 +35,7 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const summaryMap = new Map(summaries.map((s) => [s.date, s]));
+  const overtimeMarkerColor = getStatusTheme('overtime_offday').color;
 
   const cells: (number | null)[] = [
     ...Array(firstDayOfMonth).fill(null),
@@ -108,7 +94,7 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
             const isFutureDay = summary?.status === 'future';
             const isWeekend = summary?.status === 'weekend';
             const isOvertimeOffday = summary?.status === 'overtime_offday';
-            const dot = summary ? dotColor(summary.status) : null;
+            const dot = summary ? getCalendarDotClass(summary.status) : null;
             const isTappable = !isFutureDay && summary?.status !== 'weekend' && summary?.status != null;
 
             return (
@@ -130,13 +116,20 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
                   {day}
                 </span>
                 {dot && !isToday && (
-                  <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                  <span className="w-1.5 h-1.5 rounded-full" style={dot} />
                 )}
                 {isToday && dot && (
                   <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
                 )}
                 {isOvertimeOffday && !isToday && (
-                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-violet-200 border border-violet-500" />
+                  <span
+                    className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full border"
+                    style={{
+                      backgroundColor: overtimeMarkerColor,
+                      borderColor: overtimeMarkerColor,
+                      opacity: 0.25,
+                    }}
+                  />
                 )}
               </button>
             );
@@ -146,20 +139,22 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
 
       {/* Legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 justify-center">
-        <LegendItem color="bg-emerald-500" label="حاضر" />
-        <LegendItem color="bg-amber-500" label="متأخر" />
-        <LegendItem color="bg-red-500" label="غائب" />
-        <LegendItem color="bg-blue-400" label="إجازة" />
-        <LegendItem color="bg-violet-500" label="عمل إضافي" />
+        {CALENDAR_LEGEND_STATUSES.map((statusKey) => (
+          <LegendItem
+            key={statusKey}
+            dotStyle={getStatusTheme(statusKey).dotStyle}
+            label={getStatusTheme(statusKey).label}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-function LegendItem({ color, label }: { color: string; label: string }) {
+function LegendItem({ dotStyle, label }: { dotStyle: CSSProperties; label: string }) {
   return (
     <div className="flex items-center gap-1">
-      <span className={`w-2 h-2 rounded-full ${color}`} />
+      <span className="w-2 h-2 rounded-full" style={dotStyle} />
       <span className="text-xs text-gray-400">{label}</span>
     </div>
   );

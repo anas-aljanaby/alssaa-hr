@@ -1,53 +1,62 @@
-import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { TodayPunchLog } from './TodayPunchLog';
-import type { PunchEntry } from '@/lib/services/attendance.service';
+import type { AttendanceSession } from '@/lib/services/attendance.service';
 
-function punchesThreeClosedSegments(): PunchEntry[] {
+function sessionsThreeSegments(): AttendanceSession[] {
   return [
-    { id: 's1-in', timestamp: '08:30', type: 'clock_in', isOvertime: false },
-    { id: 's1-out', timestamp: '12:00', type: 'clock_out', isOvertime: false },
-    { id: 's2-in', timestamp: '13:00', type: 'clock_in', isOvertime: false },
-    { id: 's2-out', timestamp: '14:00', type: 'clock_out', isOvertime: false },
-    { id: 's3-in', timestamp: '14:30', type: 'clock_in', isOvertime: false },
-    { id: 's3-out', timestamp: '18:00', type: 'clock_out', isOvertime: false },
+    {
+      id: 's1',
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2026-03-05',
+      check_in_time: '08:30',
+      check_out_time: '12:00',
+      status: 'present',
+      is_overtime: false,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+      duration_minutes: 210,
+      last_action_at: '',
+      is_dev: false,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 's2',
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2026-03-06',
+      check_in_time: '09:12',
+      check_out_time: null,
+      status: 'late',
+      is_overtime: false,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+      duration_minutes: 0,
+      last_action_at: '',
+      is_dev: false,
+      created_at: '',
+      updated_at: '',
+    },
   ];
 }
 
 describe('TodayPunchLog', () => {
-  /**
-   * Doc §24.2: With two breaks, the timeline must list every check-in and check-out in order.
-   */
-  it('24.2 renders six punch rows alternating حضور / انصراف for three closed sessions', () => {
-    render(<TodayPunchLog punches={punchesThreeClosedSegments()} isCheckedIn={false} />);
+  it('renders session cards with check-in and check-out times', () => {
+    render(<TodayPunchLog sessions={sessionsThreeSegments()} selectedDate={null} />);
 
-    expect(screen.getByText('سجل اليوم')).toBeInTheDocument();
-
-    const ins = screen.getAllByText('← تسجيل حضور');
-    const outs = screen.getAllByText('→ تسجيل انصراف');
-    expect(ins).toHaveLength(3);
-    expect(outs).toHaveLength(3);
-
-    const times = screen.getAllByText(/\d{2}:\d{2}/);
-    const timeTexts = times.map((el) => el.textContent);
-    expect(timeTexts.slice(0, 6)).toEqual(['08:30', '12:00', '13:00', '14:00', '14:30', '18:00']);
+    expect(screen.getByText('سجل الجلسات')).toBeInTheDocument();
+    expect(screen.getByText('08:30')).toBeInTheDocument();
+    expect(screen.getByText('12:00')).toBeInTheDocument();
+    expect(screen.getByText('09:12')).toBeInTheDocument();
+    expect(screen.getByText('مباشر')).toBeInTheDocument();
   });
 
-  /**
-   * Doc §24.3: Open third segment — last row is check-in; prior check-outs must still appear.
-   */
-  it('24.3 renders five punches with third segment open and isCheckedIn true', () => {
-    const punches = punchesThreeClosedSegments().slice(0, 5);
-    render(<TodayPunchLog punches={punches} isCheckedIn />);
-
-    expect(screen.getAllByText('← تسجيل حضور')).toHaveLength(3);
-    expect(screen.getAllByText('→ تسجيل انصراف')).toHaveLength(2);
-
-    const root = screen.getByText('سجل اليوم').closest('div')?.parentElement;
-    expect(root).toBeTruthy();
-    const block = root as HTMLElement;
-    const timeLabels = within(block).getAllByText(/\d{2}:\d{2}/);
-    expect(timeLabels.map((el) => el.textContent)).toEqual(['08:30', '12:00', '13:00', '14:00', '14:30']);
+  it('renders filtered-day empty state message', () => {
+    render(<TodayPunchLog sessions={[]} selectedDate="2026-03-06" />);
+    expect(screen.getByText('لا توجد جلسات في هذا اليوم')).toBeInTheDocument();
   });
 });
