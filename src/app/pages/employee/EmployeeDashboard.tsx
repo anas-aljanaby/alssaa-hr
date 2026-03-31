@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
@@ -26,12 +25,11 @@ import {
 import { StatCard } from '../../components/shared/StatCard';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { getStatusColor } from '@/lib/ui-helpers';
-import { QuickPunchCard } from '../../components/attendance/QuickPunchCard';
+import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { useQuickPunch } from '../../hooks/useQuickPunch';
 
 export function EmployeeDashboard() {
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
   const [stats, setStats] = useState<MonthlyStats | null>(null);
@@ -142,14 +140,16 @@ export function EmployeeDashboard() {
         }
       />
 
-      <QuickPunchCard
-        today={quickPunch.today}
-        loading={quickPunch.loading}
-        actionLoading={quickPunch.actionLoading}
-        onCheckIn={quickPunch.handleCheckIn}
-        onCheckOut={quickPunch.handleCheckOut}
-        onOpenAttendance={() => navigate('/attendance')}
-      />
+      {quickPunch.loading ? (
+        <div className="bg-gray-100 rounded-2xl h-64 animate-pulse" />
+      ) : (
+        <TodayStatusCard
+          today={quickPunch.today}
+          actionLoading={quickPunch.actionLoading}
+          onCheckIn={quickPunch.handleCheckIn}
+          onCheckOut={quickPunch.handleCheckOut}
+        />
+      )}
 
       {/* Monthly Statistics */}
       {stats && (

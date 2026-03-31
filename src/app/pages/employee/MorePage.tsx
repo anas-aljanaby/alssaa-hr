@@ -117,13 +117,6 @@ export function MorePage() {
                     onClick: () => navigate('/transfer-general-manager'),
                   },
               {
-                icon: Clock,
-                label: 'سياسة الحضور',
-                color: 'text-slate-600',
-                bgColor: 'bg-slate-50',
-                onClick: () => navigate('/attendance-policy'),
-              },
-              {
                 icon: Calendar,
                 label: 'تسجيل الحضور',
                 color: 'text-emerald-500',

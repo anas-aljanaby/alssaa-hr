@@ -1,19 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useApp } from '../../contexts/AppContext';
 import { useDevTime } from '../../contexts/DevTimeContext';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import type { TodayRecord, MonthDaySummary } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
-import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { TodayPunchLog } from '../../components/attendance/TodayPunchLog';
 import { MonthCalendarHeatmap } from '../../components/attendance/MonthCalendarHeatmap';
 import { DayDetailsSheet } from '../../components/attendance/DayDetailsSheet';
 
 export function AttendancePage() {
   const { currentUser } = useAuth();
-  const { checkIn, checkOut } = useApp();
   const devTime = useDevTime();
 
   const [today, setToday] = useState<TodayRecord>({ log: null, punches: [], shift: null });
@@ -23,9 +20,6 @@ export function AttendancePage() {
   const [selectedYear, setSelectedYear] = useState(now().getFullYear());
   const [monthlySummaries, setMonthlySummaries] = useState<MonthDaySummary[]>([]);
   const [monthlyLoading, setMonthlyLoading] = useState(true);
-
-  const [actionLoading, setActionLoading] = useState(false);
-  const actionInFlightRef = useRef(false);
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
@@ -80,49 +74,6 @@ export function AttendancePage() {
     }
   }, [devTime?.override?.date, loadToday, currentUser]);
 
-  const handleCheckIn = async () => {
-    if (!currentUser || actionInFlightRef.current) return;
-    actionInFlightRef.current = true;
-    setActionLoading(true);
-    try {
-      const { log } = await checkIn(currentUser.uid);
-      if (navigator.vibrate) navigator.vibrate(100);
-      const updated = await attendanceService.getAttendanceToday(currentUser.uid);
-      setToday({ ...updated, log });
-      loadMonthly();
-    } catch {
-      // toast handled by context
-    } finally {
-      actionInFlightRef.current = false;
-      setActionLoading(false);
-    }
-  };
-
-  const handleCheckOut = async (checkoutTime?: string) => {
-    if (!currentUser || actionInFlightRef.current) return;
-    actionInFlightRef.current = true;
-    setActionLoading(true);
-    try {
-      const result = await checkOut(currentUser.uid, checkoutTime);
-      if (navigator.vibrate) navigator.vibrate(100);
-      // Always update UI with checkout result so shift-congrats / totals refresh immediately.
-      // If getAttendanceToday fails (e.g. network), we still keep the latest log until next load.
-      setToday((prev) => ({ ...prev, log: result.log }));
-      try {
-        const updated = await attendanceService.getAttendanceToday(currentUser.uid);
-        setToday({ ...updated, log: result.log });
-      } catch {
-        // Keep today with result log; punches may be stale until next load
-      }
-      loadMonthly();
-    } catch {
-      // toast handled by context
-    } finally {
-      actionInFlightRef.current = false;
-      setActionLoading(false);
-    }
-  };
-
   const prevMonth = () => {
     if (selectedMonth === 0) {
       setSelectedMonth(11);
@@ -148,32 +99,11 @@ export function AttendancePage() {
 
   if (!currentUser) return null;
 
-  const isCheckedIn = attendanceService.isCheckedInToday(today);
-
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4 pb-24">
       <h1 className="text-gray-800 font-semibold text-lg">الحضور والانصراف</h1>
 
-      {/* Section 1: Today's Status Card */}
-      {todayLoading ? (
-        <div className="bg-gray-100 rounded-2xl h-64 animate-pulse" />
-      ) : (
-        <TodayStatusCard
-          today={today}
-          actionLoading={actionLoading}
-          onCheckIn={handleCheckIn}
-          onCheckOut={handleCheckOut}
-        />
-      )}
-
-      {/* Section 2: Today's Punch Log */}
-      {todayLoading ? (
-        <div className="bg-gray-100 rounded-2xl h-28 animate-pulse" />
-      ) : (
-        <TodayPunchLog punches={today.punches} isCheckedIn={isCheckedIn} />
-      )}
-
-      {/* Section 3: Monthly Calendar Heatmap */}
+      {/* Section 1: Monthly Calendar Heatmap */}
       <MonthCalendarHeatmap
         year={selectedYear}
         month={selectedMonth}
@@ -183,6 +113,13 @@ export function AttendancePage() {
         onNextMonth={nextMonth}
         onDayTap={setSelectedDay}
       />
+
+      {/* Section 2: Daily Punch Log */}
+      {todayLoading ? (
+        <div className="bg-gray-100 rounded-2xl h-28 animate-pulse" />
+      ) : (
+        <TodayPunchLog punches={today.punches} isCheckedIn={attendanceService.isCheckedInToday(today)} />
+      )}
 
       {/* Day Details Bottom Sheet */}
       <DayDetailsSheet
