@@ -131,8 +131,7 @@ export const addUserSchema = z.object({
   email: z.string().min(1, 'البريد الإلكتروني مطلوب').email('البريد الإلكتروني غير صالح'),
   password: strongPassword,
   phone: z.string().optional(),
-  role: z.enum(['employee', 'manager'], { required_error: 'الدور مطلوب' }),
-  department_id: z.string().min(1, 'القسم مطلوب'),
+  department_id: z.string().optional(),
 });
 export type AddUserFormData = z.infer<typeof addUserSchema>;
 

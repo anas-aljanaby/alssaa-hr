@@ -113,14 +113,13 @@ Deno.test('validation INVALID_ROLE', async () => {
   assertEquals(((await json(res)) as { code: string }).code, 'INVALID_ROLE');
 });
 
-Deno.test('validation INVALID_DEPARTMENT', async () => {
+Deno.test('empty department is allowed', async () => {
   const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
   const res = await handleInviteUser(
     post({ email: 'a@b.com', name: 'Ab', password: 'Abc12345', role: 'employee', department_id: '' }),
     makeDeps({ user: { id: 'u1' }, queue: q })
   );
-  assertEquals(res.status, 400);
-  assertEquals(((await json(res)) as { code: string }).code, 'INVALID_DEPARTMENT');
+  assertEquals(res.status, 200);
 });
 
 Deno.test('createUser duplicate message returns 409 DUPLICATE_EMAIL', async () => {

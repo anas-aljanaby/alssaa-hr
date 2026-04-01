@@ -11,7 +11,7 @@ export interface InviteBody {
   password: string;
   phone?: string;
   role: 'employee' | 'manager';
-  department_id: string;
+  department_id?: string;
 }
 
 export type InviteAdminClient = PunchServiceClient & {
@@ -122,27 +122,20 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    if (!department_id) {
-      return new Response(
-        JSON.stringify({ error: 'القسم مطلوب', code: 'INVALID_DEPARTMENT' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const user_metadata: Record<string, unknown> = {
       name,
       name_ar: name,
       role,
       org_id: profile.org_id,
-      department_id,
     };
+    if (department_id) user_metadata.department_id = department_id;
     if (phone) user_metadata.phone = phone;
 
     const { data: createdUser, error } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      data: user_metadata,
+      user_metadata: user_metadata,
     });
 
     if (error) {
@@ -163,6 +156,20 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
         JSON.stringify({ error: msg || 'فشل إنشاء المستخدم', code: 'CREATE_USER_FAILED' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    if (createdUser?.user?.id) {
+      await admin
+        .from('profiles')
+        .update({
+          org_id: profile.org_id,
+          role,
+          name,
+          name_ar: name,
+          phone: phone ?? '',
+          department_id: department_id || null,
+        })
+        .eq('id', createdUser.user.id);
     }
 
     return new Response(

@@ -39,7 +39,7 @@ export function UsersPage() {
 
   const addUserForm = useForm<AddUserFormData>({
     resolver: zodResolver(addUserSchema),
-    defaultValues: { name: '', email: '', password: '', phone: '', role: 'employee', department_id: '' },
+    defaultValues: { name: '', email: '', password: '', phone: '', department_id: '' },
   });
 
   const editUserForm = useForm<UpdateProfileFormData>({
@@ -142,8 +142,8 @@ export function UsersPage() {
         name: data.name.trim(),
         password: data.password,
         phone: data.phone?.trim() || undefined,
-        role: data.role,
-        department_id: data.department_id,
+        role: 'employee',
+        department_id: data.department_id?.trim() || undefined,
       });
       toast.success('تم إنشاء المستخدم بنجاح');
       setShowForm(false);
@@ -417,35 +417,24 @@ export function UsersPage() {
                   <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.password.message}</p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1.5 text-gray-700">الدور</label>
-                  <select
-                    {...addUserForm.register('role')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value="employee">موظف</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block mb-1.5 text-gray-700">القسم</label>
-                  <select
-                    {...addUserForm.register('department_id')}
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      addUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
-                    }`}
-                  >
-                    <option value="">اختر القسم</option>
-                    {departmentsForAdd.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name_ar}
-                      </option>
-                    ))}
-                  </select>
-                  {addUserForm.formState.errors.department_id && (
-                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.department_id.message}</p>
-                  )}
-                </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">القسم</label>
+                <select
+                  {...addUserForm.register('department_id')}
+                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    addUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
+                  }`}
+                >
+                  <option value="">بدون قسم</option>
+                  {departmentsForAdd.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name_ar}
+                    </option>
+                  ))}
+                </select>
+                {addUserForm.formState.errors.department_id && (
+                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.department_id.message}</p>
+                )}
               </div>
               <button
                 type="submit"

@@ -80,7 +80,7 @@ export interface InviteUserPayload {
   password: string;
   phone?: string;
   role: 'employee' | 'manager';
-  department_id: string;
+  department_id?: string;
 }
 
 export interface InviteUserResult {

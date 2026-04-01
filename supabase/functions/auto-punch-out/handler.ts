@@ -39,12 +39,18 @@ function diffMinutes(checkIn: string, checkOut: string): number {
 
 export type AutoPunchEnv = {
   supabaseUrl: string;
+  supabaseAnonKey: string;
   serviceRoleKey: string;
   isProduction: boolean;
 };
 
+export type AutoPunchUserClient = {
+  auth: { getUser: () => Promise<{ data: { user: { id: string } | null }; error: unknown | null }> };
+};
+
 export type AutoPunchDeps = {
   getEnv: () => AutoPunchEnv;
+  createUserClient: (authHeader: string) => AutoPunchUserClient;
   createServiceClient: () => PunchServiceClient;
 };
 
@@ -69,7 +75,35 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       );
     }
 
-    const { isProduction } = deps.getEnv();
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const { isProduction, serviceRoleKey } = deps.getEnv();
+    const admin = deps.createServiceClient();
+
+    // Allow secure system calls using the service-role token (e.g., scheduler).
+    // Otherwise require a valid logged-in admin user.
+    if (token !== serviceRoleKey) {
+      const clientWithAuth = deps.createUserClient(authHeader);
+      const { data: { user: caller } } = await clientWithAuth.auth.getUser();
+      if (!caller) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized', code: 'UNAUTHORIZED' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: profileRaw } = await admin
+        .from('profiles')
+        .select('role')
+        .eq('id', caller.id)
+        .single();
+      const profile = profileRaw as { role?: string } | null;
+      if (!profile || profile.role !== 'admin') {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden', code: 'FORBIDDEN' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     let effectiveNow: Date;
     try {
@@ -88,8 +122,6 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     const today = toDateStr(effectiveNow);
     const localNow = toOrgLocalDate(effectiveNow);
     const nowMinutes = localNow.getUTCHours() * 60 + localNow.getUTCMinutes();
-
-    const admin = deps.createServiceClient();
 
     const { data: openSessionsRaw, error: sessionsError } = await admin
       .from('attendance_sessions')

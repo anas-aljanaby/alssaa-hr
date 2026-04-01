@@ -1,0 +1,17 @@
+[functions.invite-user]
+verify_jwt = false
+
+[functions.delete-user]
+verify_jwt = false
+
+[functions.punch]
+verify_jwt = false
+
+[functions.dev-seed-attendance]
+verify_jwt = false
+
+[functions.dev-reset-attendance]
+verify_jwt = false
+
+[functions.auto-punch-out]
+verify_jwt = false

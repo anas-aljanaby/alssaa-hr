@@ -297,7 +297,6 @@ describe('addUserSchema', () => {
     name: 'Ali',
     email: 'a@b.com',
     password: STRONG_PW,
-    role: 'employee' as const,
     department_id: 'dept-1',
   };
 
@@ -324,15 +323,9 @@ describe('addUserSchema', () => {
     expect(r.success).toBe(false);
   });
 
-  it('rejects invalid role', () => {
-    const r = addUserSchema.safeParse({ ...valid, role: 'admin' });
-    expect(r.success).toBe(false);
-    if (!r.success) expect(errorPaths(r)).toContain('role');
-  });
-
-  it('rejects empty department_id', () => {
+  it('accepts empty department_id (none)', () => {
     const r = addUserSchema.safeParse({ ...valid, department_id: '' });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
   });
 
   it('rejects weak password', () => {

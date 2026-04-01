@@ -8,6 +8,7 @@ import {
   toDateStr,
   type AutoPunchDeps,
   type AutoPunchEnv,
+  type AutoPunchUserClient,
 } from './handler.ts';
 
 Deno.test('toDateStr', () => {
@@ -26,6 +27,7 @@ Deno.test('formatTimeHHMM', () => {
 
 const baseEnv: AutoPunchEnv = {
   supabaseUrl: 'https://x.supabase.co',
+  supabaseAnonKey: 'anon',
   serviceRoleKey: 'service',
   isProduction: false,
 };
@@ -34,6 +36,12 @@ function makeDeps(queue: QResult[]): AutoPunchDeps {
   const admin = createQueuedFromClient(queue);
   return {
     getEnv: () => baseEnv,
+    createUserClient: () =>
+      ({
+        auth: {
+          getUser: async () => ({ data: { user: null }, error: null }),
+        },
+      }) as AutoPunchUserClient,
     createServiceClient: () => admin as unknown as PunchServiceClient,
   };
 }
@@ -42,7 +50,7 @@ function post(body: unknown) {
   return new Request('http://x', {
     method: 'POST',
     headers: {
-      Authorization: 'Bearer t',
+      Authorization: `Bearer ${baseEnv.serviceRoleKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
