@@ -130,7 +130,6 @@ export const addUserSchema = z.object({
   name: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
   email: z.string().min(1, 'البريد الإلكتروني مطلوب').email('البريد الإلكتروني غير صالح'),
   password: strongPassword,
-  phone: z.string().optional(),
   department_id: z.string().optional(),
 });
 export type AddUserFormData = z.infer<typeof addUserSchema>;
@@ -142,7 +141,13 @@ const timeRegex = /^([01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 export const updateProfileSchema = z
   .object({
     name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
-    phone: z.string().optional(),
+    email: z
+      .string()
+      .optional()
+      .refine(
+        (value) => !value || z.string().email().safeParse(value).success,
+        'البريد الإلكتروني غير صالح'
+      ),
     role: z.enum(['employee', 'manager', 'admin'], { required_error: 'الدور مطلوب' }),
     department_id: z.string().min(1, 'القسم مطلوب'),
     work_days: z.array(workDay).optional(),

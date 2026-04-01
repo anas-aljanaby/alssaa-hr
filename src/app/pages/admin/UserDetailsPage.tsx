@@ -9,6 +9,7 @@ import * as departmentsService from '@/lib/services/departments.service';
 import { updateProfileSchema, type UpdateProfileFormData } from '@/lib/validations';
 import { getDeleteUserErrorMessage, getProfileUpdateErrorMessage } from '@/lib/errorMessages';
 import * as attendanceService from '@/lib/services/attendance.service';
+import * as policyService from '@/lib/services/policy.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as auditService from '@/lib/services/audit.service';
@@ -24,12 +25,11 @@ import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog, MonthlyStats } from '@/lib/services/attendance.service';
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
-import type { LeaveRequest, LeaveRequestWithApprover } from '@/lib/services/requests.service';
+import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
 import { now } from '@/lib/time';
 import {
   Mail,
-  Phone,
   Calendar,
   Clock,
   LogIn,
@@ -48,37 +48,10 @@ import {
   Trash2,
   X,
   Download,
-  UserCheck,
 } from 'lucide-react';
 import { getStatusTheme } from '../../components/attendance/attendanceStatusTheme';
 import { StatCard } from '../../components/shared/StatCard';
-
-/** Calendar day YYYY-MM-DD in local time (matches leave form date pickers). */
-function calendarDayKeyFromIso(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function findApprovedLeaveForLogDate(
-  logDate: string,
-  requests: LeaveRequest[]
-): LeaveRequestWithApprover | null {
-  const day = logDate.slice(0, 10);
-  const candidates = (requests as LeaveRequestWithApprover[]).filter(
-    (r) =>
-      (r.type === 'annual_leave' || r.type === 'sick_leave') &&
-      r.status === 'approved' &&
-      day >= calendarDayKeyFromIso(r.from_date_time) &&
-      day <= calendarDayKeyFromIso(r.to_date_time)
-  );
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => {
-    const ta = new Date(a.decided_at ?? a.created_at).getTime();
-    const tb = new Date(b.decided_at ?? b.created_at).getTime();
-    return tb - ta;
-  });
-  return candidates[0]!;
-}
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 
 function calculateLateMinutes(
   checkInTime: string,
@@ -137,6 +110,11 @@ function getAttendanceLogTheme(status: AttendanceLog['status']) {
   }
 }
 
+function getDisplayEmail(email: string | null): string {
+  const value = email?.trim();
+  return value && value.length > 0 ? value : '—';
+}
+
 export function UserDetailsPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -176,12 +154,19 @@ export function UserDetailsPage() {
   const [editAnnualTotal, setEditAnnualTotal] = useState('');
   const [editSickTotal, setEditSickTotal] = useState('');
   const [departments, setDepartments] = useState<Awaited<ReturnType<typeof departmentsService.listDepartments>>>([]);
+  const [orgPolicy, setOrgPolicy] = useState<Awaited<ReturnType<typeof policyService.getPolicy>>>(null);
+  useBodyScrollLock(
+    showEditModal ||
+    showDeleteConfirm ||
+    showAuditLog ||
+    showLeaveBalanceModal
+  );
 
   const editProfileForm = useForm<UpdateProfileFormData>({
     resolver: zodResolver(updateProfileSchema),
     defaultValues: {
       name_ar: '',
-      phone: '',
+      email: '',
       role: 'employee',
       department_id: '',
       work_days: undefined,
@@ -246,22 +231,32 @@ export function UserDetailsPage() {
   useEffect(() => {
     if (profile && currentUser?.role === 'admin') {
       departmentsService.listDepartments().then(setDepartments).catch(() => {});
+      policyService.getPolicy().then(setOrgPolicy).catch(() => {});
     }
   }, [profile, currentUser?.role]);
- 
+
   const openEditModal = useCallback(() => {
     if (!profile) return;
+    const fallbackWorkDays = orgPolicy?.weekly_off_days
+      ? [0, 1, 2, 3, 4, 5, 6].filter((d) => !orgPolicy.weekly_off_days.includes(d))
+      : undefined;
     setShowEditModal(true);
     editProfileForm.reset({
       name_ar: profile.name_ar,
-      phone: profile.phone ?? '',
+      email: profile.email ?? '',
       role: profile.role,
       department_id: profile.department_id ?? '',
-      work_days: profile.work_days ?? undefined,
-      work_start_time: profile.work_start_time ?? '',
-      work_end_time: profile.work_end_time ?? '',
+      work_days: profile.work_days ?? fallbackWorkDays,
+      work_start_time: profile.work_start_time ?? orgPolicy?.work_start_time ?? '',
+      work_end_time: profile.work_end_time ?? orgPolicy?.work_end_time ?? '',
     });
-  }, [profile, editProfileForm]);
+  }, [profile, orgPolicy, editProfileForm]);
+
+  useEffect(() => {
+    if (searchParams.get('edit') !== '1') return;
+    if (!profile || currentUser?.role !== 'admin') return;
+    openEditModal();
+  }, [searchParams, profile, currentUser?.role, openEditModal]);
  
   const handleEditModalKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -475,6 +470,15 @@ export function UserDetailsPage() {
   };
   const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
     if (!profile) return;
+    const oldEmail = (profile.email ?? '').trim().toLowerCase();
+    const nextEmail = (data.email ?? '').trim().toLowerCase();
+    const emailChanged = nextEmail !== oldEmail;
+    if (emailChanged) {
+      const confirmed = window.confirm(
+        'تغيير البريد الإلكتروني إجراء حساس وقد يؤثر على تسجيل الدخول لهذا المستخدم. هل تريد المتابعة؟'
+      );
+      if (!confirmed) return;
+    }
     setEditSubmitting(true);
     try {
       const hasWorkDays = data.work_days && data.work_days.length > 0;
@@ -482,7 +486,7 @@ export function UserDetailsPage() {
       const workEnd = data.work_end_time?.trim();
       await profilesService.updateUser(profile.id, {
         name_ar: data.name_ar.trim(),
-        phone: data.phone?.trim() || undefined,
+        email: data.email?.trim() || null,
         role: data.role,
         department_id: data.department_id,
         work_days: hasWorkDays && workStart && workEnd ? data.work_days! : null,
@@ -650,22 +654,12 @@ export function UserDetailsPage() {
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-100">
-          {profile.phone || profile.email ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Phone className="w-4 h-4 text-gray-400" />
-                <span dir="ltr">{profile.phone ?? '—'}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Mail className="w-4 h-4 text-gray-400" />
-                <span className="truncate" dir="ltr">
-                  {profile.email ?? '—'}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-xs text-gray-400 py-3">لا توجد بيانات اتصال</div>
-          )}
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Mail className="w-4 h-4 text-gray-400" />
+            <span className="truncate" dir="ltr">
+              {getDisplayEmail(profile.email)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1429,14 +1423,22 @@ export function UserDetailsPage() {
                 )}
               </div>
               <div>
-                <label className="block mb-1.5 text-gray-700">رقم الهاتف</label>
+                <label className="block mb-1.5 text-gray-700">البريد الإلكتروني</label>
                 <input
-                  type="tel"
-                  {...editProfileForm.register('phone')}
-                  placeholder="+964 770 000 0000"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  type="email"
+                  {...editProfileForm.register('email')}
+                  placeholder="example@alssaa.tv"
+                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    editProfileForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
+                  }`}
                   dir="ltr"
                 />
+                {editProfileForm.formState.errors.email && (
+                  <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.email.message}</p>
+                )}
+                <p className="text-amber-700 text-xs mt-1">
+                  تنبيه: تغيير البريد الإلكتروني إجراء حساس وقد يؤثر على تسجيل الدخول.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

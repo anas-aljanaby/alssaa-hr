@@ -90,3 +90,9 @@ The repo uses two test runners: **Vitest** for the Vite app (TypeScript/React an
 - `scripts/`
   - `deploy-functions.sh`: deploy script for the Edge Functions
 
+## Frontend Data Notes
+- **Phone numbers removed from frontend (Apr 2026):**
+  - Phone number collection and display were intentionally removed from app UI flows (add user, edit user, user details, and profile surfaces).
+  - This change is frontend-only for now; the `profiles.phone` database column remains in place for backward compatibility and future migration planning.
+  - If phone support is reintroduced later, it should be treated as a new product decision and reimplemented explicitly rather than assumed from existing DB schema.
+

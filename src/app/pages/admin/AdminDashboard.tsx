@@ -31,6 +31,11 @@ function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function hasJoinedBy(day: string, joinDate: string | null | undefined): boolean {
+  if (!joinDate) return true;
+  return joinDate <= day;
+}
+
 type AdminTab = 'overview' | 'analytics';
 
 export function AdminDashboard() {
@@ -139,16 +144,18 @@ export function AdminDashboard() {
   );
 
   const overallStats = useMemo(() => {
+    const today = dateStr(now());
+    const activeEmployees = allNonAdmin.filter((e) => hasJoinedBy(today, e.join_date));
     const present = todayLogs.filter((l) => l.status === 'present').length;
     const late = todayLogs.filter((l) => l.status === 'late').length;
     const onLeave = todayLogs.filter((l) => l.status === 'on_leave').length;
     const checkedIn = todayLogs.filter((l) => l.check_in_time).length;
     return {
-      totalEmployees: allNonAdmin.length,
+      totalEmployees: activeEmployees.length,
       totalDepartments: departments.length,
       present,
       late,
-      absent: allNonAdmin.length - checkedIn,
+      absent: activeEmployees.length - checkedIn,
       onLeave,
     };
   }, [todayLogs, allNonAdmin, departments]);
@@ -159,8 +166,9 @@ export function AdminDashboard() {
   );
 
   const todayEmployeeStatus = useMemo((): EmployeeWithTodayStatus[] => {
+    const today = dateStr(now());
     const logsMap = new Map(todayLogs.map((l) => [l.user_id, l]));
-    return allNonAdmin.map((emp) => {
+    return allNonAdmin.filter((emp) => hasJoinedBy(today, emp.join_date)).map((emp) => {
       const log = logsMap.get(emp.id);
       return {
         ...emp,
@@ -183,8 +191,11 @@ export function AdminDashboard() {
   }, [monthLogs]);
 
   const deptChartData = useMemo(() => {
+    const today = dateStr(now());
     return departments.map((dept) => {
-      const empIds = allNonAdmin.filter((p) => p.department_id === dept.id).map((p) => p.id);
+      const empIds = allNonAdmin
+        .filter((p) => p.department_id === dept.id && hasJoinedBy(today, p.join_date))
+        .map((p) => p.id);
       const deptLogs = todayLogs.filter((l) => empIds.includes(l.user_id));
       return {
         name: dept.name_ar,

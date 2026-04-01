@@ -12,7 +12,6 @@ import {
   ChevronLeft,
   Bell,
   FileText,
-  Phone,
   Mail,
   Building2,
   Calendar,
@@ -186,10 +185,6 @@ export function MorePage() {
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Calendar className="w-4 h-4 text-gray-400" />
             <span>{new Date(currentUser.joinDate).toLocaleDateString('ar-IQ')}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Phone className="w-4 h-4 text-gray-400" />
-            <span dir="ltr">{currentUser.phone}</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Mail className="w-4 h-4 text-gray-400" />

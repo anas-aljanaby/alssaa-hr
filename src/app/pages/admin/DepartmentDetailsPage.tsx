@@ -9,6 +9,7 @@ import type { Profile } from '@/lib/services/profiles.service';
 import { updateDepartmentSchema } from '@/lib/validations';
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Building2, Users, Crown, ArrowRight, Edit2, Trash2, X } from 'lucide-react';
 
 const INITIAL_EDIT_FORM = { nameAr: '', nameEn: '', managerId: '' };
@@ -28,6 +29,7 @@ export function DepartmentDetailsPage() {
   const [deleting, setDeleting] = useState(false);
   const [managers, setManagers] = useState<Profile[]>([]);
   const [allDepartments, setAllDepartments] = useState<(Department & { employee_count: number })[]>([]);
+  useBodyScrollLock(showEditModal || showDeleteConfirm);
 
   useEffect(() => {
     if (!deptId) {

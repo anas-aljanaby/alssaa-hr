@@ -30,7 +30,6 @@ function profileToUser(profile: Tables<'profiles'>, email: string): User {
     name: profile.name,
     nameAr: profile.name_ar,
     email,
-    phone: profile.phone ?? '',
     role: profile.role,
     departmentId: profile.department_id ?? '',
     avatar: profile.avatar_url ?? undefined,

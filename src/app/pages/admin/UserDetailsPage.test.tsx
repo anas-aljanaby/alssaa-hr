@@ -101,7 +101,6 @@ function setupSuccessfulDataLoad() {
     employee_id: 'EMP-0002',
     name_ar: 'سارة أحمد',
     email: 'sara@example.com',
-    phone: '+9647700000000',
     role: 'employee',
     department_id: 'dept-1',
     work_days: [0, 1, 2, 3, 4],

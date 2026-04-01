@@ -9,6 +9,7 @@ import type { Profile } from '@/lib/services/profiles.service';
 import { createDepartmentSchema, updateDepartmentSchema } from '@/lib/validations';
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Pagination, usePagination } from '@/app/components/Pagination';
 import { PageLayout } from '@/app/components/layout/PageLayout';
 import {
@@ -18,6 +19,7 @@ import {
   Trash2,
   Users,
   Crown,
+  UserPlus,
   X,
   ChevronDown,
   ChevronUp,
@@ -32,15 +34,18 @@ export function DepartmentsPage() {
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState<(Department & { employee_count: number })[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
-  const [expandedDept, setExpandedDept] = useState<string | null>(null);
-  const [deptEmployees, setDeptEmployees] = useState<Profile[]>([]);
-  const [expandLoading, setExpandLoading] = useState(false);
+  const [expandedDeptIds, setExpandedDeptIds] = useState<Set<string>>(new Set());
+  const [deptEmployeesById, setDeptEmployeesById] = useState<Record<string, Profile[]>>({});
+  const [expandLoadingById, setExpandLoadingById] = useState<Record<string, boolean>>({});
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [editingDept, setEditingDept] = useState<(Department & { employee_count: number }) | null>(null);
   const [editFormData, setEditFormData] = useState(INITIAL_FORM);
   const [deptToDelete, setDeptToDelete] = useState<(Department & { employee_count: number }) | null>(null);
+  const [deptToAttachUser, setDeptToAttachUser] = useState<(Department & { employee_count: number }) | null>(null);
+  const [selectedAttachUserId, setSelectedAttachUserId] = useState('');
+  const [attachingUser, setAttachingUser] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [createFormErrors, setCreateFormErrors] = useState<{ nameAr?: string; nameEn?: string; managerId?: string }>({});
   const [editFormErrors, setEditFormErrors] = useState<{ nameAr?: string; nameEn?: string; managerId?: string }>({});
@@ -49,6 +54,7 @@ export function DepartmentsPage() {
   const modalRef = useRef<HTMLDivElement>(null);
   const editModalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  useBodyScrollLock(showForm || !!editingDept || !!deptToDelete || !!deptToAttachUser);
 
   useEffect(() => {
     loadData();
@@ -114,19 +120,23 @@ export function DepartmentsPage() {
   }
 
   const handleExpand = async (deptId: string) => {
-    if (expandedDept === deptId) {
-      setExpandedDept(null);
+    if (expandedDeptIds.has(deptId)) {
+      setExpandedDeptIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deptId);
+        return next;
+      });
       return;
     }
-    setExpandedDept(deptId);
-    setExpandLoading(true);
+    setExpandedDeptIds((prev) => new Set(prev).add(deptId));
+    setExpandLoadingById((prev) => ({ ...prev, [deptId]: true }));
     try {
       const emps = await profilesService.getDepartmentEmployees(deptId);
-      setDeptEmployees(emps);
+      setDeptEmployeesById((prev) => ({ ...prev, [deptId]: emps }));
     } catch (err) {
       toast.error(getDepartmentErrorMessage(err, 'فشل تحميل الموظفين'));
     } finally {
-      setExpandLoading(false);
+      setExpandLoadingById((prev) => ({ ...prev, [deptId]: false }));
     }
   };
 
@@ -260,12 +270,52 @@ export function DepartmentsPage() {
       });
       toast.success('تم حذف القسم');
       setDeptToDelete(null);
-      setExpandedDept((prev) => (prev === id ? null : prev));
+      setExpandedDeptIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setDeptEmployeesById((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      setExpandLoadingById((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
       await loadData();
     } catch (err) {
       toast.error(getDepartmentErrorMessage(err, 'فشل حذف القسم'));
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const openAttachUserModal = (dept: Department & { employee_count: number }) => {
+    setDeptToAttachUser(dept);
+    setSelectedAttachUserId('');
+  };
+
+  const handleAttachUserToDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deptToAttachUser || !selectedAttachUserId) return;
+    setAttachingUser(true);
+    try {
+      await profilesService.updateUser(selectedAttachUserId, {
+        department_id: deptToAttachUser.id,
+      });
+      toast.success('تم اضافة الموظف للقسم');
+      setDeptToAttachUser(null);
+      setSelectedAttachUserId('');
+      await loadData();
+      if (expandedDeptIds.has(deptToAttachUser.id)) {
+        const emps = await profilesService.getDepartmentEmployees(deptToAttachUser.id);
+        setDeptEmployeesById((prev) => ({ ...prev, [deptToAttachUser.id]: emps }));
+      }
+    } catch (err) {
+      toast.error(getDepartmentErrorMessage(err, 'فشل اضافة الموظف للقسم'));
+    } finally {
+      setAttachingUser(false);
     }
   };
 
@@ -324,6 +374,15 @@ export function DepartmentsPage() {
     'bg-rose-100 text-rose-600',
   ];
 
+  const attachableUsers = useMemo(() => {
+    if (!deptToAttachUser) return [];
+    return allProfiles.filter(
+      (profile) =>
+        (profile.role === 'employee' || profile.role === 'manager') &&
+        profile.department_id !== deptToAttachUser.id
+    );
+  }, [allProfiles, deptToAttachUser]);
+
   if (loading) {
     return (
       <PageLayout title="إدارة الأقسام" backPath="/more">
@@ -368,7 +427,7 @@ export function DepartmentsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="بحث بالاسم (عربي أو إنجليزي)..."
+              placeholder="بحث بالاسم أو الرقم الوظيفي..."
               className="w-full pr-10 pl-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               aria-label="بحث الأقسام"
             />
@@ -412,8 +471,10 @@ export function DepartmentsPage() {
         <>
         {paginatedDepartments.map((dept, idx) => {
           const manager = profilesMap.get(dept.manager_uid ?? '');
-          const isExpanded = expandedDept === dept.id;
+          const isExpanded = expandedDeptIds.has(dept.id);
           const colorIdx = idx % deptColors.length;
+          const expandLoading = !!expandLoadingById[dept.id];
+          const deptEmployees = deptEmployeesById[dept.id] ?? [];
 
           return (
             <div
@@ -499,7 +560,18 @@ export function DepartmentsPage() {
 
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3">
-                  <p className="text-xs text-gray-400 mb-2">أعضاء القسم</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-gray-400">أعضاء القسم</p>
+                    <button
+                      type="button"
+                      onClick={() => openAttachUserModal(dept)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      aria-label={`اضافة موظف للقسم${dept.name_ar}`}
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      اضافة موظف
+                    </button>
+                  </div>
                   {expandLoading ? (
                     <div className="space-y-2">
                       {[...Array(2)].map((_, i) => (
@@ -809,6 +881,68 @@ export function DepartmentsPage() {
                 {deleting ? 'جاري الحذف...' : 'حذف'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {deptToAttachUser && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => !attachingUser && setDeptToAttachUser(null)}
+          onKeyDown={handleModalKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="attach-user-title"
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-lg shadow-xl p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="attach-user-title" className="text-gray-800">اضافة موظف للقسم</h2>
+              <button
+                type="button"
+                onClick={() => !attachingUser && setDeptToAttachUser(null)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="إغلاق"
+                disabled={attachingUser}
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              اختر موظفاً لاضافته لقسم &quot;{deptToAttachUser.name_ar}&quot;.
+            </p>
+            <form className="space-y-4" onSubmit={handleAttachUserToDepartment}>
+              <div>
+                <label className="block mb-1.5 text-gray-700">المستخدم</label>
+                <select
+                  value={selectedAttachUserId}
+                  onChange={(e) => setSelectedAttachUserId(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="">-- اختيار --</option>
+                  {attachableUsers.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name_ar} ({profile.employee_id})
+                    </option>
+                  ))}
+                </select>
+                {attachableUsers.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    لا يوجد موظفون متاحون للاضافة حالياً.
+                  </p>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={attachingUser || !selectedAttachUserId}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
+                {attachingUser ? 'جاري الاضافة...' : 'اضافة الموظف'}
+              </button>
+            </form>
           </div>
         </div>
       )}

@@ -21,6 +21,7 @@ import { FilterChips } from '../../components/shared/FilterChips';
 import { RequestCard } from '../../components/shared/RequestCard';
 import { OvertimeRequestCard } from '../../components/shared/OvertimeRequestCard';
 import { EmptyState } from '../../components/shared/EmptyState';
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 
 const PAGE_SIZE = 10;
 
@@ -52,6 +53,7 @@ export function ApprovalsPage() {
     action: 'approve' | 'reject';
   } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  useBodyScrollLock(!!actionModal);
 
   const approvalForm = useForm<ApprovalFormData>({
     resolver: zodResolver(approvalSchema),

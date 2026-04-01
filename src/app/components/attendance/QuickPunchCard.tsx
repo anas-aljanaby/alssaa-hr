@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Clock3, LogIn, LogOut, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { wallTimeHHMM, type TodayRecord } from '@/lib/services/attendance.service';
 import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 
 interface QuickPunchCardProps {
   today: TodayRecord;
@@ -27,6 +28,7 @@ export function QuickPunchCard({
 }: QuickPunchCardProps) {
   const { log, shift } = today;
   const [confirmDialog, setConfirmDialog] = useState<'overtime' | null>(null);
+  useBodyScrollLock(!!confirmDialog);
 
   const {
     isCheckedIn,

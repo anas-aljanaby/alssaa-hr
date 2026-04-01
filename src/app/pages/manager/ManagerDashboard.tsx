@@ -36,6 +36,11 @@ function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function hasJoinedBy(day: string, joinDate: string | null | undefined): boolean {
+  if (!joinDate) return true;
+  return joinDate <= day;
+}
+
 type ManagerTab = 'overview' | 'analytics';
 
 export function ManagerDashboard() {
@@ -157,15 +162,17 @@ export function ManagerDashboard() {
   }
 
   const todayStats = useMemo(() => {
+    const today = todayStr();
+    const activeEmployees = employees.filter((e) => hasJoinedBy(today, e.join_date));
     const present = todayLogs.filter((l) => l.status === 'present').length;
     const late = todayLogs.filter((l) => l.status === 'late').length;
     const onLeave = todayLogs.filter((l) => l.status === 'on_leave').length;
     const checkedIn = todayLogs.filter((l) => l.check_in_time).length;
     return {
-      total: employees.length,
+      total: activeEmployees.length,
       present,
       late,
-      absent: employees.length - checkedIn,
+      absent: activeEmployees.length - checkedIn,
       onLeave,
     };
   }, [todayLogs, employees]);
@@ -181,8 +188,9 @@ export function ManagerDashboard() {
   }, [monthLogs]);
 
   const todayEmployeeStatus = useMemo((): EmployeeWithTodayStatus[] => {
+    const today = todayStr();
     const logsMap = new Map(todayLogs.map((l) => [l.user_id, l]));
-    return employees.map((emp) => {
+    return employees.filter((emp) => hasJoinedBy(today, emp.join_date)).map((emp) => {
       const log = logsMap.get(emp.id);
       return {
         ...emp,

@@ -791,27 +791,37 @@ export async function getLogsInRange(
   fromDate: string,
   toDate: string
 ): Promise<AttendanceLog[]> {
-  const { data, error } = await supabase
-    .from('attendance_logs')
-    .select('*')
-    .eq('user_id', userId)
-    .gte('date', fromDate)
-    .lte('date', toDate)
-    .order('date', { ascending: false });
+  const [{ data, error }, joinDate] = await Promise.all([
+    supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', fromDate)
+      .lte('date', toDate)
+      .order('date', { ascending: false }),
+    getUserJoinDate(userId),
+  ]);
 
   if (error) throw error;
-  return data ?? [];
+  const logs = data ?? [];
+  if (!joinDate) return logs;
+  return logs.filter((log) => log.date >= joinDate);
 }
 
 export async function getAllUserLogs(userId: string): Promise<AttendanceLog[]> {
-  const { data, error } = await supabase
-    .from('attendance_logs')
-    .select('*')
-    .eq('user_id', userId)
-    .order('date', { ascending: false });
+  const [{ data, error }, joinDate] = await Promise.all([
+    supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false }),
+    getUserJoinDate(userId),
+  ]);
 
   if (error) throw error;
-  return data ?? [];
+  const logs = data ?? [];
+  if (!joinDate) return logs;
+  return logs.filter((log) => log.date >= joinDate);
 }
 
 export async function getMonthlyLogs(

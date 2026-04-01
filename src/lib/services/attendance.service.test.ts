@@ -216,10 +216,41 @@ describe('attendance.service', () => {
   });
 
   it('getLogsInRange returns rows', async () => {
+    sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
     sb.queueResult({ data: [logRow], error: null });
     const { getLogsInRange } = await import('./attendance.service');
     const logs = await getLogsInRange('u1', '2025-06-01', '2025-06-30');
     expect(logs).toHaveLength(1);
+  });
+
+  it('getLogsInRange excludes logs before join date', async () => {
+    sb.queueResult({ data: { join_date: '2025-06-10' }, error: null });
+    sb.queueResult({
+      data: [
+        { ...logRow, id: 'old', date: '2025-06-08', status: 'absent' as const },
+        { ...logRow, id: 'new', date: '2025-06-11', status: 'present' as const },
+      ],
+      error: null,
+    });
+    const { getLogsInRange } = await import('./attendance.service');
+    const logs = await getLogsInRange('u1', '2025-06-01', '2025-06-30');
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.id).toBe('new');
+  });
+
+  it('getAllUserLogs excludes logs before join date', async () => {
+    sb.queueResult({ data: { join_date: '2025-06-10' }, error: null });
+    sb.queueResult({
+      data: [
+        { ...logRow, id: 'old', date: '2025-06-08', status: 'absent' as const },
+        { ...logRow, id: 'new', date: '2025-06-11', status: 'present' as const },
+      ],
+      error: null,
+    });
+    const { getAllUserLogs } = await import('./attendance.service');
+    const logs = await getAllUserLogs('u1');
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.id).toBe('new');
   });
 
   it('getMonthlyStats aggregates statuses', async () => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import * as policyService from '@/lib/services/policy.service';
 import type { AttendancePolicy } from '@/lib/services/policy.service';
 import { Clock, Calendar, Settings, X } from 'lucide-react';
@@ -32,6 +33,7 @@ export function AttendancePolicyPage() {
   const [showEditPolicy, setShowEditPolicy] = useState(false);
   const [editPolicy, setEditPolicy] = useState<AttendancePolicy | null>(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
+  useBodyScrollLock(showEditPolicy);
 
   useEffect(() => {
     policyService

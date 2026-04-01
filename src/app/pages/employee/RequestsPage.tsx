@@ -34,6 +34,7 @@ import { FilterChips } from '../../components/shared/FilterChips';
 import { RequestCard } from '../../components/shared/RequestCard';
 import { OvertimeRequestCard } from '../../components/shared/OvertimeRequestCard';
 import { EmptyState } from '../../components/shared/EmptyState';
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 
 const PAGE_SIZE = 10;
 
@@ -60,6 +61,7 @@ export function RequestsPage() {
   const [uploading, setUploading] = useState(false);
   const [workStartTime, setWorkStartTime] = useState<string>('08:00');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  useBodyScrollLock(showForm);
 
   const form = useForm<LeaveRequestFormData>({
     resolver: zodResolver(leaveRequestSchema),

@@ -16,7 +16,6 @@ export interface User {
   name: string;
   nameAr: string;
   email: string;
-  phone: string;
   role: UserRole;
   departmentId: string;
   avatar?: string;
@@ -117,7 +116,6 @@ export const users: User[] = [
     name: 'Ahmed Hassan',
     nameAr: 'أحمد حسن',
     email: 'ahmed@alssaa.tv',
-    phone: '+964 770 123 4567',
     role: 'admin',
     departmentId: 'dept-5',
     joinDate: '2020-01-15',
@@ -128,7 +126,6 @@ export const users: User[] = [
     name: 'Sara Ali',
     nameAr: 'سارة علي',
     email: 'sara@alssaa.tv',
-    phone: '+964 770 234 5678',
     role: 'manager',
     departmentId: 'dept-1',
     joinDate: '2020-03-20',
@@ -139,7 +136,6 @@ export const users: User[] = [
     name: 'Mohammed Karim',
     nameAr: 'محمد كريم',
     email: 'mohammed@alssaa.tv',
-    phone: '+964 770 345 6789',
     role: 'employee',
     departmentId: 'dept-1',
     joinDate: '2021-06-01',
@@ -150,7 +146,6 @@ export const users: User[] = [
     name: 'Fatima Nouri',
     nameAr: 'فاطمة نوري',
     email: 'fatima@alssaa.tv',
-    phone: '+964 770 456 7890',
     role: 'employee',
     departmentId: 'dept-1',
     joinDate: '2021-09-15',
@@ -161,7 +156,6 @@ export const users: User[] = [
     name: 'Ali Mahmoud',
     nameAr: 'علي محمود',
     email: 'ali@alssaa.tv',
-    phone: '+964 770 567 8901',
     role: 'manager',
     departmentId: 'dept-2',
     joinDate: '2020-02-10',
@@ -172,7 +166,6 @@ export const users: User[] = [
     name: 'Nour Saleh',
     nameAr: 'نور صالح',
     email: 'nour@alssaa.tv',
-    phone: '+964 770 678 9012',
     role: 'manager',
     departmentId: 'dept-3',
     joinDate: '2020-05-01',
@@ -183,7 +176,6 @@ export const users: User[] = [
     name: 'Hassan Jabbar',
     nameAr: 'حسن جبار',
     email: 'hassan.j@alssaa.tv',
-    phone: '+964 770 789 0123',
     role: 'manager',
     departmentId: 'dept-4',
     joinDate: '2020-04-15',
@@ -194,7 +186,6 @@ export const users: User[] = [
     name: 'Zainab Ridha',
     nameAr: 'زينب رضا',
     email: 'zainab@alssaa.tv',
-    phone: '+964 770 890 1234',
     role: 'manager',
     departmentId: 'dept-5',
     joinDate: '2020-01-20',
@@ -205,7 +196,6 @@ export const users: User[] = [
     name: 'Omar Faisal',
     nameAr: 'عمر فيصل',
     email: 'omar@alssaa.tv',
-    phone: '+964 770 901 2345',
     role: 'employee',
     departmentId: 'dept-2',
     joinDate: '2022-01-10',
@@ -216,7 +206,6 @@ export const users: User[] = [
     name: 'Layla Ibrahim',
     nameAr: 'ليلى إبراهيم',
     email: 'layla@alssaa.tv',
-    phone: '+964 770 012 3456',
     role: 'employee',
     departmentId: 'dept-3',
     joinDate: '2022-03-01',
@@ -227,7 +216,6 @@ export const users: User[] = [
     name: 'Yusuf Tariq',
     nameAr: 'يوسف طارق',
     email: 'yusuf@alssaa.tv',
-    phone: '+964 770 111 2222',
     role: 'employee',
     departmentId: 'dept-2',
     joinDate: '2022-06-15',
@@ -238,7 +226,6 @@ export const users: User[] = [
     name: 'Maryam Qasim',
     nameAr: 'مريم قاسم',
     email: 'maryam@alssaa.tv',
-    phone: '+964 770 333 4444',
     role: 'employee',
     departmentId: 'dept-4',
     joinDate: '2023-01-10',

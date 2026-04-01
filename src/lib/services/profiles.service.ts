@@ -78,7 +78,6 @@ export interface InviteUserPayload {
   email: string;
   name: string;
   password: string;
-  phone?: string;
   role: 'employee' | 'manager';
   department_id?: string;
 }

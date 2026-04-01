@@ -10,6 +10,7 @@ import {
 import { now } from '@/lib/time';
 import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
 import { getStatusTheme } from './attendanceStatusTheme';
+import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 
 interface Props {
   today: TodayRecord;
@@ -66,6 +67,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
   const [punchInElapsedSeconds, setPunchInElapsedSeconds] = useState(0);
   const [workdayElapsedSeconds, setWorkdayElapsedSeconds] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<'overtime' | null>(null);
+  useBodyScrollLock(!!confirmDialog);
 
   const punchUi = useTodayPunchUi(today);
   const {

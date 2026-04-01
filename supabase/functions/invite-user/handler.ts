@@ -9,7 +9,6 @@ export interface InviteBody {
   email: string;
   name: string;
   password: string;
-  phone?: string;
   role: 'employee' | 'manager';
   department_id?: string;
 }
@@ -32,6 +31,13 @@ export type InviteDeps = {
   createUserClient: (authHeader: string) => InviteUserClient;
   createServiceClient: () => InviteAdminClient;
 };
+
+const PROFILE_SYNC_MAX_ATTEMPTS = 6;
+const PROFILE_SYNC_DELAY_MS = 150;
+
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<Response> {
   if (req.method === 'OPTIONS') {
@@ -85,7 +91,6 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
     const password = typeof body?.password === 'string' ? body.password : '';
     const role = body?.role;
     const department_id = typeof body?.department_id === 'string' ? body.department_id.trim() : '';
-    const phone = typeof body?.phone === 'string' ? body.phone.trim() : undefined;
     const allowedRoles = ['employee', 'manager'] as const;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -129,7 +134,6 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
       org_id: profile.org_id,
     };
     if (department_id) user_metadata.department_id = department_id;
-    if (phone) user_metadata.phone = phone;
 
     const { data: createdUser, error } = await admin.auth.admin.createUser({
       email,
@@ -159,17 +163,32 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
     }
 
     if (createdUser?.user?.id) {
-      await admin
-        .from('profiles')
-        .update({
-          org_id: profile.org_id,
-          role,
-          name,
-          name_ar: name,
-          phone: phone ?? '',
-          department_id: department_id || null,
-        })
-        .eq('id', createdUser.user.id);
+      for (let attempt = 0; attempt < PROFILE_SYNC_MAX_ATTEMPTS; attempt += 1) {
+        const { data: existingProfile } = await admin
+          .from('profiles')
+          .select('id')
+          .eq('id', createdUser.user.id)
+          .maybeSingle();
+
+        if (existingProfile) {
+          await admin
+            .from('profiles')
+            .update({
+              email,
+              org_id: profile.org_id,
+              role,
+              name,
+              name_ar: name,
+              department_id: department_id || null,
+            })
+            .eq('id', createdUser.user.id);
+          break;
+        }
+
+        if (attempt < PROFILE_SYNC_MAX_ATTEMPTS - 1) {
+          await wait(PROFILE_SYNC_DELAY_MS);
+        }
+      }
     }
 
     return new Response(

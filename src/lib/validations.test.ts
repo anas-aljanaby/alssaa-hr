@@ -304,10 +304,6 @@ describe('addUserSchema', () => {
     expect(addUserSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('accepts optional phone', () => {
-    expect(addUserSchema.safeParse({ ...valid, phone: '+123' }).success).toBe(true);
-  });
-
   it('rejects name shorter than 2', () => {
     const r = addUserSchema.safeParse({ ...valid, name: 'A' });
     expect(r.success).toBe(false);
@@ -340,7 +336,12 @@ describe('addUserSchema', () => {
 // ---------------------------------------------------------------------------
 
 describe('updateProfileSchema', () => {
-  const valid = { name_ar: 'علي', role: 'employee' as const, department_id: 'dept-1' };
+  const valid = {
+    name_ar: 'علي',
+    email: 'user@example.com',
+    role: 'employee' as const,
+    department_id: 'dept-1',
+  };
 
   it('passes with minimal valid data', () => {
     expect(updateProfileSchema.safeParse(valid).success).toBe(true);
@@ -401,6 +402,12 @@ describe('updateProfileSchema', () => {
     for (const role of ['employee', 'manager', 'admin'] as const) {
       expect(updateProfileSchema.safeParse({ ...valid, role }).success).toBe(true);
     }
+  });
+
+  it('rejects invalid email format', () => {
+    const r = updateProfileSchema.safeParse({ ...valid, email: 'bad-email' });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(errorPaths(r)).toContain('email');
   });
 
   it('rejects work_day outside 0-6', () => {
