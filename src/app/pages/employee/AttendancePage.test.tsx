@@ -1,11 +1,11 @@
-import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MemoryRouter } from 'react-router';
 import { AttendancePage } from './AttendancePage';
 
 const mockUseAuth = vi.hoisted(() => vi.fn());
 const mockUseDevTime = vi.hoisted(() => vi.fn());
-const mockGetAttendanceToday = vi.hoisted(() => vi.fn());
+const mockGetAttendanceSessions = vi.hoisted(() => vi.fn());
 const mockGetAttendanceMonthly = vi.hoisted(() => vi.fn());
 
 vi.mock('../../contexts/AuthContext', () => ({
@@ -26,13 +26,15 @@ vi.mock('@/lib/services/attendance.service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/services/attendance.service')>();
   return {
     ...actual,
-    getAttendanceToday: (...args: unknown[]) => mockGetAttendanceToday(...args),
+    getAttendanceSessions: (...args: unknown[]) => mockGetAttendanceSessions(...args),
     getAttendanceMonthly: (...args: unknown[]) => mockGetAttendanceMonthly(...args),
   };
 });
 
 vi.mock('../../components/attendance/TodayPunchLog', () => ({
-  TodayPunchLog: () => <div data-testid="today-punch-log" />,
+  TodayPunchLog: ({ items }: { items: Array<{ kind: string }> }) => (
+    <div data-testid="today-punch-log">items:{items.map((i) => i.kind).join(',')}</div>
+  ),
 }));
 
 vi.mock('../../components/attendance/MonthCalendarHeatmap', () => ({
@@ -47,12 +49,29 @@ describe('AttendancePage', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ currentUser: { uid: 'u1' } });
     mockUseDevTime.mockReturnValue({ override: null });
-    mockGetAttendanceToday.mockResolvedValue({ log: null, punches: [], shift: null });
+    mockGetAttendanceSessions.mockResolvedValue([
+      {
+        id: 's1',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2026-03-01',
+        check_in_time: '08:30',
+        check_out_time: '16:30',
+        status: 'present',
+        is_overtime: false,
+        is_auto_punch_out: false,
+        is_early_departure: false,
+        needs_review: false,
+        duration_minutes: 480,
+        last_action_at: '',
+        is_dev: false,
+        created_at: '',
+        updated_at: '',
+      },
+    ]);
     mockGetAttendanceMonthly.mockResolvedValue([
       { date: '2026-03-01', status: 'present', totalMinutesWorked: 480 },
-      { date: '2026-03-02', status: 'late', totalMinutesWorked: 430 },
       { date: '2026-03-03', status: 'absent', totalMinutesWorked: 0 },
-      { date: '2026-03-04', status: 'on_leave', totalMinutesWorked: 0 },
     ]);
   });
 
@@ -60,24 +79,26 @@ describe('AttendancePage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders monthly stats, then calendar, then daily log, without punch buttons', async () => {
-    render(<AttendancePage />);
+  it('renders calendar and list container', async () => {
+    render(
+      <MemoryRouter initialEntries={['/attendance']}>
+        <AttendancePage />
+      </MemoryRouter>
+    );
 
-    await waitFor(() => expect(screen.getByText('إحصائيات الشهر')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('month-calendar')).toBeInTheDocument());
+    expect(screen.getByTestId('today-punch-log')).toBeInTheDocument();
+  });
 
-    expect(screen.getByText('أيام الحضور')).toBeInTheDocument();
-    expect(screen.getByText('أيام التأخر')).toBeInTheDocument();
-    expect(screen.getByText('أيام الغياب')).toBeInTheDocument();
-    expect(screen.getByText('أيام الإجازة')).toBeInTheDocument();
+  it('shows absent synthetic rows when filtering by absent from URL', async () => {
+    render(
+      <MemoryRouter initialEntries={['/attendance?month=2026-03&status=absent']}>
+        <AttendancePage />
+      </MemoryRouter>
+    );
 
-    const statsTitle = screen.getByText('إحصائيات الشهر');
-    const calendar = screen.getByTestId('month-calendar');
-    const dailyLog = screen.getByTestId('today-punch-log');
-
-    expect(statsTitle.compareDocumentPosition(calendar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(calendar.compareDocumentPosition(dailyLog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    expect(screen.queryByRole('button', { name: 'تسجيل الحضور' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'تسجيل الانصراف' })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/items:absent_day/)).toBeInTheDocument();
+    });
   });
 });

@@ -1,9 +1,13 @@
 import { LogIn, LogOut, Clock, CalendarDays } from 'lucide-react';
 import type { AttendanceSession } from '@/lib/services/attendance.service';
-import { getSessionTheme } from './attendanceStatusTheme';
+import { getSessionTheme, getStatusTheme } from './attendanceStatusTheme';
+
+export type AttendanceListItem =
+  | { kind: 'session'; session: AttendanceSession }
+  | { kind: 'absent_day'; date: string };
 
 interface Props {
-  sessions: AttendanceSession[];
+  items: AttendanceListItem[];
   selectedDate: string | null;
   onClearFilter?: () => void;
   title?: string;
@@ -47,7 +51,7 @@ function sessionType(session: AttendanceSession): 'present' | 'late' | 'overtime
   return 'present';
 }
 
-export function TodayPunchLog({ sessions, selectedDate, onClearFilter, title = 'سجل الجلسات' }: Props) {
+export function TodayPunchLog({ items, selectedDate, onClearFilter, title = 'سجل الجلسات' }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -63,17 +67,19 @@ export function TodayPunchLog({ sessions, selectedDate, onClearFilter, title = '
         )}
       </div>
 
-      {sessions.length === 0 ? (
+      {items.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center text-gray-400">
           <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-50" />
           <p className="text-sm">
-            {selectedDate ? 'لا توجد جلسات في هذا اليوم' : 'لا توجد جلسات حضور حتى الآن'}
+            {selectedDate ? 'لا توجد جلسات في هذا اليوم' : 'لا توجد سجلات لهذا الشهر'}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {sessions.map((session) => (
-            <SessionRow key={session.id} session={session} />
+          {items.map((item) => (
+            item.kind === 'session'
+              ? <SessionRow key={item.session.id} session={item.session} />
+              : <AbsentDayRow key={`absent-${item.date}`} date={item.date} />
           ))}
         </div>
       )}
@@ -138,6 +144,37 @@ function SessionRow({ session }: { session: AttendanceSession }) {
           انصراف تلقائي
         </div>
       )}
+    </div>
+  );
+}
+
+function AbsentDayRow({ date }: { date: string }) {
+  const statusTheme = getStatusTheme('absent');
+  const dateParts = formatDayAndMonth(date);
+  return (
+    <div
+      className="relative bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.08)] p-4 pt-8 border-r-4"
+      style={statusTheme.accentStyle}
+    >
+      <span
+        className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium font-['IBM_Plex_Sans_Arabic',_sans-serif]"
+        style={statusTheme.badgeSolidStyle}
+      >
+        {statusTheme.label}
+      </span>
+      <div className="flex items-center gap-5">
+        <div className="min-w-[78px] text-center">
+          <p className="text-[12px] font-normal text-[#94A3B8] font-['IBM_Plex_Sans_Arabic',_sans-serif]">{formatWeekday(date)}</p>
+          <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900 font-['IBM_Plex_Sans_Arabic',_sans-serif]">
+            <span className="text-[20px] font-bold leading-none">{dateParts.day}</span>
+            <span className="text-[13px] font-bold leading-none">{dateParts.month}</span>
+          </div>
+        </div>
+        <div className="h-12 w-px bg-gray-200" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-700">لم يتم تسجيل حضور أو انصراف في يوم عمل</p>
+        </div>
+      </div>
     </div>
   );
 }

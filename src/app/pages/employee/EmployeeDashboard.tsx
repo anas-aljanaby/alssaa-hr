@@ -114,6 +114,10 @@ export function EmployeeDashboard() {
 
   const current = now();
   const greeting = current.getHours() < 12 ? 'صباح الخير' : 'مساء الخير';
+  const monthParam = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+  const openAttendanceWithStatus = (status: 'present' | 'late' | 'absent' | 'on_leave') => {
+    navigate(`/attendance?month=${monthParam}&status=${status}`);
+  };
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
@@ -165,12 +169,14 @@ export function EmployeeDashboard() {
               label="أيام الحضور"
               value={stats.presentDays}
               color="bg-emerald-50 border-emerald-100"
+              onClick={() => openAttendanceWithStatus('present')}
             />
             <StatCard
               icon={<Timer className="w-5 h-5 text-amber-500" />}
               label="أيام التأخر"
               value={stats.lateDays}
               color="bg-amber-50 border-amber-100"
+              onClick={() => openAttendanceWithStatus('late')}
               warningIcon={
                 stats.lateDays >= 3 ? (
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
@@ -182,12 +188,14 @@ export function EmployeeDashboard() {
               label="أيام الغياب"
               value={stats.absentDays}
               color="bg-red-50 border-red-100"
+              onClick={() => openAttendanceWithStatus('absent')}
             />
             <StatCard
               icon={<Coffee className="w-5 h-5 text-blue-500" />}
               label="أيام الإجازة"
               value={stats.leaveDays}
               color="bg-blue-50 border-blue-100"
+              onClick={() => openAttendanceWithStatus('on_leave')}
             />
           </div>
         </div>

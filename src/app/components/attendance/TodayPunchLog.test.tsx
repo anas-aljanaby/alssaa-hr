@@ -46,7 +46,12 @@ function sessionsThreeSegments(): AttendanceSession[] {
 
 describe('TodayPunchLog', () => {
   it('renders session cards with check-in and check-out times', () => {
-    render(<TodayPunchLog sessions={sessionsThreeSegments()} selectedDate={null} />);
+    render(
+      <TodayPunchLog
+        items={sessionsThreeSegments().map((session) => ({ kind: 'session' as const, session }))}
+        selectedDate={null}
+      />
+    );
 
     expect(screen.getByText('سجل الجلسات')).toBeInTheDocument();
     expect(screen.getByText('08:30')).toBeInTheDocument();
@@ -56,7 +61,13 @@ describe('TodayPunchLog', () => {
   });
 
   it('renders filtered-day empty state message', () => {
-    render(<TodayPunchLog sessions={[]} selectedDate="2026-03-06" />);
+    render(<TodayPunchLog items={[]} selectedDate="2026-03-06" />);
     expect(screen.getByText('لا توجد جلسات في هذا اليوم')).toBeInTheDocument();
+  });
+
+  it('renders an absent day synthetic card', () => {
+    render(<TodayPunchLog items={[{ kind: 'absent_day', date: '2026-03-07' }]} selectedDate={null} />);
+    expect(screen.getByText('غائب')).toBeInTheDocument();
+    expect(screen.getByText('لم يتم تسجيل حضور أو انصراف في يوم عمل')).toBeInTheDocument();
   });
 });
