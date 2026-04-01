@@ -100,6 +100,7 @@ describe('profiles.service', () => {
     const r = await inviteUser({
       email: 'n@n.com',
       name: 'New',
+      password: 'Abc12345',
       role: 'employee',
       department_id: 'd1',
     });
@@ -129,6 +130,7 @@ describe('profiles.service', () => {
     const r = await inviteUser({
       email: 'n@n.com',
       name: 'New',
+      password: 'Abc12345',
       role: 'manager',
       department_id: 'd1',
     });
@@ -163,7 +165,7 @@ describe('profiles.service', () => {
     });
     const { inviteUser } = await import('./profiles.service');
     await expect(
-      inviteUser({ email: 'x', name: 'N', role: 'employee', department_id: 'd1' }),
+      inviteUser({ email: 'x', name: 'N', password: 'Abc12345', role: 'employee', department_id: 'd1' }),
     ).rejects.toThrow();
   });
 });

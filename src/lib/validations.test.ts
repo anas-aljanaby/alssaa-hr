@@ -293,7 +293,13 @@ describe('approvalSchema', () => {
 // ---------------------------------------------------------------------------
 
 describe('addUserSchema', () => {
-  const valid = { name: 'Ali', email: 'a@b.com', role: 'employee' as const, department_id: 'dept-1' };
+  const valid = {
+    name: 'Ali',
+    email: 'a@b.com',
+    password: STRONG_PW,
+    role: 'employee' as const,
+    department_id: 'dept-1',
+  };
 
   it('passes with valid data', () => {
     expect(addUserSchema.safeParse(valid).success).toBe(true);
@@ -327,6 +333,12 @@ describe('addUserSchema', () => {
   it('rejects empty department_id', () => {
     const r = addUserSchema.safeParse({ ...valid, department_id: '' });
     expect(r.success).toBe(false);
+  });
+
+  it('rejects weak password', () => {
+    const r = addUserSchema.safeParse({ ...valid, password: 'weak' });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(errorPaths(r)).toContain('password');
   });
 });
 

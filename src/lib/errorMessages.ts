@@ -46,6 +46,7 @@ const ADD_USER_MESSAGES: Record<string, string> = {
   '42501': 'ليس لديك صلاحية تنفيذ هذه العملية',
   INVALID_EMAIL: 'البريد الإلكتروني غير صالح',
   INVALID_NAME: 'الاسم يجب أن يكون حرفين على الأقل',
+  INVALID_PASSWORD: 'كلمة المرور غير صالحة',
   INVALID_ROLE: 'الدور مطلوب',
   INVALID_DEPARTMENT: 'القسم مطلوب',
   DUPLICATE_EMAIL: 'البريد الإلكتروني مسجل مسبقاً',

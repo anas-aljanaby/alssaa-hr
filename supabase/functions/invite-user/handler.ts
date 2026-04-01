@@ -8,6 +8,7 @@ import type { PunchServiceClient } from '../punch/handler.ts';
 export interface InviteBody {
   email: string;
   name: string;
+  password: string;
   phone?: string;
   role: 'employee' | 'manager';
   department_id: string;
@@ -16,8 +17,7 @@ export interface InviteBody {
 export type InviteAdminClient = PunchServiceClient & {
   auth: {
     admin: {
-      inviteUserByEmail: (
-        email: string,
+      createUser: (
         options: unknown
       ) => Promise<{ data: { user: { id: string } | null } | null; error: { message?: string } | null }>;
     };
@@ -82,24 +82,11 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
     const body = (await req.json()) as InviteBody;
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
+    const password = typeof body?.password === 'string' ? body.password : '';
     const role = body?.role;
     const department_id = typeof body?.department_id === 'string' ? body.department_id.trim() : '';
     const phone = typeof body?.phone === 'string' ? body.phone.trim() : undefined;
     const allowedRoles = ['employee', 'manager'] as const;
-
-    const originHeader = req.headers.get('origin')?.trim();
-    const refererHeader = req.headers.get('referer')?.trim() ?? req.headers.get('referrer')?.trim();
-    const originFromReferer = refererHeader
-      ? (() => {
-          try {
-            return new URL(refererHeader).origin;
-          } catch {
-            return undefined;
-          }
-        })()
-      : undefined;
-    const origin = originHeader || originFromReferer;
-    const redirectTo = origin ? `${origin.replace(/\/+$/, '')}/set-password` : undefined;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return new Response(
@@ -110,6 +97,22 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
     if (!name || name.length < 2) {
       return new Response(
         JSON.stringify({ error: 'الاسم يجب أن يكون حرفين على الأقل', code: 'INVALID_NAME' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (
+      !password
+      || password.length < 8
+      || password.length > 128
+      || !/[a-z]/.test(password)
+      || !/[A-Z]/.test(password)
+      || !/\d/.test(password)
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: 'كلمة المرور يجب أن تكون 8-128 وتحتوي على حرف كبير وحرف صغير ورقم',
+          code: 'INVALID_PASSWORD',
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -135,9 +138,11 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
     };
     if (phone) user_metadata.phone = phone;
 
-    const { data: invitedUser, error } = await admin.auth.admin.inviteUserByEmail(email, {
+    const { data: createdUser, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
       data: user_metadata,
-      ...(redirectTo ? { redirectTo } : {}),
     });
 
     if (error) {
@@ -161,7 +166,7 @@ export async function handleInviteUser(req: Request, deps: InviteDeps): Promise<
     }
 
     return new Response(
-      JSON.stringify({ success: true, user_id: invitedUser?.user?.id }),
+      JSON.stringify({ success: true, user_id: createdUser?.user?.id }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (_e) {

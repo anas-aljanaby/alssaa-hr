@@ -10,10 +10,10 @@ import {
 function makeDeps(opts: {
   user: { id: string } | null;
   queue: QResult[];
-  inviteResult?: { data: { user: { id: string } | null } | null; error: { message?: string } | null };
+  createUserResult?: { data: { user: { id: string } | null } | null; error: { message?: string } | null };
 }): InviteDeps {
   const adminFrom = createQueuedFromClient(opts.queue);
-  const inviteResult = opts.inviteResult ?? {
+  const createUserResult = opts.createUserResult ?? {
     data: { user: { id: 'new-user' } },
     error: null,
   };
@@ -21,7 +21,7 @@ function makeDeps(opts: {
     ...adminFrom,
     auth: {
       admin: {
-        inviteUserByEmail: async () => inviteResult,
+        createUser: async () => createUserResult,
       },
     },
   } as unknown as InviteAdminClient;
@@ -72,6 +72,7 @@ Deno.test('non-admin returns 403 42501', async () => {
     post({
       email: 'a@b.com',
       name: 'Ab',
+      password: 'Abc12345',
       role: 'employee',
       department_id: 'd1',
     }),
@@ -85,7 +86,7 @@ Deno.test('non-admin returns 403 42501', async () => {
 Deno.test('validation INVALID_EMAIL', async () => {
   const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
   const res = await handleInviteUser(
-    post({ email: 'bad', name: 'Ab', role: 'employee', department_id: 'd1' }),
+    post({ email: 'bad', name: 'Ab', password: 'Abc12345', role: 'employee', department_id: 'd1' }),
     makeDeps({ user: { id: 'u1' }, queue: q })
   );
   assertEquals(res.status, 400);
@@ -95,7 +96,7 @@ Deno.test('validation INVALID_EMAIL', async () => {
 Deno.test('validation INVALID_NAME', async () => {
   const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
   const res = await handleInviteUser(
-    post({ email: 'a@b.com', name: 'A', role: 'employee', department_id: 'd1' }),
+    post({ email: 'a@b.com', name: 'A', password: 'Abc12345', role: 'employee', department_id: 'd1' }),
     makeDeps({ user: { id: 'u1' }, queue: q })
   );
   assertEquals(res.status, 400);
@@ -105,7 +106,7 @@ Deno.test('validation INVALID_NAME', async () => {
 Deno.test('validation INVALID_ROLE', async () => {
   const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
   const res = await handleInviteUser(
-    post({ email: 'a@b.com', name: 'Ab', role: 'other', department_id: 'd1' }),
+    post({ email: 'a@b.com', name: 'Ab', password: 'Abc12345', role: 'other', department_id: 'd1' }),
     makeDeps({ user: { id: 'u1' }, queue: q })
   );
   assertEquals(res.status, 400);
@@ -115,35 +116,45 @@ Deno.test('validation INVALID_ROLE', async () => {
 Deno.test('validation INVALID_DEPARTMENT', async () => {
   const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
   const res = await handleInviteUser(
-    post({ email: 'a@b.com', name: 'Ab', role: 'employee', department_id: '' }),
+    post({ email: 'a@b.com', name: 'Ab', password: 'Abc12345', role: 'employee', department_id: '' }),
     makeDeps({ user: { id: 'u1' }, queue: q })
   );
   assertEquals(res.status, 400);
   assertEquals(((await json(res)) as { code: string }).code, 'INVALID_DEPARTMENT');
 });
 
-Deno.test('inviteUserByEmail duplicate message returns 409 DUPLICATE_EMAIL', async () => {
+Deno.test('createUser duplicate message returns 409 DUPLICATE_EMAIL', async () => {
   const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
   const res = await handleInviteUser(
-    post({ email: 'a@b.com', name: 'Ab', role: 'employee', department_id: 'd1' }),
+    post({ email: 'a@b.com', name: 'Ab', password: 'Abc12345', role: 'employee', department_id: 'd1' }),
     makeDeps({
       user: { id: 'u1' },
       queue: q,
-      inviteResult: { data: null, error: { message: 'User already exists' } },
+      createUserResult: { data: null, error: { message: 'User already exists' } },
     })
   );
   assertEquals(res.status, 409);
   assertEquals(((await json(res)) as { code: string }).code, 'DUPLICATE_EMAIL');
 });
 
+Deno.test('validation INVALID_PASSWORD', async () => {
+  const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
+  const res = await handleInviteUser(
+    post({ email: 'a@b.com', name: 'Ab', password: 'weak', role: 'employee', department_id: 'd1' }),
+    makeDeps({ user: { id: 'u1' }, queue: q })
+  );
+  assertEquals(res.status, 400);
+  assertEquals(((await json(res)) as { code: string }).code, 'INVALID_PASSWORD');
+});
+
 Deno.test('success returns 200 with user_id', async () => {
   const q: QResult[] = [{ data: { org_id: 'o1', role: 'admin' }, error: null }];
   const res = await handleInviteUser(
-    post({ email: 'a@b.com', name: 'Ab', role: 'employee', department_id: 'd1' }),
+    post({ email: 'a@b.com', name: 'Ab', password: 'Abc12345', role: 'employee', department_id: 'd1' }),
     makeDeps({
       user: { id: 'u1' },
       queue: q,
-      inviteResult: { data: { user: { id: 'uid-xyz' } }, error: null },
+      createUserResult: { data: { user: { id: 'uid-xyz' } }, error: null },
     })
   );
   assertEquals(res.status, 200);

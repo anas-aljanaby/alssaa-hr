@@ -39,7 +39,7 @@ export function UsersPage() {
 
   const addUserForm = useForm<AddUserFormData>({
     resolver: zodResolver(addUserSchema),
-    defaultValues: { name: '', email: '', phone: '', role: 'employee', department_id: '' },
+    defaultValues: { name: '', email: '', password: '', phone: '', role: 'employee', department_id: '' },
   });
 
   const editUserForm = useForm<UpdateProfileFormData>({
@@ -140,11 +140,12 @@ export function UsersPage() {
       await profilesService.inviteUser({
         email: data.email.trim(),
         name: data.name.trim(),
+        password: data.password,
         phone: data.phone?.trim() || undefined,
         role: data.role,
         department_id: data.department_id,
       });
-      toast.success('تم إرسال دعوة المستخدم عبر البريد الإلكتروني');
+      toast.success('تم إنشاء المستخدم بنجاح');
       setShowForm(false);
       addUserForm.reset();
       await loadData();
@@ -400,6 +401,21 @@ export function UsersPage() {
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   dir="ltr"
                 />
+              </div>
+              <div>
+                <label className="block mb-1.5 text-gray-700">كلمة المرور</label>
+                <input
+                  type="password"
+                  {...addUserForm.register('password')}
+                  placeholder="أدخل كلمة مرور قوية"
+                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    addUserForm.formState.errors.password ? 'border-red-400' : 'border-gray-200'
+                  }`}
+                  dir="ltr"
+                />
+                {addUserForm.formState.errors.password && (
+                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.password.message}</p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

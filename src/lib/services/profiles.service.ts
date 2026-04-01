@@ -77,6 +77,7 @@ export async function updateUser(
 export interface InviteUserPayload {
   email: string;
   name: string;
+  password: string;
   phone?: string;
   role: 'employee' | 'manager';
   department_id: string;
@@ -166,7 +167,7 @@ async function invokeDeleteUser(
 }
 
 /**
- * Invites a new user via the invite-user Edge Function (uses service role on the server).
+ * Creates a new auth user via the invite-user Edge Function (uses service role on the server).
  * On success the trigger handle_new_user creates profile and leave_balances.
  * On failure throws an error with optional response body for getAddUserErrorMessage.
  */
