@@ -335,6 +335,20 @@ describe('attendance.service', () => {
     expect(postJoinWorkday?.status).toBe('absent');
   });
 
+  it('calendar uses profile created_at when join_date is missing', async () => {
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: { join_date: null, created_at: '2025-06-05T09:45:00Z' }, error: null });
+    sb.queueResult({ data: [], error: null });
+    sb.queueResult({ data: policyRow, error: null });
+
+    const { getAttendanceMonthly } = await import('./attendance.service');
+    const month = await getAttendanceMonthly('u1', 2025, 5); // June
+    const preAccountDay = month.find((d) => d.date === '2025-06-03');
+    const postAccountWorkday = month.find((d) => d.date === '2025-06-10');
+    expect(preAccountDay?.status).toBeNull();
+    expect(postAccountWorkday?.status).toBe('absent');
+  });
+
   it('checkIn inserts when no existing log', async () => {
     sb.queueResult({ data: null, error: null });
     sb.queueResult({ data: profileShift, error: null });

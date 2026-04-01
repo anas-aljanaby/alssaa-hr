@@ -419,15 +419,27 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
   return { log, punches, shift, totalMinutesWorked, sessions, summary };
 }
 
+function toDateOnly(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+}
+
 async function getUserJoinDate(userId: string): Promise<string | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('join_date')
+    .select('join_date, created_at')
     .eq('id', userId)
     .maybeSingle();
 
   if (error) throw error;
-  return data?.join_date ?? null;
+  const joinDate = toDateOnly(data?.join_date);
+  if (joinDate) return joinDate;
+  return toDateOnly(data?.created_at);
 }
 
 export async function getAttendanceSessions(
@@ -785,6 +797,17 @@ export async function getLogsInRange(
     .eq('user_id', userId)
     .gte('date', fromDate)
     .lte('date', toDate)
+    .order('date', { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getAllUserLogs(userId: string): Promise<AttendanceLog[]> {
+  const { data, error } = await supabase
+    .from('attendance_logs')
+    .select('*')
+    .eq('user_id', userId)
     .order('date', { ascending: false });
 
   if (error) throw error;

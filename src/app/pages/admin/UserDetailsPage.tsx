@@ -51,6 +51,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { getStatusTheme } from '../../components/attendance/attendanceStatusTheme';
+import { StatCard } from '../../components/shared/StatCard';
 
 /** Calendar day YYYY-MM-DD in local time (matches leave form date pickers). */
 function calendarDayKeyFromIso(iso: string): string {
@@ -149,12 +150,15 @@ export function UserDetailsPage() {
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+  const [allAttendanceLogs, setAllAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [userAuditLogs, setUserAuditLogs] = useState<AuditLog[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'leaves' | 'requests'>(
     'overview'
   );
   const [requestFilter, setRequestFilter] = useState<'all' | LeaveRequest['status']>('all');
   const [showAuditLog, setShowAuditLog] = useState(false);
+  const [attendanceFilter, setAttendanceFilter] = useState<'all' | AttendanceLog['status']>('all');
+  const [attendanceViewMode, setAttendanceViewMode] = useState<'all_time' | 'range'>('all_time');
   const [dateFrom, setDateFrom] = useState(() => {
     const n = now();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
@@ -213,12 +217,12 @@ export function UserDetailsPage() {
   }, [userId, canAccess]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || attendanceViewMode !== 'range') return;
     attendanceService
       .getLogsInRange(userId, dateFrom, dateTo)
       .then(setAttendanceLogs)
       .catch(() => toast.error('فشل تحميل سجلات الحضور'));
-  }, [userId, dateFrom, dateTo]);
+  }, [userId, dateFrom, dateTo, attendanceViewMode]);
 
   const requestFromUrl = searchParams.get('request');
 
@@ -326,13 +330,15 @@ export function UserDetailsPage() {
     try {
       setLoading(true);
       const n = now();
-      const [prof, log, stats, balance, reqs, audit] = await Promise.all([
+      const [prof, log, stats, balance, reqs, audit, allLogs, rangeLogs] = await Promise.all([
         profilesService.getUserById(userId),
         attendanceService.getTodayLog(userId),
         attendanceService.getMonthlyStats(userId, n.getFullYear(), n.getMonth()),
         leaveBalanceService.getUserBalance(userId),
         requestsService.getUserRequests(userId),
         auditService.getAuditLogsForTarget(userId),
+        attendanceService.getAllUserLogs(userId),
+        attendanceService.getLogsInRange(userId, dateFrom, dateTo),
       ]);
       setProfile(prof);
       setTodayLog(log);
@@ -340,14 +346,13 @@ export function UserDetailsPage() {
       setLeaveBalance(balance);
       setUserRequests(reqs);
       setUserAuditLogs(audit.slice(0, 10));
+      setAllAttendanceLogs(allLogs);
+      setAttendanceLogs(rangeLogs);
 
       if (prof?.department_id) {
         const dept = await departmentsService.getDepartmentById(prof.department_id);
         setDepartment(dept);
       }
-
-      const logs = await attendanceService.getLogsInRange(userId, dateFrom, dateTo);
-      setAttendanceLogs(logs);
     } catch {
       toast.error('فشل تحميل بيانات الموظف');
     } finally {
@@ -456,6 +461,18 @@ export function UserDetailsPage() {
     requestFilter === 'all'
       ? userRequests
       : userRequests.filter((r) => r.status === requestFilter);
+  const displayedAttendanceLogs = attendanceViewMode === 'all_time' ? allAttendanceLogs : attendanceLogs;
+  const filteredAttendanceLogs =
+    attendanceFilter === 'all'
+      ? displayedAttendanceLogs
+      : displayedAttendanceLogs.filter((log) => log.status === attendanceFilter);
+  const allTimeStats: MonthlyStats = {
+    presentDays: allAttendanceLogs.filter((d) => d.status === 'present').length,
+    lateDays: allAttendanceLogs.filter((d) => d.status === 'late').length,
+    absentDays: allAttendanceLogs.filter((d) => d.status === 'absent').length,
+    leaveDays: allAttendanceLogs.filter((d) => d.status === 'on_leave').length,
+    totalWorkingDays: allAttendanceLogs.filter((d) => d.status != null).length,
+  };
   const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
     if (!profile) return;
     setEditSubmitting(true);
@@ -723,36 +740,52 @@ export function UserDetailsPage() {
 
           {monthlyStats && (
             <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-              <h3 className="text-sm text-gray-600 mb-3">إحصائيات الشهر الحالي</h3>
+              <h3 className="text-sm text-gray-600 mb-3">إحصائيات كل الوقت</h3>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span className="text-xs text-gray-600">أيام الحضور</span>
-                  </div>
-                  <p className="text-xl text-emerald-700">{monthlyStats.presentDays}</p>
-                </div>
-                <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Clock className="w-4 h-4 text-amber-600" />
-                    <span className="text-xs text-gray-600">أيام التأخير</span>
-                  </div>
-                  <p className="text-xl text-amber-700">{monthlyStats.lateDays}</p>
-                </div>
-                <div className="bg-red-50 rounded-xl p-3 border border-red-100">
-                  <div className="flex items-center gap-2 mb-1">
-                    <XCircle className="w-4 h-4 text-red-600" />
-                    <span className="text-xs text-gray-600">أيام الغياب</span>
-                  </div>
-                  <p className="text-xl text-red-700">{monthlyStats.absentDays}</p>
-                </div>
-                <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Calendar className="w-4 h-4 text-blue-600" />
-                    <span className="text-xs text-gray-600">أيام الإجازة</span>
-                  </div>
-                  <p className="text-xl text-blue-700">{monthlyStats.leaveDays}</p>
-                </div>
+                <StatCard
+                  icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                  label="أيام الحضور"
+                  value={allTimeStats.presentDays}
+                  color="bg-emerald-50 border-emerald-100"
+                  onClick={() => {
+                    setActiveTab('attendance');
+                    setAttendanceViewMode('all_time');
+                    setAttendanceFilter('present');
+                  }}
+                />
+                <StatCard
+                  icon={<Clock className="w-5 h-5 text-amber-500" />}
+                  label="أيام التأخير"
+                  value={allTimeStats.lateDays}
+                  color="bg-amber-50 border-amber-100"
+                  onClick={() => {
+                    setActiveTab('attendance');
+                    setAttendanceViewMode('all_time');
+                    setAttendanceFilter('late');
+                  }}
+                />
+                <StatCard
+                  icon={<XCircle className="w-5 h-5 text-red-500" />}
+                  label="أيام الغياب"
+                  value={allTimeStats.absentDays}
+                  color="bg-red-50 border-red-100"
+                  onClick={() => {
+                    setActiveTab('attendance');
+                    setAttendanceViewMode('all_time');
+                    setAttendanceFilter('absent');
+                  }}
+                />
+                <StatCard
+                  icon={<Calendar className="w-5 h-5 text-blue-500" />}
+                  label="أيام الإجازة"
+                  value={allTimeStats.leaveDays}
+                  color="bg-blue-50 border-blue-100"
+                  onClick={() => {
+                    setActiveTab('attendance');
+                    setAttendanceViewMode('all_time');
+                    setAttendanceFilter('on_leave');
+                  }}
+                />
               </div>
             </div>
           )}
@@ -836,14 +869,14 @@ export function UserDetailsPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700">الفترة</h3>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-gray-700">عرض السجل</h3>
               {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
                 <button
                   type="button"
                   onClick={handleExportAttendance}
-                  disabled={attendanceLogs.length === 0}
+                  disabled={filteredAttendanceLogs.length === 0}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-emerald-200"
                   aria-label="تصدير الحضور"
                 >
@@ -852,33 +885,76 @@ export function UserDetailsPage() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">من</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                  dir="ltr"
-                />
+
+            <div className="flex gap-1 overflow-x-auto">
+              {(
+                [
+                  { key: 'all_time', label: 'كل الوقت' },
+                  { key: 'range', label: 'فترة محددة' },
+                ] as const
+              ).map((mode) => (
+                <button
+                  key={mode.key}
+                  type="button"
+                  onClick={() => setAttendanceViewMode(mode.key)}
+                  className={`px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-colors ${
+                    attendanceViewMode === mode.key
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+
+            {attendanceViewMode === 'range' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">من</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">إلى</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    dir="ltr"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">إلى</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                  dir="ltr"
-                />
-              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">
+            <div className="flex gap-1 overflow-x-auto">
+              {(['all', 'present', 'late', 'absent', 'on_leave'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setAttendanceFilter(f)}
+                  className={`px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-colors ${
+                    attendanceFilter === f
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {f === 'all' ? 'الكل' : getAttendanceStatusAr(f)}
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            {attendanceLogs.length > 0 ? (
-              attendanceLogs.map((log) => {
+            {filteredAttendanceLogs.length > 0 ? (
+              filteredAttendanceLogs.map((log) => {
                 const statusTheme = getAttendanceLogTheme(log.status);
                 const openSession = !log.check_out_time;
                 const dateParts = formatDayAndMonth(log.date);
@@ -935,7 +1011,11 @@ export function UserDetailsPage() {
             ) : (
               <div className="bg-gray-50 rounded-xl p-8 text-center border border-gray-100">
                 <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">لا توجد سجلات حضور ضمن هذا النطاق</p>
+                <p className="text-sm text-gray-500">
+                  {attendanceFilter === 'all'
+                    ? 'لا توجد سجلات حضور ضمن هذا النطاق'
+                    : `لا توجد سجلات بحالة ${getAttendanceStatusAr(attendanceFilter)}`}
+                </p>
               </div>
             )}
           </div>
