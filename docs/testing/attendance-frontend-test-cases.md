@@ -77,3 +77,11 @@ This document tracks attendance frontend/UI test coverage for the web app and cl
 | --- | --- | --- | --- | --- |
 | 24.4 | [x] | Initial load has open third session + full punches; `visibilitychange` refresh returns pseudo `log` with stale `check_out_time` | Stays **checked-in** with checkout button | **Currently failing** — matches “refresh then punch-in again” |
 | 24.5 | [x] | Happy path: three check-ins and two check-outs with consistent API `log` / `getAttendanceToday` payloads | `today-state` alternates `checked-in` / `completed`; ends on checkout CTA | Passes; validates mock + handler wiring |
+
+---
+
+## Global UI Route Smoke Coverage
+
+- Global route render smoke tests are covered in `src/app/routes.smoke.test.tsx`.
+- Scope includes all routes from `src/app/routes.tsx` (auth, employee, manager, admin, and dynamic detail routes).
+- Run directly with: `npm run test -- src/app/routes.smoke.test.tsx`.

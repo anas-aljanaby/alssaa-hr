@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:edge": "TZ=UTC deno test --allow-env supabase/functions",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepare": "husky"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -82,6 +83,7 @@
     "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "4.7.0",
     "@vitest/coverage-v8": "^4.1.1",
+    "husky": "^9.1.7",
     "jsdom": "^29.0.1",
     "msw": "^2.12.14",
     "tailwindcss": "4.1.12",

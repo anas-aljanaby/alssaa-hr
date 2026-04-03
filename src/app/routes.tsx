@@ -36,14 +36,10 @@ function Lazy({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NotFoundRedirect() {
-  return <Navigate to="/" replace />;
-}
-
 export const router = createBrowserRouter([
   {
     path: '/',
-    Component: RootLayout,
+    element: <RootLayout />,
     children: [
       {
         path: 'login',
@@ -63,7 +59,7 @@ export const router = createBrowserRouter([
       },
       {
         path: '*',
-        Component: MobileLayout,
+        element: <MobileLayout />,
         children: [
           { index: true, element: <Lazy><DashboardRouter /></Lazy> },
           { path: 'attendance', element: <Lazy><AttendancePage /></Lazy> },

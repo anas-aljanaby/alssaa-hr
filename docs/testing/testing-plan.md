@@ -247,3 +247,14 @@ Use **Playwright**. Keep it to ≤5 flows.
 | **Total** | | **~38 prompts** | |
 
 **Start today:** Phase 0 → Phase 1.1 (`time.ts`) → Phase 1.2 (`validations.ts`). You'll have meaningful coverage of your most critical logic within a few hours.
+
+---
+
+## Route Render Smoke Tests
+
+A lightweight route smoke suite now validates that all app routes in `src/app/routes.tsx` mount successfully with role-aware contexts.
+
+- Test file: `src/app/routes.smoke.test.tsx`
+- Coverage intent: route-level render verification for auth, employee, manager, admin, and dynamic detail routes
+- Command: `npm run test -- src/app/routes.smoke.test.tsx`
+- Notes: this suite is intentionally shallow (render wiring only), and is not a replacement for feature-level behavioral tests
