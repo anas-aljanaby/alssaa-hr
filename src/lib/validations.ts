@@ -20,6 +20,7 @@ export const loginSchema = z.object({
     .min(1, 'البريد الإلكتروني مطلوب')
     .email('البريد الإلكتروني غير صالح'),
   password: z.string().min(1, 'كلمة المرور مطلوبة'),
+  rememberMe: z.boolean().default(true),
 });
 export type LoginFormData = z.infer<typeof loginSchema>;
 

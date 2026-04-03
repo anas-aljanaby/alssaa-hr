@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginFormData } from '@/lib/validations';
+import { getRememberMePreference } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../data/mockData';
 import {
@@ -32,12 +33,12 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: '', password: '', rememberMe: getRememberMePreference() },
   });
 
   const onSubmit = async (data: LoginFormData) => {
     setServerError('');
-    const result = await login(data.email, data.password);
+    const result = await login(data.email, data.password, data.rememberMe);
     if (result.ok) {
       navigate('/');
     } else {
@@ -113,6 +114,11 @@ export function LoginPage() {
                 {serverError}
               </div>
             )}
+
+            <label className="flex items-center gap-2 text-sm text-gray-600 select-none">
+              <input type="checkbox" {...register('rememberMe')} className="h-4 w-4 accent-blue-600" />
+              تذكرني على هذا الجهاز
+            </label>
 
             <button
               type="submit"

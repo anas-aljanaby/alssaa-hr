@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { User, UserRole } from '../data/mockData';
-import { supabase } from '@/lib/supabase';
+import { setRememberMePreference, supabase } from '@/lib/supabase';
 import type { Tables } from '@/lib/database.types';
 import { PROFILE_SELECT_COLUMNS } from '@/lib/services/profiles.service';
 import type { Session } from '@supabase/supabase-js';
@@ -16,7 +16,7 @@ interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
   authReady: boolean;
-  login: (email: string, password: string) => Promise<AuthResult>;
+  login: (email: string, password: string, rememberMe: boolean) => Promise<AuthResult>;
   loginAs: ((role: UserRole) => void) | null;
   logout: () => Promise<void>;
 }
@@ -147,7 +147,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string): Promise<AuthResult> => {
+    async (email: string, password: string, rememberMe: boolean): Promise<AuthResult> => {
+      setRememberMePreference(rememberMe);
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         const message =
