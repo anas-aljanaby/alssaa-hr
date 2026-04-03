@@ -10,7 +10,6 @@ import {
   Shield,
   LogOut,
   ChevronLeft,
-  Bell,
   FileText,
   Mail,
   Building2,
@@ -49,13 +48,6 @@ export function MorePage() {
           color: 'text-blue-500',
           bgColor: 'bg-blue-50',
           onClick: () => navigate(`/user-details/${currentUser.uid}`),
-        },
-        {
-          icon: Bell,
-          label: 'الإشعارات',
-          color: 'text-purple-500',
-          bgColor: 'bg-purple-50',
-          onClick: () => navigate('/notifications'),
         },
         {
           icon: Shield,
@@ -102,13 +94,6 @@ export function MorePage() {
             title: 'إدارة النظام',
             items: [
               {
-                icon: Building2,
-                label: 'إدارة الأقسام',
-                color: 'text-indigo-500',
-                bgColor: 'bg-indigo-50',
-                onClick: () => navigate('/departments'),
-              },
-                  {
                     icon: Shield,
                     label: 'تغيير المدير العام',
                     color: 'text-purple-500',

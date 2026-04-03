@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation, Navigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import * as notificationsService from '@/lib/services/notifications.service';
 import * as requestsService from '@/lib/services/requests.service';
+import { NotificationsDropdown } from '@/app/components/notifications/NotificationsDropdown';
 import {
   Home,
   Clock,
@@ -21,6 +22,7 @@ export function MobileLayout() {
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -53,6 +55,10 @@ export function MobileLayout() {
       .then(setUnreadCount)
       .catch((e) => console.warn('Failed to load unread count', e));
   }, [location.pathname, currentUser?.uid]);
+
+  useEffect(() => {
+    setNotificationsOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -93,7 +99,7 @@ export function MobileLayout() {
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/attendance', icon: Clock, label: 'الحضور' },
     { path: '/requests', icon: FileText, label: 'الطلبات' },
-    { path: '/notifications', icon: Bell, label: 'الإشعارات', badge: unreadCount },
+    { path: '/departments', icon: Building2, label: 'الأقسام' },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
 
@@ -101,7 +107,7 @@ export function MobileLayout() {
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/attendance', icon: Clock, label: 'الحضور' },
     { path: '/approvals', icon: CheckSquare, label: 'الموافقات', badge: pendingApprovals },
-    { path: '/notifications', icon: Bell, label: 'الإشعارات', badge: unreadCount },
+    { path: '/departments', icon: Building2, label: 'الأقسام' },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
 
@@ -109,7 +115,7 @@ export function MobileLayout() {
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/users', icon: Users, label: 'المستخدمون' },
     { path: '/approvals', icon: CheckSquare, label: 'الموافقات', badge: pendingApprovals },
-    { path: '/notifications', icon: Bell, label: 'الإشعارات', badge: unreadCount },
+    { path: '/departments', icon: Building2, label: 'الأقسام' },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
 
@@ -132,7 +138,6 @@ export function MobileLayout() {
       '/security-privacy',
       '/terms-conditions',
       '/reports',
-      '/departments',
       '/transfer-general-manager',
     ];
 
@@ -155,7 +160,27 @@ export function MobileLayout() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-background flex flex-col">
-      <div className="flex-1 pb-20 overflow-auto">
+      <div className="fixed top-3 left-3 z-40">
+        <button
+          type="button"
+          onClick={() => setNotificationsOpen((prev) => !prev)}
+          aria-label="الإشعارات"
+          className="relative p-2.5 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
+        >
+          <Bell className="w-5 h-5 text-gray-600" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px]">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {notificationsOpen && (
+        <NotificationsDropdown userId={currentUser.uid} onClose={() => setNotificationsOpen(false)} />
+      )}
+
+      <div className="flex-1 pb-20 pt-14 overflow-auto">
         <Outlet />
       </div>
 

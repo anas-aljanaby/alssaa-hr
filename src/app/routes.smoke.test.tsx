@@ -114,13 +114,14 @@ describe('route rendering smoke tests', () => {
     { path: '/', role: 'employee', expectedTestId: 'page-dashboard-router' },
     { path: '/attendance', role: 'employee', expectedTestId: 'page-attendance' },
     { path: '/requests', role: 'employee', expectedTestId: 'page-requests' },
-    { path: '/notifications', role: 'employee', expectedTestId: 'page-notifications' },
+    { path: '/departments', role: 'employee', expectedTestId: 'page-departments' },
     { path: '/more', role: 'employee', expectedTestId: 'page-more' },
     { path: '/attendance-policy', role: 'employee', expectedTestId: 'page-attendance-policy' },
     { path: '/security-privacy', role: 'employee', expectedTestId: 'page-security-privacy' },
     { path: '/terms-conditions', role: 'employee', expectedTestId: 'page-terms-conditions' },
 
     { path: '/approvals', role: 'manager', expectedTestId: 'page-approvals' },
+    { path: '/departments', role: 'manager', expectedTestId: 'page-departments' },
 
     { path: '/users', role: 'admin', expectedTestId: 'page-users' },
     { path: '/departments', role: 'admin', expectedTestId: 'page-departments' },

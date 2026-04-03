@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Navigate, Link } from 'react-router';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as profilesService from '@/lib/services/profiles.service';
@@ -115,9 +115,13 @@ export function DepartmentsPage() {
     setCurrentPage: setDepartmentsPage,
   } = usePagination(filteredDepartments, DEPARTMENTS_PAGE_SIZE);
 
-  if (!currentUser || currentUser.role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
+  if (!currentUser) return null;
+
+  const isAdmin = currentUser.role === 'admin';
+  const canCreateDepartment = isAdmin;
+  const canDeleteDepartment = isAdmin;
+  const canAttachUsers = isAdmin;
+  const canEditDepartments = isAdmin;
 
   const handleExpand = async (deptId: string) => {
     if (expandedDeptIds.has(deptId)) {
@@ -142,6 +146,10 @@ export function DepartmentsPage() {
 
   const handleCreateDept = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreateDepartment) {
+      toast.error('ليس لديك صلاحية إنشاء قسم');
+      return;
+    }
     const parsed = createDepartmentSchema.safeParse(formData);
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors;
@@ -195,6 +203,10 @@ export function DepartmentsPage() {
   };
 
   const openEditModal = (dept: Department & { employee_count: number }) => {
+    if (!canEditDepartments) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
     setEditingDept(dept);
     setEditFormErrors({});
     setEditFormData({
@@ -207,6 +219,10 @@ export function DepartmentsPage() {
   const handleEditDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDept) return;
+    if (!canEditDepartments) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
     const parsed = updateDepartmentSchema.safeParse(editFormData);
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors;
@@ -234,12 +250,15 @@ export function DepartmentsPage() {
     }
     setSubmitting(true);
     try {
-      await departmentsService.updateDepartment(editingDept.id, {
+      const updatePayload: departmentsService.DepartmentUpdate = {
         name_ar: nameAr,
         name: nameEn,
-        manager_uid: managerId ?? null,
-      });
-      if (managerId) {
+      };
+      if (isAdmin) {
+        updatePayload.manager_uid = managerId ?? null;
+      }
+      await departmentsService.updateDepartment(editingDept.id, updatePayload);
+      if (isAdmin && managerId) {
         await profilesService.updateUser(managerId, {
           role: 'manager',
           department_id: editingDept.id,
@@ -267,6 +286,10 @@ export function DepartmentsPage() {
 
   const handleDeleteDept = async () => {
     if (!deptToDelete) return;
+    if (!canDeleteDepartment) {
+      toast.error('ليس لديك صلاحية حذف الأقسام');
+      return;
+    }
     const id = deptToDelete.id;
     const nameAr = deptToDelete.name_ar;
     setDeleting(true);
@@ -304,6 +327,10 @@ export function DepartmentsPage() {
   };
 
   const openAttachUserModal = (dept: Department & { employee_count: number }) => {
+    if (!canAttachUsers || !canEditDepartments) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
     setDeptToAttachUser(dept);
     setSelectedAttachUserId('');
   };
@@ -311,6 +338,10 @@ export function DepartmentsPage() {
   const handleAttachUserToDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deptToAttachUser || !selectedAttachUserId) return;
+    if (!canAttachUsers || !canEditDepartments) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
     setAttachingUser(true);
     try {
       await profilesService.updateUser(selectedAttachUserId, {
@@ -397,7 +428,7 @@ export function DepartmentsPage() {
 
   if (loading) {
     return (
-      <PageLayout title="إدارة الأقسام" backPath="/more">
+      <PageLayout title="الأقسام" backPath="/more">
       <div className="space-y-4">
         <div className="bg-gray-100 rounded-2xl h-16 animate-pulse" />
         {[...Array(4)].map((_, i) => (
@@ -409,17 +440,19 @@ export function DepartmentsPage() {
   }
 
   return (
-    <PageLayout title="إدارة الأقسام" backPath="/more">
+    <PageLayout title="الأقسام" backPath="/more">
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          قسم جديد
-        </button>
-      </div>
+      {canCreateDepartment && (
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            قسم جديد
+          </button>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center justify-between">
@@ -464,14 +497,16 @@ export function DepartmentsPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
           <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500 mb-4">لا توجد أقسام بعد. أضف أول قسم لبدء التنظيم.</p>
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            إضافة أول قسم
-          </button>
+          {canCreateDepartment && (
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              إضافة أول قسم
+            </button>
+          )}
         </div>
       ) : (
       <div className="space-y-3">
@@ -550,39 +585,47 @@ export function DepartmentsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(dept)}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer"
-                    aria-label="تعديل القسم"
-                  >
-                    <Edit2 className="w-3.5 h-3.5 text-gray-400" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeptToDelete(dept)}
-                    className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"
-                    aria-label="حذف القسم"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" />
-                  </button>
-                </div>
+                {(canEditDepartments || canDeleteDepartment) && (
+                  <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {canEditDepartments && (
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(dept)}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer"
+                        aria-label="تعديل القسم"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-gray-400" />
+                      </button>
+                    )}
+                    {canDeleteDepartment && (
+                      <button
+                        type="button"
+                        onClick={() => setDeptToDelete(dept)}
+                        className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"
+                        aria-label="حذف القسم"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" />
+                      </button>
+                    )}
+                  </div>
+                )}
               </button>
 
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-gray-400">أعضاء القسم</p>
-                    <button
-                      type="button"
-                      onClick={() => openAttachUserModal(dept)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                      aria-label={`اضافة موظف للقسم${dept.name_ar}`}
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      اضافة موظف
-                    </button>
+                    {canAttachUsers && canEditDepartments && (
+                      <button
+                        type="button"
+                        onClick={() => openAttachUserModal(dept)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        aria-label={`اضافة موظف للقسم${dept.name_ar}`}
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        اضافة موظف
+                      </button>
+                    )}
                   </div>
                   {expandLoading ? (
                     <div className="space-y-2">
@@ -641,7 +684,7 @@ export function DepartmentsPage() {
       </div>
       )}
 
-      {showForm && (
+      {showForm && canCreateDepartment && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => setShowForm(false)}

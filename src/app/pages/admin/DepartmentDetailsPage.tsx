@@ -30,6 +30,7 @@ export function DepartmentDetailsPage() {
   const [managers, setManagers] = useState<Profile[]>([]);
   const [allDepartments, setAllDepartments] = useState<(Department & { employee_count: number })[]>([]);
   useBodyScrollLock(showEditModal || showDeleteConfirm);
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     if (!deptId) {
@@ -64,6 +65,10 @@ export function DepartmentDetailsPage() {
 
   const openEditModal = useCallback(async () => {
     if (!department) return;
+    if (!isAdmin) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
     setEditFormData({
       nameAr: department.name_ar,
       nameEn: department.name,
@@ -81,11 +86,15 @@ export function DepartmentDetailsPage() {
     } catch (err) {
       toast.error(getDepartmentErrorMessage(err, 'فشل تحميل البيانات'));
     }
-  }, [department]);
+  }, [department, isAdmin]);
 
   const handleEditDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!department) return;
+    if (!isAdmin) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
     const parsed = updateDepartmentSchema.safeParse(editFormData);
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors;
@@ -113,11 +122,14 @@ export function DepartmentDetailsPage() {
     }
     setSubmitting(true);
     try {
-      await departmentsService.updateDepartment(department.id, {
+      const updatePayload: departmentsService.DepartmentUpdate = {
         name_ar: nameAr,
         name: nameEn,
-        manager_uid: managerId ?? null,
-      });
+      };
+      if (isAdmin) {
+        updatePayload.manager_uid = managerId ?? null;
+      }
+      await departmentsService.updateDepartment(department.id, updatePayload);
       await auditService.createAuditLog({
         actor_id: currentUser!.uid,
         action: 'department_updated',
@@ -143,6 +155,10 @@ export function DepartmentDetailsPage() {
 
   const handleDeleteDept = async () => {
     if (!department) return;
+    if (!isAdmin) {
+      toast.error('ليس لديك صلاحية حذف الأقسام');
+      return;
+    }
     const id = department.id;
     const nameAr = department.name_ar;
     setDeleting(true);
@@ -172,7 +188,7 @@ export function DepartmentDetailsPage() {
     }
   }, []);
 
-  if (!currentUser || currentUser.role !== 'admin') {
+  if (!currentUser) {
     return null;
   }
 
@@ -212,24 +228,26 @@ export function DepartmentDetailsPage() {
                 <p className="text-sm text-gray-500" dir="ltr">{department.name}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={openEditModal}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                aria-label="تعديل القسم"
-              >
-                <Edit2 className="w-4 h-4 text-gray-500" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="p-2 hover:bg-red-50 rounded-xl transition-colors"
-                aria-label="حذف القسم"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-              </button>
-            </div>
+            {isAdmin && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openEditModal}
+                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                  aria-label="تعديل القسم"
+                >
+                  <Edit2 className="w-4 h-4 text-gray-500" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-2 hover:bg-red-50 rounded-xl transition-colors"
+                  aria-label="حذف القسم"
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <div className="p-4 space-y-3">
@@ -378,7 +396,7 @@ export function DepartmentDetailsPage() {
         </div>
       )}
 
-      {showDeleteConfirm && (
+      {showDeleteConfirm && isAdmin && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => !deleting && setShowDeleteConfirm(false)}
