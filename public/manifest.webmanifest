@@ -1,0 +1,19 @@
+{
+  "name": "شبكة الساعة - الموارد البشرية",
+  "short_name": "شبكة الساعة",
+  "description": "نظام إدارة الحضور والإجازات في شبكة الساعة",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

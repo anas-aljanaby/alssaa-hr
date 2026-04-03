@@ -11,4 +11,41 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+const REMEMBER_ME_STORAGE_KEY = 'auth.rememberMe';
+
+export function getRememberMePreference(): boolean {
+  const storedValue = localStorage.getItem(REMEMBER_ME_STORAGE_KEY);
+  return storedValue !== 'false';
+}
+
+export function setRememberMePreference(rememberMe: boolean): void {
+  localStorage.setItem(REMEMBER_ME_STORAGE_KEY, String(rememberMe));
+}
+
+const authStorage = {
+  getItem(key: string): string | null {
+    if (getRememberMePreference()) {
+      return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    }
+    return sessionStorage.getItem(key) ?? localStorage.getItem(key);
+  },
+  setItem(key: string, value: string): void {
+    if (getRememberMePreference()) {
+      localStorage.setItem(key, value);
+      sessionStorage.removeItem(key);
+      return;
+    }
+    sessionStorage.setItem(key, value);
+    localStorage.removeItem(key);
+  },
+  removeItem(key: string): void {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  },
+};
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: authStorage,
+  },
+});
