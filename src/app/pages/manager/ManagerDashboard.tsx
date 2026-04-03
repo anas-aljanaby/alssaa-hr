@@ -47,6 +47,7 @@ export function ManagerDashboard() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [missingDepartment, setMissingDepartment] = useState(false);
   const [department, setDepartment] = useState<Department | null>(null);
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [todayLogs, setTodayLogs] = useState<AttendanceLog[]>([]);
@@ -111,48 +112,63 @@ export function ManagerDashboard() {
   );
 
   async function loadData() {
-    if (!currentUser?.departmentId) return;
     try {
       setLoading(true);
+      setMissingDepartment(false);
+      let departmentId = currentUser?.departmentId || '';
+      if (!departmentId && currentUser?.role === 'manager') {
+        const managedDepartment = await departmentsService.getDepartmentByManagerUid(currentUser.uid);
+        departmentId = managedDepartment?.id ?? '';
+      }
+      if (!departmentId) {
+        setMissingDepartment(true);
+        setLoading(false);
+        return;
+      }
       const today = todayStr();
       const base = now();
       const [dept, emps, logs, reqs] = await Promise.all([
-        departmentsService.getDepartmentById(currentUser.departmentId),
-        profilesService.getDepartmentEmployees(currentUser.departmentId),
-        attendanceService.getDepartmentLogsForDate(currentUser.departmentId, today),
-        requestsService.getPendingDepartmentRequests(currentUser.departmentId),
+        departmentsService.getDepartmentById(departmentId),
+        profilesService.getDepartmentEmployees(departmentId),
+        attendanceService.getDepartmentLogsForDate(departmentId, today),
+        requestsService.getPendingDepartmentRequests(departmentId),
       ]);
       setDepartment(dept);
       setEmployees(emps);
       setTodayLogs(logs);
       setPendingRequests(reqs);
 
-      const allMonthLogs: AttendanceLog[] = [];
-      for (const emp of emps) {
-        const empLogs = await attendanceService.getMonthlyLogs(
-          emp.id,
-          base.getFullYear(),
-          base.getMonth()
-        );
-        allMonthLogs.push(...empLogs);
-      }
-      setMonthLogs(allMonthLogs);
+      const monthLogsPerEmployee = await Promise.all(
+        emps.map((emp) =>
+          attendanceService.getMonthlyLogs(
+            emp.id,
+            base.getFullYear(),
+            base.getMonth()
+          )
+        )
+      );
+      setMonthLogs(monthLogsPerEmployee.flat());
 
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-      const weekData: { day: string; logs: AttendanceLog[] }[] = [];
-      for (let i = 4; i >= 0; i--) {
+      const weekDays = Array.from({ length: 5 }, (_, idx) => {
+        const i = 4 - idx;
         const d = new Date(base);
         d.setDate(d.getDate() - i);
-        const ds = dateStr(d);
-        const dayLogs = await attendanceService.getDepartmentLogsForDate(
-          currentUser.departmentId,
-          ds
-        );
-        weekData.push({
+        return d;
+      });
+      const weekData = await Promise.all(
+        weekDays.map(async (d) => {
+          const ds = dateStr(d);
+          const logs = await attendanceService.getDepartmentLogsForDate(
+            departmentId,
+            ds
+          );
+          return {
           day: days[d.getDay()] || d.toLocaleDateString('ar-IQ', { weekday: 'short' }),
-          logs: dayLogs,
-        });
-      }
+            logs,
+          };
+        })
+      );
       setWeekLogs(weekData);
     } catch {
       toast.error('فشل تحميل البيانات');
@@ -232,6 +248,16 @@ export function ManagerDashboard() {
 
   if (loading) {
     return <DashboardSkeleton />;
+  }
+
+  if (missingDepartment) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900">
+          لا يمكن تحميل لوحة المدير حالياً. حسابك غير مرتبط بقسم. يرجى التواصل مع المدير العام لإسناد قسم لك.
+        </div>
+      </div>
+    );
   }
 
   const tabClass = (tab: ManagerTab) =>

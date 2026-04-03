@@ -168,6 +168,12 @@ export function DepartmentsPage() {
         name_ar: nameAr,
         manager_uid: managerId ?? null,
       });
+      if (managerId) {
+        await profilesService.updateUser(managerId, {
+          role: 'manager',
+          department_id: created.id,
+        });
+      }
       await auditService.createAuditLog({
         actor_id: currentUser.uid,
         action: 'department_created',
@@ -233,6 +239,12 @@ export function DepartmentsPage() {
         name: nameEn,
         manager_uid: managerId ?? null,
       });
+      if (managerId) {
+        await profilesService.updateUser(managerId, {
+          role: 'manager',
+          department_id: editingDept.id,
+        });
+      }
       await auditService.createAuditLog({
         actor_id: currentUser.uid,
         action: 'department_updated',

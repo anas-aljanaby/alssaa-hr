@@ -106,31 +106,36 @@ export function AdminDashboard() {
       setPendingRequests(pendingReqs);
 
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-      const weekData: { day: string; logs: AttendanceLog[] }[] = [];
       const base = now();
-      for (let i = 4; i >= 0; i--) {
+      const weekDays = Array.from({ length: 5 }, (_, idx) => {
+        const i = 4 - idx;
         const d = new Date(base);
         d.setDate(d.getDate() - i);
-        const ds = dateStr(d);
-        const dayLogs = await attendanceService.getAllLogsForDate(ds);
-        weekData.push({
+        return d;
+      });
+      const weekData = await Promise.all(
+        weekDays.map(async (d) => {
+          const ds = dateStr(d);
+          const logsForDay = await attendanceService.getAllLogsForDate(ds);
+          return {
           day: days[d.getDay()] || d.toLocaleDateString('ar-IQ', { weekday: 'short' }),
-          logs: dayLogs,
-        });
-      }
+            logs: logsForDay,
+          };
+        })
+      );
       setWeekLogs(weekData);
 
       const allNonAdmin = profs.filter((p) => p.role !== 'admin');
-      const allMonthLogs: AttendanceLog[] = [];
-      for (const emp of allNonAdmin) {
-        const empLogs = await attendanceService.getMonthlyLogs(
-          emp.id,
-          base.getFullYear(),
-          base.getMonth()
-        );
-        allMonthLogs.push(...empLogs);
-      }
-      setMonthLogs(allMonthLogs);
+      const monthLogsPerEmployee = await Promise.all(
+        allNonAdmin.map((emp) =>
+          attendanceService.getMonthlyLogs(
+            emp.id,
+            base.getFullYear(),
+            base.getMonth()
+          )
+        )
+      );
+      setMonthLogs(monthLogsPerEmployee.flat());
     } catch {
       toast.error('فشل تحميل البيانات');
     } finally {

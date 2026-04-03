@@ -47,6 +47,17 @@ export async function getDepartmentById(id: string): Promise<Department | null> 
   return data;
 }
 
+export async function getDepartmentByManagerUid(managerUid: string): Promise<Department | null> {
+  const { data, error } = await supabase
+    .from('departments')
+    .select('*')
+    .eq('manager_uid', managerUid)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function createDepartment(dept: DepartmentInsert): Promise<Department> {
   const { data, error } = await supabase
     .from('departments')
