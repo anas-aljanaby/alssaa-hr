@@ -14,6 +14,9 @@ const mockGetTodayLog = vi.hoisted(() => vi.fn());
 const mockGetMonthlyStats = vi.hoisted(() => vi.fn());
 const mockGetAllUserLogs = vi.hoisted(() => vi.fn());
 const mockGetLogsInRange = vi.hoisted(() => vi.fn());
+const mockGetAllTimeStats = vi.hoisted(() => vi.fn());
+const mockGetAllTimeSummaries = vi.hoisted(() => vi.fn());
+const mockGetSummariesInRange = vi.hoisted(() => vi.fn());
 const mockGetUserBalance = vi.hoisted(() => vi.fn());
 const mockGetUserRequests = vi.hoisted(() => vi.fn());
 const mockGetAuditLogsForTarget = vi.hoisted(() => vi.fn());
@@ -66,6 +69,9 @@ vi.mock('@/lib/services/attendance.service', async (importOriginal) => {
     getMonthlyStats: (...args: unknown[]) => mockGetMonthlyStats(...args),
     getAllUserLogs: (...args: unknown[]) => mockGetAllUserLogs(...args),
     getLogsInRange: (...args: unknown[]) => mockGetLogsInRange(...args),
+    getAllTimeStats: (...args: unknown[]) => mockGetAllTimeStats(...args),
+    getAllTimeSummaries: (...args: unknown[]) => mockGetAllTimeSummaries(...args),
+    getSummariesInRange: (...args: unknown[]) => mockGetSummariesInRange(...args),
   };
 });
 
@@ -191,6 +197,20 @@ function setupSuccessfulDataLoad() {
     },
   ]);
   mockGetAuditLogsForTarget.mockResolvedValue([]);
+  mockGetAllTimeStats.mockResolvedValue({
+    presentDays: 1,
+    lateDays: 0,
+    absentDays: 1,
+    leaveDays: 0,
+    totalWorkingDays: 2,
+  });
+  mockGetAllTimeSummaries.mockResolvedValue([
+    { date: '2026-03-20', status: 'present', totalMinutesWorked: 435 },
+    { date: '2026-03-19', status: 'absent', totalMinutesWorked: 0 },
+  ]);
+  mockGetSummariesInRange.mockResolvedValue([
+    { date: '2026-03-20', status: 'present', totalMinutesWorked: 435 },
+  ]);
 }
 
 describe('UserDetailsPage', () => {

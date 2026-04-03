@@ -1,6 +1,10 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables, UpdateTables } from '../database.types';
 
+/** Columns fetched in the app — excludes `phone` (not shown in the UI). */
+export const PROFILE_SELECT_COLUMNS =
+  'id, org_id, employee_id, name, name_ar, email, role, department_id, avatar_url, join_date, work_days, work_start_time, work_end_time';
+
 export type Profile = Tables<'profiles'>;
 export type ProfileInsert = InsertTables<'profiles'>;
 export type ProfileUpdate = UpdateTables<'profiles'>;
@@ -8,7 +12,7 @@ export type ProfileUpdate = UpdateTables<'profiles'>;
 export async function getUserById(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT_COLUMNS)
     .eq('id', userId)
     .single();
 
@@ -19,7 +23,7 @@ export async function getUserById(userId: string): Promise<Profile | null> {
 export async function listUsers(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT_COLUMNS)
     .order('name_ar');
 
   if (error) throw error;
@@ -29,7 +33,7 @@ export async function listUsers(): Promise<Profile[]> {
 export async function getDepartmentEmployees(departmentId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT_COLUMNS)
     .eq('department_id', departmentId)
     .order('name_ar');
 
@@ -40,7 +44,7 @@ export async function getDepartmentEmployees(departmentId: string): Promise<Prof
 export async function getUsersByRole(role: Profile['role']): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT_COLUMNS)
     .eq('role', role)
     .order('name_ar');
 
@@ -52,7 +56,7 @@ export async function createUser(profile: ProfileInsert): Promise<Profile> {
   const { data, error } = await supabase
     .from('profiles')
     .insert(profile)
-    .select()
+    .select(PROFILE_SELECT_COLUMNS)
     .single();
 
   if (error) throw error;
@@ -67,7 +71,7 @@ export async function updateUser(
     .from('profiles')
     .update(updates)
     .eq('id', userId)
-    .select()
+    .select(PROFILE_SELECT_COLUMNS)
     .single();
 
   if (error) throw error;

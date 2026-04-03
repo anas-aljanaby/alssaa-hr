@@ -176,6 +176,7 @@ begin
     employee_id,
     name,
     name_ar,
+    email,
     phone,
     role,
     created_at,
@@ -186,6 +187,7 @@ begin
     v_gm_employee_id,
     v_gm_name,
     v_gm_name_ar,
+    v_gm_email,
     v_gm_phone,
     'admin',
     now(),
@@ -196,6 +198,7 @@ begin
     employee_id = excluded.employee_id,
     name = excluded.name,
     name_ar = excluded.name_ar,
+    email = excluded.email,
     phone = excluded.phone,
     role = excluded.role,
     updated_at = now();

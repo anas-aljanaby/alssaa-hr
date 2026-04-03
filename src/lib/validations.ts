@@ -149,7 +149,7 @@ export const updateProfileSchema = z
         'البريد الإلكتروني غير صالح'
       ),
     role: z.enum(['employee', 'manager', 'admin'], { required_error: 'الدور مطلوب' }),
-    department_id: z.string().min(1, 'القسم مطلوب'),
+    department_id: z.string(),
     work_days: z.array(workDay).optional(),
     work_start_time: z.string().optional(),
     work_end_time: z.string().optional(),

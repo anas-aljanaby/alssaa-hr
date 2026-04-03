@@ -15,3 +15,6 @@ verify_jwt = false
 
 [functions.auto-punch-out]
 verify_jwt = false
+
+[functions.mark-absent]
+verify_jwt = false

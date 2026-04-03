@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, typ
 import type { User, UserRole } from '../data/mockData';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/lib/database.types';
+import { PROFILE_SELECT_COLUMNS } from '@/lib/services/profiles.service';
 import type { Session } from '@supabase/supabase-js';
 
 interface AuthResult {
@@ -40,7 +41,7 @@ function profileToUser(profile: Tables<'profiles'>, email: string): User {
 async function fetchProfileForSession(session: Session): Promise<User | null> {
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT_COLUMNS)
     .eq('id', session.user.id)
     .single();
 

@@ -347,6 +347,11 @@ describe('updateProfileSchema', () => {
     expect(updateProfileSchema.safeParse(valid).success).toBe(true);
   });
 
+  it('passes with empty department_id (no department)', () => {
+    const r = updateProfileSchema.safeParse({ ...valid, department_id: '' });
+    expect(r.success).toBe(true);
+  });
+
   it('passes with valid work schedule', () => {
     const r = updateProfileSchema.safeParse({
       ...valid,

@@ -23,7 +23,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
-import type { AttendanceLog, MonthlyStats } from '@/lib/services/attendance.service';
+import type { AttendanceLog, MonthlyStats, MonthDaySummary } from '@/lib/services/attendance.service';
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
@@ -32,8 +32,6 @@ import {
   Mail,
   Calendar,
   Clock,
-  LogIn,
-  LogOut,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -53,22 +51,6 @@ import { getStatusTheme } from '../../components/attendance/attendanceStatusThem
 import { StatCard } from '../../components/shared/StatCard';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 
-function calculateLateMinutes(
-  checkInTime: string,
-  workStartTime: string = '08:00',
-  gracePeriod: number = 10
-): number {
-  const [checkHour, checkMin] = checkInTime.split(':').map(Number);
-  const [startHour, startMin] = workStartTime.split(':').map(Number);
-  const checkMinutes = checkHour * 60 + checkMin;
-  const startMinutes = startHour * 60 + startMin + gracePeriod;
-  return Math.max(0, checkMinutes - startMinutes);
-}
-
-function formatWallTime(t: string | null): string {
-  if (!t) return '--:--';
-  return t.includes('T') ? t.slice(11, 16) : t.slice(0, 5);
-}
 
 function formatDayAndMonth(date: string) {
   const d = new Date(`${date}T00:00:00`);
@@ -124,18 +106,18 @@ export function UserDetailsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [department, setDepartment] = useState<Department | null>(null);
   const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
-  const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
-  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
-  const [allAttendanceLogs, setAllAttendanceLogs] = useState<AttendanceLog[]>([]);
+  const [allTimeSummaries, setAllTimeSummaries] = useState<MonthDaySummary[]>([]);
+  const [rangeSummaries, setRangeSummaries] = useState<MonthDaySummary[]>([]);
+  const [allTimeStats, setAllTimeStats] = useState<MonthlyStats | null>(null);
   const [userAuditLogs, setUserAuditLogs] = useState<AuditLog[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'leaves' | 'requests'>(
     'overview'
   );
   const [requestFilter, setRequestFilter] = useState<'all' | LeaveRequest['status']>('all');
   const [showAuditLog, setShowAuditLog] = useState(false);
-  const [attendanceFilter, setAttendanceFilter] = useState<'all' | AttendanceLog['status']>('all');
+  const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'present' | 'late' | 'absent' | 'on_leave'>('all');
   const [attendanceViewMode, setAttendanceViewMode] = useState<'all_time' | 'range'>('all_time');
   const [dateFrom, setDateFrom] = useState(() => {
     const n = now();
@@ -153,7 +135,6 @@ export function UserDetailsPage() {
   const [updatingLeaveBalance, setUpdatingLeaveBalance] = useState(false);
   const [editAnnualTotal, setEditAnnualTotal] = useState('');
   const [editSickTotal, setEditSickTotal] = useState('');
-  const [departments, setDepartments] = useState<Awaited<ReturnType<typeof departmentsService.listDepartments>>>([]);
   const [orgPolicy, setOrgPolicy] = useState<Awaited<ReturnType<typeof policyService.getPolicy>>>(null);
   useBodyScrollLock(
     showEditModal ||
@@ -204,8 +185,8 @@ export function UserDetailsPage() {
   useEffect(() => {
     if (!userId || attendanceViewMode !== 'range') return;
     attendanceService
-      .getLogsInRange(userId, dateFrom, dateTo)
-      .then(setAttendanceLogs)
+      .getSummariesInRange(userId, dateFrom, dateTo)
+      .then(setRangeSummaries)
       .catch(() => toast.error('فشل تحميل سجلات الحضور'));
   }, [userId, dateFrom, dateTo, attendanceViewMode]);
 
@@ -230,7 +211,6 @@ export function UserDetailsPage() {
 
   useEffect(() => {
     if (profile && currentUser?.role === 'admin') {
-      departmentsService.listDepartments().then(setDepartments).catch(() => {});
       policyService.getPolicy().then(setOrgPolicy).catch(() => {});
     }
   }, [profile, currentUser?.role]);
@@ -324,25 +304,24 @@ export function UserDetailsPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const n = now();
-      const [prof, log, stats, balance, reqs, audit, allLogs, rangeLogs] = await Promise.all([
+      const [prof, log, balance, reqs, audit, atStats, atSummaries, atRangeSummaries] = await Promise.all([
         profilesService.getUserById(userId),
         attendanceService.getTodayLog(userId),
-        attendanceService.getMonthlyStats(userId, n.getFullYear(), n.getMonth()),
         leaveBalanceService.getUserBalance(userId),
         requestsService.getUserRequests(userId),
         auditService.getAuditLogsForTarget(userId),
-        attendanceService.getAllUserLogs(userId),
-        attendanceService.getLogsInRange(userId, dateFrom, dateTo),
+        attendanceService.getAllTimeStats(userId),
+        attendanceService.getAllTimeSummaries(userId),
+        attendanceService.getSummariesInRange(userId, dateFrom, dateTo),
       ]);
       setProfile(prof);
       setTodayLog(log);
-      setMonthlyStats(stats);
       setLeaveBalance(balance);
       setUserRequests(reqs);
       setUserAuditLogs(audit.slice(0, 10));
-      setAllAttendanceLogs(allLogs);
-      setAttendanceLogs(rangeLogs);
+      setAllTimeStats(atStats);
+      setAllTimeSummaries(atSummaries);
+      setRangeSummaries(atRangeSummaries);
 
       if (prof?.department_id) {
         const dept = await departmentsService.getDepartmentById(prof.department_id);
@@ -456,18 +435,14 @@ export function UserDetailsPage() {
     requestFilter === 'all'
       ? userRequests
       : userRequests.filter((r) => r.status === requestFilter);
-  const displayedAttendanceLogs = attendanceViewMode === 'all_time' ? allAttendanceLogs : attendanceLogs;
-  const filteredAttendanceLogs =
+  const displayedSummaries = attendanceViewMode === 'all_time' ? allTimeSummaries : rangeSummaries;
+  const workingDaySummaries = displayedSummaries.filter(
+    (d) => d.status != null && d.status !== 'future' && d.status !== 'weekend'
+  );
+  const filteredSummaries =
     attendanceFilter === 'all'
-      ? displayedAttendanceLogs
-      : displayedAttendanceLogs.filter((log) => log.status === attendanceFilter);
-  const allTimeStats: MonthlyStats = {
-    presentDays: allAttendanceLogs.filter((d) => d.status === 'present').length,
-    lateDays: allAttendanceLogs.filter((d) => d.status === 'late').length,
-    absentDays: allAttendanceLogs.filter((d) => d.status === 'absent').length,
-    leaveDays: allAttendanceLogs.filter((d) => d.status === 'on_leave').length,
-    totalWorkingDays: allAttendanceLogs.filter((d) => d.status != null).length,
-  };
+      ? workingDaySummaries
+      : workingDaySummaries.filter((d) => d.status === attendanceFilter);
   const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
     if (!profile) return;
     const oldEmail = (profile.email ?? '').trim().toLowerCase();
@@ -487,8 +462,8 @@ export function UserDetailsPage() {
       await profilesService.updateUser(profile.id, {
         name_ar: data.name_ar.trim(),
         email: data.email?.trim() || null,
-        role: data.role,
-        department_id: data.department_id,
+        role: profile.role,
+        department_id: profile.department_id,
         work_days: hasWorkDays && workStart && workEnd ? data.work_days! : null,
         work_start_time: hasWorkDays && workStart && workEnd ? workStart : null,
         work_end_time: hasWorkDays && workStart && workEnd ? workEnd : null,
@@ -525,14 +500,11 @@ export function UserDetailsPage() {
   };
 
   const handleExportAttendance = () => {
-    if (attendanceLogs.length === 0) return;
-    const rows = attendanceLogs.map((log) => ({
-      'التاريخ': log.date,
-      'الحالة': getAttendanceStatusAr(log.status),
-      'وقت الدخول': log.check_in_time ?? '—',
-      'وقت الخروج': log.check_out_time ?? '—',
-      'تأخير (دقائق)': log.check_in_time ? calculateLateMinutes(log.check_in_time) : 0,
-      'انصراف تلقائي': log.auto_punch_out ? 'نعم' : 'لا',
+    if (filteredSummaries.length === 0) return;
+    const rows = filteredSummaries.map((d) => ({
+      'التاريخ': d.date,
+      'الحالة': getAttendanceStatusAr(d.status as 'present' | 'late' | 'absent' | 'on_leave'),
+      'إجمالي الدقائق': d.totalMinutesWorked,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -602,7 +574,7 @@ export function UserDetailsPage() {
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-start gap-4">
           <div
-            className={`w-16 h-16 rounded-full flex items-center justify-center text-xl ${
+            className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-xl ${
               profile.role === 'admin'
                 ? 'bg-purple-100 text-purple-600'
                 : profile.role === 'manager'
@@ -612,14 +584,15 @@ export function UserDetailsPage() {
           >
             {profile.name_ar.charAt(0)}
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h2 className="text-gray-800">{profile.name_ar}</h2>
-            <p className="text-xs text-gray-500 mt-0.5" dir="ltr">
-              {profile.employee_id}
-            </p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-600 min-w-0">
+              <Building2 className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden />
+              <span className="truncate">{department?.name_ar ?? 'بدون قسم'}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
               <span
-                className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 ${roleColor(profile.role)}`}
+                className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${roleColor(profile.role)}`}
               >
                 {roleIcon(profile.role)}
                 {roleLabel(profile.role)}
@@ -643,12 +616,6 @@ export function UserDetailsPage() {
                 {' — '}
                 <span dir="ltr">{profile.work_start_time}–{profile.work_end_time}</span>
               </p>
-            )}
-            {department && (
-              <div className="flex items-center gap-1 mt-2 text-xs text-gray-600">
-                <Building2 className="w-3.5 h-3.5" />
-                {department.name_ar}
-              </div>
             )}
           </div>
         </div>
@@ -732,7 +699,7 @@ export function UserDetailsPage() {
             )}
           </div>
 
-          {monthlyStats && (
+          {allTimeStats && (
             <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
               <h3 className="text-sm text-gray-600 mb-3">إحصائيات كل الوقت</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -870,7 +837,7 @@ export function UserDetailsPage() {
                 <button
                   type="button"
                   onClick={handleExportAttendance}
-                  disabled={filteredAttendanceLogs.length === 0}
+                  disabled={filteredSummaries.length === 0}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-emerald-200"
                   aria-label="تصدير الحضور"
                 >
@@ -947,61 +914,64 @@ export function UserDetailsPage() {
           </div>
 
           <div className="space-y-2">
-            {filteredAttendanceLogs.length > 0 ? (
-              filteredAttendanceLogs.map((log) => {
-                const statusTheme = getAttendanceLogTheme(log.status);
-                const openSession = !log.check_out_time;
-                const dateParts = formatDayAndMonth(log.date);
-                return (
-                  <div
-                    key={log.id}
-                    className="relative bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.08)] p-4 pt-8 border-r-4"
-                    style={statusTheme.accentStyle}
-                  >
-                    <span
-                      className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium font-['IBM_Plex_Sans_Arabic',_sans-serif]"
-                      style={statusTheme.badgeSolidStyle}
+            {filteredSummaries.length > 0 ? (
+              filteredSummaries
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .map((day) => {
+                  const mappedStatus: AttendanceLog['status'] =
+                    day.status === 'present' ? 'present'
+                    : day.status === 'late' ? 'late'
+                    : day.status === 'on_leave' ? 'on_leave'
+                    : 'absent';
+                  const statusTheme = getAttendanceLogTheme(mappedStatus);
+                  const dateParts = formatDayAndMonth(day.date);
+                  const hours = Math.floor(day.totalMinutesWorked / 60);
+                  const mins = day.totalMinutesWorked % 60;
+                  return (
+                    <div
+                      key={day.date}
+                      className="relative bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.08)] p-4 pt-8 border-r-4"
+                      style={statusTheme.accentStyle}
                     >
-                      {statusTheme.label}
-                    </span>
+                      <span
+                        className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium font-['IBM_Plex_Sans_Arabic',_sans-serif]"
+                        style={statusTheme.badgeSolidStyle}
+                      >
+                        {statusTheme.label}
+                      </span>
 
-                    <div className="flex items-center gap-5">
-                      <div className="min-w-[78px] text-center">
-                        <p className="text-[12px] font-normal text-[#94A3B8] font-['IBM_Plex_Sans_Arabic',_sans-serif]">{formatWeekday(log.date)}</p>
-                        <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900 font-['IBM_Plex_Sans_Arabic',_sans-serif]">
-                          <span className="text-[20px] font-bold leading-none">{dateParts.day}</span>
-                          <span className="text-[13px] font-bold leading-none">{dateParts.month}</span>
-                        </div>
-                      </div>
-
-                      <div className="h-12 w-px bg-gray-200" />
-
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <div className="flex items-center gap-3 text-gray-800">
-                          <LogIn className="w-4 h-4 text-teal-700" />
-                          <span className="text-[15px] font-medium text-[#334155] font-['IBM_Plex_Mono',_monospace] tabular-nums">
-                            {formatWallTime(log.check_in_time)}
-                          </span>
+                      <div className="flex items-center gap-5">
+                        <div className="min-w-[78px] text-center">
+                          <p className="text-[12px] font-normal text-[#94A3B8] font-['IBM_Plex_Sans_Arabic',_sans-serif]">{formatWeekday(day.date)}</p>
+                          <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900 font-['IBM_Plex_Sans_Arabic',_sans-serif]">
+                            <span className="text-[20px] font-bold leading-none">{dateParts.day}</span>
+                            <span className="text-[13px] font-bold leading-none">{dateParts.month}</span>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-gray-800">
-                          <LogOut className="w-4 h-4 text-gray-500" />
-                          <span className={`text-[15px] font-medium font-['IBM_Plex_Mono',_monospace] tabular-nums ${openSession ? 'text-gray-300' : 'text-[#334155]'}`}>
-                            {formatWallTime(log.check_out_time)}
-                          </span>
+                        <div className="h-12 w-px bg-gray-200" />
+
+                        <div className="flex-1 min-w-0 space-y-2">
+                          {day.totalMinutesWorked > 0 ? (
+                            <div className="flex items-center gap-3 text-gray-800">
+                              <Clock className="w-4 h-4 text-teal-700" />
+                              <span className="text-[15px] font-medium text-[#334155] font-['IBM_Plex_Mono',_monospace] tabular-nums">
+                                {hours > 0 ? `${hours} س ` : ''}{mins > 0 ? `${mins} د` : hours > 0 ? '' : '0 د'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3 text-gray-400">
+                              <Clock className="w-4 h-4" />
+                              <span className="text-[15px] font-medium font-['IBM_Plex_Mono',_monospace] tabular-nums">
+                                —
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
-
-                    {log.auto_punch_out && (
-                      <div className="mt-3 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 inline-flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        انصراف تلقائي
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+                  );
+                })
             ) : (
               <div className="bg-gray-50 rounded-xl p-8 text-center border border-gray-100">
                 <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-2" />
@@ -1439,39 +1409,12 @@ export function UserDetailsPage() {
                 <p className="text-amber-700 text-xs mt-1">
                   تنبيه: تغيير البريد الإلكتروني إجراء حساس وقد يؤثر على تسجيل الدخول.
                 </p>
+                <p className="text-gray-500 text-xs mt-2">
+                  الدور والقسم يُعدّلان من صفحة الأقسام.
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1.5 text-gray-700">الدور</label>
-                  <select
-                    {...editProfileForm.register('role')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value={profile.role}>
-                      {roleLabel(profile.role)}
-                    </option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block mb-1.5 text-gray-700">القسم</label>
-                  <select
-                    {...editProfileForm.register('department_id')}
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      editProfileForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
-                    }`}
-                  >
-                    <option value="">اختر القسم</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name_ar}
-                      </option>
-                    ))}
-                  </select>
-                  {editProfileForm.formState.errors.department_id && (
-                    <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.department_id.message}</p>
-                  )}
-                </div>
-              </div>
+              <input type="hidden" {...editProfileForm.register('role')} />
+              <input type="hidden" {...editProfileForm.register('department_id')} />
 
               <div className="border-t border-gray-100 pt-4">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>

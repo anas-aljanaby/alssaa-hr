@@ -12,6 +12,7 @@ import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Pagination, usePagination } from '../../components/Pagination';
+import { PasswordGenerateCopyRow } from '@/app/components/PasswordGenerateCopyRow';
 import { UsersPageSkeleton } from '../../components/skeletons';
 import {
   Plus,
@@ -38,6 +39,7 @@ export function UsersPage() {
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [orgPolicy, setOrgPolicy] = useState<Awaited<ReturnType<typeof policyService.getPolicy>>>(null);
+  const [showAddUserPassword, setShowAddUserPassword] = useState(false);
   const navigate = useNavigate();
   useBodyScrollLock(showForm || !!editingUser);
 
@@ -112,6 +114,7 @@ export function UsersPage() {
     if (e.key === 'Escape') {
       setShowForm(false);
       addUserForm.reset();
+      setShowAddUserPassword(false);
       setEditingUser(null);
       editUserForm.reset();
     }
@@ -165,6 +168,7 @@ export function UsersPage() {
       toast.success('تم إنشاء المستخدم بنجاح');
       setShowForm(false);
       addUserForm.reset();
+      setShowAddUserPassword(false);
       await loadData();
     } catch (err) {
       const msg = getAddUserErrorMessage(
@@ -214,8 +218,8 @@ export function UsersPage() {
         name_ar: data.name_ar.trim(),
         // Preserve existing email when form does not provide one.
         email: rawNextEmail && rawNextEmail.length > 0 ? rawNextEmail : (editingUser.email ?? null),
-        role: data.role,
-        department_id: data.department_id,
+        role: editingUser.role,
+        department_id: editingUser.department_id,
         work_days: hasWorkDays && workStart && workEnd ? data.work_days! : null,
         work_start_time: hasWorkDays && workStart && workEnd ? workStart : null,
         work_end_time: hasWorkDays && workStart && workEnd ? workEnd : null,
@@ -236,7 +240,10 @@ export function UsersPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-gray-800">إدارة المستخدمين</h1>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            setShowForm(true);
+            setShowAddUserPassword(false);
+          }}
           className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -306,63 +313,60 @@ export function UsersPage() {
                   if (e.key === 'Enter' || e.key === ' ') navigate(`/user-details/${user.id}`);
                 }}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-11 h-11 rounded-full flex items-center justify-center ${
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center ${
+                      user.role === 'admin'
+                        ? 'bg-purple-100'
+                        : user.role === 'manager'
+                          ? 'bg-emerald-100'
+                          : 'bg-blue-100'
+                    }`}
+                  >
+                    <span
+                      className={`text-sm ${
                         user.role === 'admin'
-                          ? 'bg-purple-100'
+                          ? 'text-purple-600'
                           : user.role === 'manager'
-                            ? 'bg-emerald-100'
-                            : 'bg-blue-100'
+                            ? 'text-emerald-600'
+                            : 'text-blue-600'
                       }`}
                     >
-                      <span
-                        className={`text-sm ${
-                          user.role === 'admin'
-                            ? 'text-purple-600'
-                            : user.role === 'manager'
-                              ? 'text-emerald-600'
-                              : 'text-blue-600'
-                        }`}
-                      >
-                        {user.name_ar.charAt(0)}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-800">{user.name_ar}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 truncate" dir="ltr">
-                        {getDisplayEmail(user.email)}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 ${roleColor(user.role)}`}
+                      {user.name_ar.charAt(0)}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{user.name_ar}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate" dir="ltr">
+                          {getDisplayEmail(user.email)}
+                        </p>
+                      </div>
+                      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(user)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                          aria-label="تعديل"
                         >
-                          {roleIcon(user.role)}
-                          {roleLabel(user.role)}
-                        </span>
-                        {dept && (
-                          <span className="flex items-center gap-1 text-xs text-gray-400">
-                            <Building2 className="w-3 h-3" />
-                            {dept.name_ar}
-                          </span>
-                        )}
+                          <Edit2 className="w-4 h-4 text-gray-400" />
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(user)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                      aria-label="تعديل"
-                    >
-                      <Edit2 className="w-4 h-4 text-gray-400" />
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${roleColor(user.role)}`}
+                      >
+                        {roleIcon(user.role)}
+                        {roleLabel(user.role)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-                  <span className="text-xs text-gray-400">{user.employee_id}</span>
+                <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-1.5 text-xs text-gray-600 min-w-0">
+                  <Building2 className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden />
+                  <span className="truncate">{dept?.name_ar ?? 'بدون قسم'}</span>
                 </div>
               </div>
             </div>
@@ -380,7 +384,11 @@ export function UsersPage() {
       {showForm && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-          onClick={() => { setShowForm(false); addUserForm.reset(); }}
+          onClick={() => {
+            setShowForm(false);
+            addUserForm.reset();
+            setShowAddUserPassword(false);
+          }}
           onKeyDown={handleModalKeyDown}
           role="dialog"
           aria-modal="true"
@@ -395,7 +403,11 @@ export function UsersPage() {
               <h2 id="add-user-title" className="text-gray-800">إضافة مستخدم جديد</h2>
               <button
                 type="button"
-                onClick={() => { setShowForm(false); addUserForm.reset(); }}
+                onClick={() => {
+                  setShowForm(false);
+                  addUserForm.reset();
+                  setShowAddUserPassword(false);
+                }}
                 className="p-2 hover:bg-gray-100 rounded-full"
                 aria-label="إغلاق"
               >
@@ -438,13 +450,23 @@ export function UsersPage() {
               <div>
                 <label className="block mb-1.5 text-gray-700">كلمة المرور</label>
                 <input
-                  type="password"
+                  type={showAddUserPassword ? 'text' : 'password'}
                   {...addUserForm.register('password')}
                   placeholder="أدخل كلمة مرور قوية"
                   className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                     addUserForm.formState.errors.password ? 'border-red-400' : 'border-gray-200'
                   }`}
                   dir="ltr"
+                />
+                <PasswordGenerateCopyRow
+                  className="mt-2"
+                  onGenerated={(pw) => {
+                    addUserForm.setValue('password', pw, { shouldValidate: true });
+                    setShowAddUserPassword(true);
+                  }}
+                  valueToCopy={addUserForm.watch('password') ?? ''}
+                  passwordVisible={showAddUserPassword}
+                  onTogglePasswordVisible={() => setShowAddUserPassword((v) => !v)}
                 />
                 {addUserForm.formState.errors.password && (
                   <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.password.message}</p>
@@ -522,38 +544,11 @@ export function UsersPage() {
                   <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.name_ar.message}</p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1.5 text-gray-700">الدور</label>
-                  <select
-                    {...editUserForm.register('role')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value={editingUser.role}>
-                      {roleLabel(editingUser.role)}
-                    </option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block mb-1.5 text-gray-700">القسم</label>
-                  <select
-                    {...editUserForm.register('department_id')}
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      editUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
-                    }`}
-                  >
-                    <option value="">اختر القسم</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name_ar}
-                      </option>
-                    ))}
-                  </select>
-                  {editUserForm.formState.errors.department_id && (
-                    <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.department_id.message}</p>
-                  )}
-                </div>
-              </div>
+              <p className="text-gray-500 text-xs -mt-2">
+                الدور والقسم يُعدّلان من صفحة الأقسام.
+              </p>
+              <input type="hidden" {...editUserForm.register('role')} />
+              <input type="hidden" {...editUserForm.register('department_id')} />
 
               <div className="border-t border-gray-100 pt-4">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>

@@ -6,6 +6,7 @@ import { changePasswordSchema, type ChangePasswordFormData } from '@/lib/validat
 import { useAuth } from '../../contexts/AuthContext';
 import * as authService from '@/lib/services/auth.service';
 import { PasswordChecklist } from '../../components/PasswordChecklist';
+import { PasswordGenerateCopyRow } from '@/app/components/PasswordGenerateCopyRow';
 import { PageLayout } from '../../components/layout/PageLayout';
 import { toast } from 'sonner';
 import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
@@ -20,6 +21,7 @@ export function SecurityPrivacyPage() {
   const {
     register,
     watch,
+    setValue,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
@@ -76,24 +78,27 @@ export function SecurityPrivacyPage() {
           </div>
           <div>
             <label className="block mb-1.5 text-sm text-gray-700">كلمة المرور الجديدة</label>
-            <div className="relative">
-              <input
-                type={showNewPassword ? 'text' : 'password'}
-                {...register('newPassword')}
-                placeholder="••••••••"
-                className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all ${
-                  errors.newPassword ? 'border-red-400' : 'border-gray-200'
-                }`}
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword((v) => !v)}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+            <input
+              type={showNewPassword ? 'text' : 'password'}
+              {...register('newPassword')}
+              placeholder="••••••••"
+              className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all ${
+                errors.newPassword ? 'border-red-400' : 'border-gray-200'
+              }`}
+              autoComplete="new-password"
+            />
+            <PasswordGenerateCopyRow
+              className="mt-2"
+              onGenerated={(pw) => {
+                setValue('newPassword', pw, { shouldValidate: true });
+                setValue('confirmPassword', pw, { shouldValidate: true });
+                setShowNewPassword(true);
+                setShowConfirmPassword(true);
+              }}
+              valueToCopy={watch('newPassword') ?? ''}
+              passwordVisible={showNewPassword}
+              onTogglePasswordVisible={() => setShowNewPassword((v) => !v)}
+            />
             {errors.newPassword && (
               <p className="mt-1 text-xs text-red-500">{errors.newPassword.message}</p>
             )}

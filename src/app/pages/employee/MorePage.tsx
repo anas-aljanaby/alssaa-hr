@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Department } from '@/lib/services/departments.service';
+import { displayProfileEmail } from '@/lib/profileDisplay';
 import {
   User,
   Settings,
@@ -148,7 +149,7 @@ export function MorePage() {
           </div>
           <div className="flex-1">
             <h2 className="text-gray-800">{currentUser.nameAr}</h2>
-            <p className="text-sm text-gray-500">{currentUser.email}</p>
+            <p className="text-sm text-gray-500">{displayProfileEmail(currentUser.email)}</p>
             <div className="flex items-center gap-1.5 mt-1">
               <BadgeCheck className="w-4 h-4 text-blue-500" />
               <span className="text-xs text-blue-600">
@@ -174,7 +175,7 @@ export function MorePage() {
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Mail className="w-4 h-4 text-gray-400" />
             <span className="truncate" dir="ltr">
-              {currentUser.email}
+              {displayProfileEmail(currentUser.email)}
             </span>
           </div>
         </div>

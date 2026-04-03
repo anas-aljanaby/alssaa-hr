@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { setPasswordSchema, type SetPasswordFormData } from '@/lib/validations';
+import { PasswordGenerateCopyRow } from '@/app/components/PasswordGenerateCopyRow';
 
 export function SetPasswordPage() {
   const navigate = useNavigate();
@@ -15,6 +16,8 @@ export function SetPasswordPage() {
 
   const {
     register,
+    watch,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<SetPasswordFormData>({
@@ -64,24 +67,26 @@ export function SetPasswordPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <label className="block mb-1.5 text-gray-700">كلمة المرور الجديدة</label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                {...register('password')}
-                placeholder="••••••••"
-                className={`w-full px-4 py-3 pe-12 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
-                  errors.password ? 'border-red-400' : 'border-gray-200'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-              >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              {...register('password')}
+              placeholder="••••••••"
+              className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                errors.password ? 'border-red-400' : 'border-gray-200'
+              }`}
+            />
+            <PasswordGenerateCopyRow
+              className="mt-2"
+              onGenerated={(pw) => {
+                setValue('password', pw, { shouldValidate: true });
+                setValue('confirmPassword', pw, { shouldValidate: true });
+                setShowPassword(true);
+                setShowConfirm(true);
+              }}
+              valueToCopy={watch('password') ?? ''}
+              passwordVisible={showPassword}
+              onTogglePasswordVisible={() => setShowPassword((v) => !v)}
+            />
             {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>}
           </div>
 

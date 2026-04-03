@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import type { Tables } from '../database.types';
+import { PROFILE_SELECT_COLUMNS } from './profiles.service';
 import type { User, UserRole } from '@/app/data/mockData';
 import type { Session } from '@supabase/supabase-js';
 
@@ -26,7 +27,7 @@ export function profileToUser(profile: Tables<'profiles'>, email: string): User 
 export async function fetchProfileForSession(session: Session): Promise<User | null> {
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT_COLUMNS)
     .eq('id', session.user.id)
     .single();
 

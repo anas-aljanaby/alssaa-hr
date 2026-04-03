@@ -860,6 +860,104 @@ export async function getMonthlyStats(
   };
 }
 
+export async function getAllTimeStats(userId: string): Promise<MonthlyStats> {
+  const joinDate = await getUserJoinDate(userId);
+  const today = now();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+
+  let startYear: number;
+  let startMonth: number;
+  if (joinDate) {
+    const [y, m] = joinDate.split('-').map(Number);
+    startYear = y;
+    startMonth = m - 1;
+  } else {
+    startYear = todayYear;
+    startMonth = todayMonth;
+  }
+
+  const totals: MonthlyStats = {
+    presentDays: 0,
+    lateDays: 0,
+    absentDays: 0,
+    leaveDays: 0,
+    totalWorkingDays: 0,
+  };
+
+  let y = startYear;
+  let m = startMonth;
+  while (y < todayYear || (y === todayYear && m <= todayMonth)) {
+    const summaries = await getAttendanceMonthly(userId, y, m);
+    for (const d of summaries) {
+      if (d.status === 'present') totals.presentDays++;
+      else if (d.status === 'late') totals.lateDays++;
+      else if (d.status === 'absent') totals.absentDays++;
+      else if (d.status === 'on_leave') totals.leaveDays++;
+      if (d.status != null && d.status !== 'future' && d.status !== 'weekend') {
+        totals.totalWorkingDays++;
+      }
+    }
+    m++;
+    if (m > 11) { m = 0; y++; }
+  }
+
+  return totals;
+}
+
+export async function getAllTimeSummaries(userId: string): Promise<MonthDaySummary[]> {
+  const joinDate = await getUserJoinDate(userId);
+  const today = now();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+
+  let startYear: number;
+  let startMonth: number;
+  if (joinDate) {
+    const [y, m] = joinDate.split('-').map(Number);
+    startYear = y;
+    startMonth = m - 1;
+  } else {
+    startYear = todayYear;
+    startMonth = todayMonth;
+  }
+
+  const all: MonthDaySummary[] = [];
+  let y = startYear;
+  let m = startMonth;
+  while (y < todayYear || (y === todayYear && m <= todayMonth)) {
+    const summaries = await getAttendanceMonthly(userId, y, m);
+    all.push(...summaries);
+    m++;
+    if (m > 11) { m = 0; y++; }
+  }
+
+  return all;
+}
+
+export async function getSummariesInRange(
+  userId: string,
+  fromDate: string,
+  toDate: string
+): Promise<MonthDaySummary[]> {
+  const [fromY, fromM] = fromDate.split('-').map(Number);
+  const [toY, toM] = toDate.split('-').map(Number);
+
+  const all: MonthDaySummary[] = [];
+  let y = fromY;
+  let m = fromM - 1;
+  const endY = toY;
+  const endM = toM - 1;
+  while (y < endY || (y === endY && m <= endM)) {
+    const summaries = await getAttendanceMonthly(userId, y, m);
+    all.push(...summaries);
+    m++;
+    if (m > 11) { m = 0; y++; }
+  }
+
+  return all.filter((d) => d.date >= fromDate && d.date <= toDate);
+}
+
 export async function getDepartmentLogsForDate(
   departmentId: string,
   date: string
