@@ -71,37 +71,6 @@ describe('auth.service', () => {
     expect(r.error).toContain('فشل');
   });
 
-  it('signUp passes emailRedirectTo', async () => {
-    sb.auth.signUp.mockResolvedValue({ data: { user: { id: '1' }, session: {} }, error: null });
-    const { signUp } = await import('./auth.service');
-    await signUp('a@b.com', 'Secret1a', 'Ali');
-    expect(sb.auth.signUp).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: 'a@b.com',
-        password: 'Secret1a',
-        options: expect.objectContaining({
-          emailRedirectTo: 'http://localhost/auth/callback',
-        }),
-      }),
-    );
-  });
-
-  it('signUp returns error on failure', async () => {
-    sb.auth.signUp.mockResolvedValue({ data: { user: null, session: null }, error: { message: 'bad' } });
-    const { signUp } = await import('./auth.service');
-    const r = await signUp('a@b.com', 'Secret1a', 'Ali');
-    expect(r.ok).toBe(false);
-    expect(r.error).toBe('bad');
-  });
-
-  it('signUp returns message when user without session', async () => {
-    sb.auth.signUp.mockResolvedValue({ data: { user: { id: '1' }, session: null }, error: null });
-    const { signUp } = await import('./auth.service');
-    const r = await signUp('a@b.com', 'Secret1a', 'Ali');
-    expect(r.ok).toBe(true);
-    expect(r.message).toBeTruthy();
-  });
-
   it('logout calls signOut', async () => {
     sb.auth.signOut.mockResolvedValue(undefined);
     const { logout } = await import('./auth.service');

@@ -12,9 +12,15 @@
 -- ============================================================
 --
 -- HOW TO USE
--- 1) Edit only the values in the CONFIG section.
--- 2) Run this SQL in Supabase SQL editor or via psql.
--- 3) Log in with GM email/password from CONFIG.
+-- 1) Confirm ORG ID + ORG NAME match the org you intend (wrong id = wrong tenant).
+-- 2) Edit the CONFIG section. For a *new* org, set v_generate_new_org_id := true
+--    (a random org UUID is generated; you must save it from the NOTICE output).
+-- 3) Run this SQL in Supabase SQL editor or via psql.
+-- 4) Log in with GM email/password from CONFIG (or from NOTICE if a password was generated).
+--
+-- SAFETY:
+-- - If the org already has a different general_manager_id, the script aborts unless
+--   v_allow_replace_general_manager := true (prevents accidental "second GM" / GM theft).
 --
 -- NOTE:
 -- - This script sets email_confirmed_at so GM can log in immediately.
@@ -26,16 +32,24 @@ declare
   -- =========================
   -- CONFIG (EDIT THESE)
   -- =========================
+  -- Set true to create a brand-new organization id (random UUID). Notifies the new id.
+  v_generate_new_org_id boolean := false;
   v_org_id uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   v_org_name text := 'my new org';
   v_org_is_demo boolean := false;
 
   v_gm_email text := 'anas.aljanaby667@gmail.com';
+  -- Leave empty to generate a random password (printed in NOTICE).
   v_gm_password_plain text := 'ChangeMe123!';
   v_gm_name text := 'anas ahmed';
   v_gm_name_ar text := 'أنس أحمد';
   v_gm_phone text := '+964 770 000 0000';
+  -- Leave empty/whitespace to auto-generate a unique employee_id (random suffix).
   v_gm_employee_id text := 'ORG-GM-001';
+
+  -- Must be true to point general_manager_id at this bootstrap user when the org
+  -- already has another general_manager_id (default: refuse — avoids hijacking prod).
+  v_allow_replace_general_manager boolean := false;
 
   -- Optional: set to a fixed UUID if you want deterministic GM user id.
   -- Keep null to auto-generate when user is first created.
@@ -47,18 +61,30 @@ declare
   v_effective_gm_user_id uuid;
   v_existing_auth_user_id uuid;
   v_password_hash text;
+  v_current_gm_id uuid;
 begin
-  if v_org_id is null then
-    raise exception 'CONFIG_ERROR: v_org_id is required';
+  if v_generate_new_org_id then
+    v_org_id := gen_random_uuid();
+    raise notice 'Generated new org id: %', v_org_id;
+  elsif v_org_id is null then
+    raise exception 'CONFIG_ERROR: v_org_id is required (or set v_generate_new_org_id := true)';
   end if;
+
   if coalesce(trim(v_org_name), '') = '' then
     raise exception 'CONFIG_ERROR: v_org_name is required';
   end if;
   if coalesce(trim(v_gm_email), '') = '' then
     raise exception 'CONFIG_ERROR: v_gm_email is required';
   end if;
+
   if coalesce(trim(v_gm_password_plain), '') = '' then
-    raise exception 'CONFIG_ERROR: v_gm_password_plain is required';
+    v_gm_password_plain := encode(gen_random_bytes(16), 'hex');
+    raise notice 'Generated GM password (save this): %', v_gm_password_plain;
+  end if;
+
+  if coalesce(trim(v_gm_employee_id), '') = '' then
+    v_gm_employee_id := 'ORG-GM-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12));
+    raise notice 'Generated GM employee_id: %', v_gm_employee_id;
   end if;
 
   -- 1) Organization (upsert)
@@ -228,7 +254,23 @@ begin
     used_sick = excluded.used_sick,
     remaining_sick = excluded.remaining_sick;
 
-  -- 8) Set GM pointer on organization.
+  -- 8) Set GM pointer on organization (never steal GM from another user by accident).
+  select o.general_manager_id
+    into v_current_gm_id
+  from public.organizations o
+  where o.id = v_org_id;
+
+  if v_current_gm_id is not null
+     and v_current_gm_id <> v_effective_gm_user_id
+     and not v_allow_replace_general_manager then
+    raise exception
+      'ORG_ALREADY_HAS_GM: org % already has general_manager_id=%. Bootstrap user would be %. Set v_allow_replace_general_manager := true only if you intend to replace the GM.',
+      v_org_id,
+      v_current_gm_id,
+      v_effective_gm_user_id
+      using errcode = 'P0001';
+  end if;
+
   update public.organizations
   set general_manager_id = v_effective_gm_user_id
   where id = v_org_id;

@@ -7,7 +7,6 @@ import { FullPageSpinner } from './components/skeletons';
 import { RequireAdmin } from './components/RequireAdmin';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
-const SignUpPage = React.lazy(() => import('./pages/SignUpPage').then(m => ({ default: m.SignUpPage })));
 const AuthCallbackPage = React.lazy(() => import('./pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
 const SetPasswordPage = React.lazy(() => import('./pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
 const DashboardRouter = React.lazy(() => import('./pages/DashboardRouter').then(m => ({ default: m.DashboardRouter })));
@@ -47,7 +46,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'signup',
-        element: <Lazy><SignUpPage /></Lazy>,
+        element: <Navigate to="/login" replace />,
       },
       {
         path: 'auth/callback',

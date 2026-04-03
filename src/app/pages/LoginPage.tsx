@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginFormData } from '@/lib/validations';
@@ -133,11 +133,8 @@ export function LoginPage() {
               </button>
             </div>
 
-            <p className="text-center text-gray-600 pt-2">
-              لا تملك حساباً؟{' '}
-              <Link to="/signup" className="text-blue-600 font-medium hover:underline">
-                إنشاء حساب جديد
-              </Link>
+            <p className="text-center text-gray-500 text-sm pt-2">
+              الحسابات تُنشأ من قبل الإدارة. إن لم يكن لديك بيانات الدخول، راجع مديرك المباشر.
             </p>
           </form>
         </div>

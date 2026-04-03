@@ -52,32 +52,6 @@ export async function login(email: string, password: string): Promise<AuthResult
   return { ok: true };
 }
 
-export async function signUp(
-  email: string,
-  password: string,
-  name: string
-): Promise<AuthResult> {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { name, name_ar: name, role: 'employee' },
-      emailRedirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-
-  if (error) return { ok: false, error: error.message };
-
-  if (data.user && !data.session) {
-    return {
-      ok: true,
-      message: 'تم إنشاء الحساب. يرجى تأكيد بريدك الإلكتروني من الرابط المرسل إليك.',
-    };
-  }
-
-  return { ok: true };
-}
-
 export async function logout(): Promise<void> {
   await supabase.auth.signOut();
 }

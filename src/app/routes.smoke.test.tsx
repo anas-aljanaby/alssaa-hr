@@ -23,7 +23,6 @@ vi.mock('./contexts/AuthContext', () => ({
     authReady: authState.authReady,
     isAuthenticated: !!authState.currentUser,
     login: vi.fn(),
-    signUp: vi.fn(),
     loginAs: null,
     logout: vi.fn(),
   }),
@@ -60,7 +59,6 @@ vi.mock('./components/layout/MobileLayout', async (importOriginal) => {
 });
 
 vi.mock('./pages/LoginPage', () => ({ LoginPage: () => <div data-testid="page-login">login</div> }));
-vi.mock('./pages/SignUpPage', () => ({ SignUpPage: () => <div data-testid="page-signup">signup</div> }));
 vi.mock('./pages/AuthCallbackPage', () => ({ AuthCallbackPage: () => <div data-testid="page-auth-callback">auth-callback</div> }));
 vi.mock('./pages/SetPasswordPage', () => ({ SetPasswordPage: () => <div data-testid="page-set-password">set-password</div> }));
 vi.mock('./pages/DashboardRouter', () => ({ DashboardRouter: () => <div data-testid="page-dashboard-router">dashboard-router</div> }));
@@ -107,7 +105,7 @@ afterEach(() => {
 describe('route rendering smoke tests', () => {
   const cases: Array<{ path: string; role: Role | null; expectedTestId: string }> = [
     { path: '/login', role: null, expectedTestId: 'page-login' },
-    { path: '/signup', role: null, expectedTestId: 'page-signup' },
+    { path: '/signup', role: null, expectedTestId: 'page-login' },
     { path: '/auth/callback', role: null, expectedTestId: 'page-auth-callback' },
     { path: '/set-password', role: null, expectedTestId: 'page-set-password' },
 

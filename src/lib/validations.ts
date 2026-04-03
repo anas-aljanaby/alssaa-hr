@@ -23,19 +23,6 @@ export const loginSchema = z.object({
 });
 export type LoginFormData = z.infer<typeof loginSchema>;
 
-export const signUpSchema = z.object({
-  name: z
-    .string()
-    .min(2, 'الاسم يجب أن يكون حرفين على الأقل')
-    .max(100, 'الاسم طويل جداً'),
-  email: z
-    .string()
-    .min(1, 'البريد الإلكتروني مطلوب')
-    .email('البريد الإلكتروني غير صالح'),
-  password: strongPassword,
-});
-export type SignUpFormData = z.infer<typeof signUpSchema>;
-
 export const setPasswordSchema = z
   .object({
     password: strongPassword,

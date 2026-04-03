@@ -17,7 +17,6 @@ interface AuthContextType {
   isAuthenticated: boolean;
   authReady: boolean;
   login: (email: string, password: string) => Promise<AuthResult>;
-  signUp: (email: string, password: string, name: string) => Promise<AuthResult>;
   loginAs: ((role: UserRole) => void) | null;
   logout: () => Promise<void>;
 }
@@ -169,33 +168,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const signUp = useCallback(
-    async (
-      email: string,
-      password: string,
-      name: string
-    ): Promise<AuthResult> => {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { name, name_ar: name, role: 'employee' },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      if (error) return { ok: false, error: error.message };
-      if (data.user && !data.session) {
-        return {
-          ok: true,
-          message: 'تم إنشاء الحساب. يرجى تأكيد بريدك الإلكتروني من الرابط المرسل إليك.',
-        };
-      }
-      // onAuthStateChange will pick up the new session automatically
-      return { ok: true };
-    },
-    []
-  );
-
   const loginAsFn = useCallback((role: UserRole) => {
     if (!import.meta.env.DEV) return;
     import('../data/mockData').then(({ users: mockUsers }) => {
@@ -217,7 +189,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!currentUser,
         authReady,
         login,
-        signUp,
         loginAs,
         logout,
       }}

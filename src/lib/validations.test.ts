@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   loginSchema,
-  signUpSchema,
   setPasswordSchema,
   changePasswordSchema,
   leaveRequestSchema,
@@ -54,55 +53,6 @@ describe('loginSchema', () => {
     const r = loginSchema.safeParse({ email: 'a@b.com', password: '' });
     expect(r.success).toBe(false);
     if (!r.success) expect(errorPaths(r)).toContain('password');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// signUpSchema
-// ---------------------------------------------------------------------------
-
-describe('signUpSchema', () => {
-  const valid = { name: 'Ali', email: 'a@b.com', password: STRONG_PW };
-
-  it('passes with valid data', () => {
-    expect(signUpSchema.safeParse(valid).success).toBe(true);
-  });
-
-  it('rejects name shorter than 2 chars', () => {
-    const r = signUpSchema.safeParse({ ...valid, name: 'A' });
-    expect(r.success).toBe(false);
-    if (!r.success) expect(errorPaths(r)).toContain('name');
-  });
-
-  it('rejects name longer than 100 chars', () => {
-    const r = signUpSchema.safeParse({ ...valid, name: 'x'.repeat(101) });
-    expect(r.success).toBe(false);
-  });
-
-  it('enforces strong password — missing uppercase', () => {
-    const r = signUpSchema.safeParse({ ...valid, password: 'abc12345' });
-    expect(r.success).toBe(false);
-    if (!r.success) expect(errorPaths(r)).toContain('password');
-  });
-
-  it('enforces strong password — missing lowercase', () => {
-    const r = signUpSchema.safeParse({ ...valid, password: 'ABC12345' });
-    expect(r.success).toBe(false);
-  });
-
-  it('enforces strong password — missing digit', () => {
-    const r = signUpSchema.safeParse({ ...valid, password: 'Abcdefgh' });
-    expect(r.success).toBe(false);
-  });
-
-  it('enforces strong password — too short', () => {
-    const r = signUpSchema.safeParse({ ...valid, password: 'Ab1' });
-    expect(r.success).toBe(false);
-  });
-
-  it('enforces strong password — too long', () => {
-    const r = signUpSchema.safeParse({ ...valid, password: 'A1' + 'a'.repeat(127) });
-    expect(r.success).toBe(false);
   });
 });
 
