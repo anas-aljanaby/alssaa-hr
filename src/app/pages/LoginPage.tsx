@@ -11,7 +11,6 @@ import {
   User,
   Eye,
   EyeOff,
-  Fingerprint,
   Building2,
 } from 'lucide-react';
 
@@ -122,16 +121,6 @@ export function LoginPage() {
             >
               {isSubmitting ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
             </button>
-
-            <div className="pt-1">
-              <button
-                type="button"
-                className="w-full py-3 border-2 border-gray-200 rounded-xl flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                <Fingerprint className="w-5 h-5 shrink-0" />
-                <span>الدخول بالبصمة</span>
-              </button>
-            </div>
 
             <p className="text-center text-gray-500 text-sm pt-2">
               الحسابات تُنشأ من قبل الإدارة. إن لم يكن لديك بيانات الدخول، راجع مديرك المباشر.
