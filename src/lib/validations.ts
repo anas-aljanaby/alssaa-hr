@@ -166,9 +166,11 @@ const departmentNameAr = z
   .transform((s) => s.trim());
 const departmentNameEn = z
   .string()
-  .min(1, 'اسم القسم بالإنجليزية مطلوب')
   .max(100, 'اسم القسم طويل جداً')
-  .transform((s) => s.trim());
+  .transform((s) => {
+    const t = s.trim();
+    return t.length > 0 ? t : null;
+  });
 const departmentManagerId = z.string().optional().transform((s) => s || undefined);
 
 export const createDepartmentSchema = z.object({

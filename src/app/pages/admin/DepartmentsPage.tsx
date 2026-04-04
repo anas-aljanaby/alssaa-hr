@@ -98,7 +98,8 @@ export function DepartmentsPage() {
     if (q) {
       list = list.filter(
         (d) =>
-          d.name_ar.toLowerCase().includes(q) || d.name.toLowerCase().includes(q)
+          d.name_ar.toLowerCase().includes(q) ||
+          (d.name ?? '').toLowerCase().includes(q)
       );
     }
     if (managerFilterId) {
@@ -164,8 +165,11 @@ export function DepartmentsPage() {
     setCreateFormErrors({});
     const { nameAr, nameEn, managerId } = parsed.data;
     const nameArTrim = nameAr.trim();
-    const nameEnTrim = nameEn.trim();
-    if (departments.some((d) => d.name_ar === nameArTrim || d.name === nameEnTrim)) {
+    const dupAr = departments.some((d) => d.name_ar === nameArTrim);
+    const dupEn =
+      nameEn != null &&
+      departments.some((d) => d.name != null && d.name === nameEn);
+    if (dupAr || dupEn) {
       toast.error('اسم القسم (عربي أو إنجليزي) مستخدم مسبقاً في هذه المؤسسة');
       return;
     }
@@ -211,7 +215,7 @@ export function DepartmentsPage() {
     setEditFormErrors({});
     setEditFormData({
       nameAr: dept.name_ar,
-      nameEn: dept.name,
+      nameEn: dept.name ?? '',
       managerId: dept.manager_uid ?? '',
     });
   };
@@ -237,13 +241,12 @@ export function DepartmentsPage() {
     setEditFormErrors({});
     const { nameAr, nameEn, managerId } = parsed.data;
     const nameArTrim = nameAr.trim();
-    const nameEnTrim = nameEn.trim();
     if (
-      departments.some(
-        (d) =>
-          d.id !== editingDept.id &&
-          (d.name_ar === nameArTrim || d.name === nameEnTrim)
-      )
+      departments.some((d) => {
+        if (d.id === editingDept.id) return false;
+        if (d.name_ar === nameArTrim) return true;
+        return nameEn != null && d.name != null && d.name === nameEn;
+      })
     ) {
       toast.error('اسم القسم (عربي أو إنجليزي) مستخدم مسبقاً في هذه المؤسسة');
       return;
@@ -733,7 +736,7 @@ export function DepartmentsPage() {
                 )}
               </div>
               <div>
-                <label className="block mb-1.5 text-gray-700">اسم القسم (إنجليزي)</label>
+                <label className="block mb-1.5 text-gray-700">اسم القسم (إنجليزي) <span className="text-gray-400 font-normal">(اختياري)</span></label>
                 <input
                   type="text"
                   value={formData.nameEn}
@@ -837,7 +840,7 @@ export function DepartmentsPage() {
                 )}
               </div>
               <div>
-                <label className="block mb-1.5 text-gray-700">اسم القسم (إنجليزي)</label>
+                <label className="block mb-1.5 text-gray-700">اسم القسم (إنجليزي) <span className="text-gray-400 font-normal">(اختياري)</span></label>
                 <input
                   type="text"
                   value={editFormData.nameEn}

@@ -406,9 +406,16 @@ describe.each([
     if (!r.success) expect(errorPaths(r)).toContain('nameAr');
   });
 
-  it('rejects empty nameEn', () => {
+  it('allows empty nameEn (optional English name)', () => {
     const r = schema.safeParse({ ...valid, nameEn: '' });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.nameEn).toBeNull();
+  });
+
+  it('trims whitespace-only nameEn to null', () => {
+    const r = schema.safeParse({ ...valid, nameEn: '   ' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.nameEn).toBeNull();
   });
 
   it('rejects name longer than 100 chars', () => {

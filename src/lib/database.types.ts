@@ -113,7 +113,7 @@ export interface Database {
         Row: {
           id: string;
           org_id: string;
-          name: string;
+          name: string | null;
           name_ar: string;
           manager_uid: string | null;
           created_at: string;
@@ -121,7 +121,7 @@ export interface Database {
         Insert: {
           id?: string;
           org_id?: string;
-          name: string;
+          name?: string | null;
           name_ar: string;
           manager_uid?: string | null;
           created_at?: string;
@@ -129,7 +129,7 @@ export interface Database {
         Update: {
           id?: string;
           org_id?: string;
-          name?: string;
+          name?: string | null;
           name_ar?: string;
           manager_uid?: string | null;
           created_at?: string;
