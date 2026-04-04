@@ -15,6 +15,15 @@ vi.mock('@/app/contexts/AuthContext', () => ({
   }),
 }));
 
+vi.mock('@/app/contexts/PwaContext', () => ({
+  usePwa: () => ({
+    isOffline: true,
+    updateAvailable: true,
+    applyUpdate: vi.fn(),
+    refreshApp: vi.fn(),
+  }),
+}));
+
 vi.mock('@/lib/services/notifications.service', () => ({
   getUnreadCount: vi.fn().mockResolvedValue(2),
   subscribeToNotifications: vi.fn().mockImplementation((_uid: string, onNew: () => void) => {
@@ -48,6 +57,8 @@ describe('MobileLayout', () => {
     );
 
     expect(screen.getByText('الأقسام')).toBeInTheDocument();
+    expect(screen.getByText('أنت الآن في وضع عدم الاتصال.')).toBeInTheDocument();
+    expect(screen.getByText('يوجد تحديث جديد للتطبيق.')).toBeInTheDocument();
     expect(screen.queryByText('الإشعارات')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('الإشعارات'));

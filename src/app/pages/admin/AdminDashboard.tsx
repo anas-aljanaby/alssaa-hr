@@ -26,6 +26,8 @@ import {
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { StatCard } from '../../components/shared/StatCard';
 import { now } from '@/lib/time';
+import { UnavailableState } from '../../components/shared/UnavailableState';
+import { isOfflineError } from '@/lib/network';
 
 function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -47,6 +49,7 @@ export function AdminDashboard() {
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
   const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -100,6 +103,7 @@ export function AdminDashboard() {
         attendanceService.getAllLogsForDate(today),
         requestsService.getAllPendingRequests(),
       ]);
+      setLoadError(null);
       setProfiles(profs);
       setDepartments(depts);
       setTodayLogs(logs);
@@ -136,8 +140,12 @@ export function AdminDashboard() {
         )
       );
       setMonthLogs(monthLogsPerEmployee.flat());
-    } catch {
-      toast.error('فشل تحميل البيانات');
+    } catch (error) {
+      const message = isOfflineError(error)
+        ? 'تعذر تحميل لوحة المدير العام بدون اتصال بالإنترنت.'
+        : 'فشل تحميل البيانات.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -234,6 +242,19 @@ export function AdminDashboard() {
 
   if (loading) {
     return <AdminDashboardSkeleton />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <UnavailableState
+          title="تعذر تحميل لوحة المدير العام"
+          description={loadError}
+          actionLabel="إعادة المحاولة"
+          onAction={() => void loadData()}
+        />
+      </div>
+    );
   }
 
   const tabClass = (tab: AdminTab) =>

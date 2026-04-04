@@ -4,6 +4,8 @@ import { setRememberMePreference, supabase } from '@/lib/supabase';
 import type { Tables } from '@/lib/database.types';
 import { PROFILE_SELECT_COLUMNS } from '@/lib/services/profiles.service';
 import type { Session } from '@supabase/supabase-js';
+import { clearAuthSnapshot, getAuthSnapshot, saveAuthSnapshot } from '@/lib/authSnapshot';
+import { isOfflineError, OFFLINE_LOGIN_MESSAGE } from '@/lib/network';
 
 interface AuthResult {
   ok: boolean;
@@ -44,7 +46,8 @@ async function fetchProfileForSession(session: Session): Promise<User | null> {
     .eq('id', session.user.id)
     .single();
 
-  if (error || !profile) return null;
+  if (error) throw error;
+  if (!profile) return null;
   return profileToUser(profile, session.user.email ?? '');
 }
 
@@ -66,6 +69,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
+  const setResolvedCurrentUser = useCallback((user: User | null) => {
+    setCurrentUser(user);
+    if (user) {
+      saveAuthSnapshot(user);
+    } else {
+      clearAuthSnapshot();
+    }
+  }, []);
+
+  const restoreCachedUser = useCallback(
+    (session: Session) => {
+      const cached = getAuthSnapshot(session.user.id);
+      if (!cached) return null;
+      setResolvedCurrentUser(cached);
+      return cached;
+    },
+    [setResolvedCurrentUser]
+  );
+
   // Catch invalid refresh token errors thrown from Supabase client internals
   // (e.g. auto-refresh on load) so they don’t surface as uncaught exceptions.
   useEffect(() => {
@@ -73,12 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isRefreshTokenError(event.reason)) return;
       event.preventDefault();
       supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-      setCurrentUser(null);
+      setResolvedCurrentUser(null);
       setAuthReady(true);
     };
     window.addEventListener('unhandledrejection', onRejection);
     return () => window.removeEventListener('unhandledrejection', onRejection);
-  }, []);
+  }, [setResolvedCurrentUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,11 +117,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: { subscription: sub },
       } = supabase.auth.onAuthStateChange((_event, session) => {
         if (!session) {
-          setCurrentUser(null);
+          setResolvedCurrentUser(null);
         } else {
           const s = session;
           setTimeout(() => {
-            fetchProfileForSession(s).then(setCurrentUser);
+            fetchProfileForSession(s)
+              .then((user) => {
+                setResolvedCurrentUser(user);
+              })
+              .catch((error) => {
+                if (isOfflineError(error) && restoreCachedUser(s)) {
+                  return;
+                }
+                setResolvedCurrentUser(null);
+              });
           }, 0);
         }
       });
@@ -118,15 +149,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           if (error && isRefreshTokenError(error)) {
             await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-            setCurrentUser(null);
+            setResolvedCurrentUser(null);
           } else if (session) {
-            const user = await fetchProfileForSession(session);
-            if (!cancelled && user) setCurrentUser(user);
+            try {
+              const user = await fetchProfileForSession(session);
+              if (!cancelled) setResolvedCurrentUser(user);
+            } catch (error) {
+              if (!cancelled && isOfflineError(error) && restoreCachedUser(session)) {
+                return;
+              }
+              if (!cancelled) setResolvedCurrentUser(null);
+            }
+          } else {
+            setResolvedCurrentUser(null);
           }
         } catch (e: unknown) {
           if (!cancelled && isRefreshTokenError(e)) {
             await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-            setCurrentUser(null);
+            setResolvedCurrentUser(null);
+          } else if (!cancelled) {
+            setResolvedCurrentUser(null);
           }
         }
       })();
@@ -135,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cancelled) return;
       if (result === 'timeout') {
-        setCurrentUser(null);
+        setResolvedCurrentUser(null);
       }
       finishAuthInit();
     })();
@@ -144,10 +186,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription?.unsubscribe();
     };
-  }, []);
+  }, [restoreCachedUser, setResolvedCurrentUser]);
 
   const login = useCallback(
     async (email: string, password: string, rememberMe: boolean): Promise<AuthResult> => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return { ok: false, error: OFFLINE_LOGIN_MESSAGE };
+      }
       setRememberMePreference(rememberMe);
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
@@ -162,26 +207,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data.session) return { ok: false, error: 'فشل تسجيل الدخول' };
       // Set user synchronously so that navigate('/') in LoginPage sees currentUser
       // and doesn't get redirected back to /login (first-login blink).
-      const user = await fetchProfileForSession(data.session);
-      if (user) setCurrentUser(user);
+      try {
+        const user = await fetchProfileForSession(data.session);
+        if (!user) return { ok: false, error: 'تعذر تحميل بيانات الحساب' };
+        setResolvedCurrentUser(user);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'تعذر تحميل بيانات الحساب';
+        return { ok: false, error: message };
+      }
       return { ok: true };
     },
-    []
+    [setResolvedCurrentUser]
   );
 
   const loginAsFn = useCallback((role: UserRole) => {
     if (!import.meta.env.DEV) return;
     import('../data/mockData').then(({ users: mockUsers }) => {
       const demoUser = mockUsers.find(u => u.role === role);
-      if (demoUser) setCurrentUser(demoUser);
+      if (demoUser) setResolvedCurrentUser(demoUser);
     });
-  }, []);
+  }, [setResolvedCurrentUser]);
   const loginAs: ((role: UserRole) => void) | null = import.meta.env.DEV ? loginAsFn : null;
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
-    setCurrentUser(null);
-  }, []);
+    setResolvedCurrentUser(null);
+  }, [setResolvedCurrentUser]);
 
   return (
     <AuthContext.Provider

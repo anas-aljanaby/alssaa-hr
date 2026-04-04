@@ -31,6 +31,8 @@ import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { StatCard } from '../../components/shared/StatCard';
 import { QuickPunchCard } from '../../components/attendance/QuickPunchCard';
 import { useQuickPunch } from '../../hooks/useQuickPunch';
+import { UnavailableState } from '../../components/shared/UnavailableState';
+import { isOfflineError } from '@/lib/network';
 
 function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -55,6 +57,7 @@ export function ManagerDashboard() {
   const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
   const [activeTab, setActiveTab] = useState<ManagerTab>('overview');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const quickPunch = useQuickPunch({
     userId: currentUser?.uid,
   });
@@ -133,6 +136,7 @@ export function ManagerDashboard() {
         attendanceService.getDepartmentLogsForDate(departmentId, today),
         requestsService.getPendingDepartmentRequests(departmentId),
       ]);
+      setLoadError(null);
       setDepartment(dept);
       setEmployees(emps);
       setTodayLogs(logs);
@@ -170,8 +174,12 @@ export function ManagerDashboard() {
         })
       );
       setWeekLogs(weekData);
-    } catch {
-      toast.error('فشل تحميل البيانات');
+    } catch (error) {
+      const message = isOfflineError(error)
+        ? 'تعذر تحميل لوحة المدير بدون اتصال بالإنترنت.'
+        : 'فشل تحميل البيانات.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -248,6 +256,19 @@ export function ManagerDashboard() {
 
   if (loading) {
     return <DashboardSkeleton />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <UnavailableState
+          title="تعذر تحميل لوحة المدير"
+          description={loadError}
+          actionLabel="إعادة المحاولة"
+          onAction={() => void loadData()}
+        />
+      </div>
+    );
   }
 
   if (missingDepartment) {

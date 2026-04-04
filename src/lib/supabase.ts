@@ -13,34 +13,67 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const REMEMBER_ME_STORAGE_KEY = 'auth.rememberMe';
 
+type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+function createMemoryStorage(): StorageLike {
+  const store = new Map<string, string>();
+  return {
+    getItem(key: string) {
+      return store.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      store.set(key, value);
+    },
+    removeItem(key: string) {
+      store.delete(key);
+    },
+  };
+}
+
+function resolveStorage(kind: 'localStorage' | 'sessionStorage'): StorageLike {
+  const candidate = globalThis[kind];
+  if (
+    candidate &&
+    typeof candidate.getItem === 'function' &&
+    typeof candidate.setItem === 'function' &&
+    typeof candidate.removeItem === 'function'
+  ) {
+    return candidate;
+  }
+  return createMemoryStorage();
+}
+
+const safeLocalStorage = resolveStorage('localStorage');
+const safeSessionStorage = resolveStorage('sessionStorage');
+
 export function getRememberMePreference(): boolean {
-  const storedValue = localStorage.getItem(REMEMBER_ME_STORAGE_KEY);
+  const storedValue = safeLocalStorage.getItem(REMEMBER_ME_STORAGE_KEY);
   return storedValue !== 'false';
 }
 
 export function setRememberMePreference(rememberMe: boolean): void {
-  localStorage.setItem(REMEMBER_ME_STORAGE_KEY, String(rememberMe));
+  safeLocalStorage.setItem(REMEMBER_ME_STORAGE_KEY, String(rememberMe));
 }
 
 const authStorage = {
   getItem(key: string): string | null {
     if (getRememberMePreference()) {
-      return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+      return safeLocalStorage.getItem(key) ?? safeSessionStorage.getItem(key);
     }
-    return sessionStorage.getItem(key) ?? localStorage.getItem(key);
+    return safeSessionStorage.getItem(key) ?? safeLocalStorage.getItem(key);
   },
   setItem(key: string, value: string): void {
     if (getRememberMePreference()) {
-      localStorage.setItem(key, value);
-      sessionStorage.removeItem(key);
+      safeLocalStorage.setItem(key, value);
+      safeSessionStorage.removeItem(key);
       return;
     }
-    sessionStorage.setItem(key, value);
-    localStorage.removeItem(key);
+    safeSessionStorage.setItem(key, value);
+    safeLocalStorage.removeItem(key);
   },
   removeItem(key: string): void {
-    localStorage.removeItem(key);
-    sessionStorage.removeItem(key);
+    safeLocalStorage.removeItem(key);
+    safeSessionStorage.removeItem(key);
   },
 };
 

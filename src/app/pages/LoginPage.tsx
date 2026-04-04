@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginFormData } from '@/lib/validations';
 import { getRememberMePreference } from '@/lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { usePwa } from '../contexts/PwaContext';
 import type { UserRole } from '../data/mockData';
 import {
   Shield,
@@ -23,6 +24,7 @@ const DEMO_ROLE_CARDS: { role: UserRole; label: string; icon: React.ReactNode; c
 
 export function LoginPage() {
   const { login, loginAs } = useAuth();
+  const { isOffline } = usePwa();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState('');
@@ -115,6 +117,12 @@ export function LoginPage() {
               </div>
             )}
 
+            {isOffline && (
+              <div className="bg-amber-50 text-amber-800 p-3 rounded-xl text-center text-sm">
+                لا يمكن تسجيل الدخول حالياً بدون اتصال بالإنترنت.
+              </div>
+            )}
+
             <label className="flex items-center gap-2 text-sm text-gray-600 select-none">
               <input type="checkbox" {...register('rememberMe')} className="h-4 w-4 accent-blue-600" />
               تذكرني على هذا الجهاز
@@ -122,7 +130,7 @@ export function LoginPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isOffline}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
             >
               {isSubmitting ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}

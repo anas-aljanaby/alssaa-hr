@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { leaveRequestSchema, type LeaveRequestFormData } from '@/lib/validations';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import { usePwa } from '../../contexts/PwaContext';
 import { toast } from 'sonner';
 import * as requestsService from '@/lib/services/requests.service';
 import * as overtimeRequestsService from '@/lib/services/overtime-requests.service';
@@ -34,7 +35,9 @@ import { FilterChips } from '../../components/shared/FilterChips';
 import { RequestCard } from '../../components/shared/RequestCard';
 import { OvertimeRequestCard } from '../../components/shared/OvertimeRequestCard';
 import { EmptyState } from '../../components/shared/EmptyState';
+import { UnavailableState } from '../../components/shared/UnavailableState';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
+import { isOfflineError, OFFLINE_ACTION_MESSAGE } from '@/lib/network';
 
 const PAGE_SIZE = 10;
 
@@ -51,6 +54,7 @@ type EmployeeRequestRow =
 export function RequestsPage() {
   const { currentUser } = useAuth();
   const { submitRequest } = useApp();
+  const { isOffline } = usePwa();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -60,6 +64,7 @@ export function RequestsPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [workStartTime, setWorkStartTime] = useState<string>('08:00');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   useBodyScrollLock(showForm);
 
@@ -107,10 +112,15 @@ export function RequestsPage() {
         requestsService.getUserRequests(currentUser.uid),
         overtimeRequestsService.getOvertimeRequestsForUser(currentUser.uid),
       ]);
+      setLoadError(null);
       setRequests(data);
       setOvertimeRequests(ot);
-    } catch {
-      toast.error('فشل تحميل الطلبات');
+    } catch (error) {
+      const message = isOfflineError(error)
+        ? 'تعذر تحميل الطلبات بدون اتصال بالإنترنت.'
+        : 'فشل تحميل الطلبات.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -178,6 +188,10 @@ export function RequestsPage() {
     usePagination(filteredRequests, PAGE_SIZE);
 
   const handleFormSubmit = async (data: LeaveRequestFormData) => {
+    if (isOffline) {
+      toast.error(OFFLINE_ACTION_MESSAGE);
+      return;
+    }
     setSubmitting(true);
     try {
       let attachmentUrl: string | undefined;
@@ -275,6 +289,13 @@ export function RequestsPage() {
 
       {loading ? (
         <ListPageSkeleton count={3} />
+      ) : loadError && filteredRequests.length === 0 ? (
+        <UnavailableState
+          title="تعذر تحميل الطلبات"
+          description={loadError}
+          actionLabel="إعادة المحاولة"
+          onAction={() => void loadRequests()}
+        />
       ) : filteredRequests.length === 0 ? (
         <EmptyState
           icon={<FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />}

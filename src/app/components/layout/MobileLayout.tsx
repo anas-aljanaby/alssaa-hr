@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePwa } from '../../contexts/PwaContext';
 import * as notificationsService from '@/lib/services/notifications.service';
 import * as requestsService from '@/lib/services/requests.service';
 import { NotificationsDropdown } from '@/app/components/notifications/NotificationsDropdown';
@@ -18,6 +19,7 @@ import {
 
 export function MobileLayout() {
   const { currentUser, authReady } = useAuth();
+  const { isOffline, updateAvailable, applyUpdate, refreshApp } = usePwa();
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -26,6 +28,7 @@ export function MobileLayout() {
 
   useEffect(() => {
     if (!currentUser) return;
+    if (isOffline) return;
 
     notificationsService
       .getUnreadCount(currentUser.uid)
@@ -46,15 +49,16 @@ export function MobileLayout() {
     );
 
     return unsubscribe;
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, isOffline]);
 
   useEffect(() => {
     if (!currentUser || location.pathname === '/notifications') return;
+    if (isOffline) return;
     notificationsService
       .getUnreadCount(currentUser.uid)
       .then(setUnreadCount)
       .catch((e) => console.warn('Failed to load unread count', e));
-  }, [location.pathname, currentUser?.uid]);
+  }, [location.pathname, currentUser?.uid, isOffline]);
 
   useEffect(() => {
     setNotificationsOpen(false);
@@ -65,6 +69,7 @@ export function MobileLayout() {
       setPendingApprovals(0);
       return;
     }
+    if (isOffline) return;
 
     async function loadPendingApprovals() {
       try {
@@ -84,7 +89,7 @@ export function MobileLayout() {
     }
 
     loadPendingApprovals();
-  }, [currentUser?.uid, currentUser?.role, currentUser?.departmentId, location.pathname]);
+  }, [currentUser?.uid, currentUser?.role, currentUser?.departmentId, location.pathname, isOffline]);
 
   if (!authReady) {
     return (
@@ -181,6 +186,40 @@ export function MobileLayout() {
       )}
 
       <div className="flex-1 pb-20 pt-14 overflow-auto">
+        <div className="sticky top-0 z-30 px-4 space-y-2">
+          {isOffline && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm">أنت الآن في وضع عدم الاتصال.</p>
+                <p className="text-xs opacity-80">يمكنك تصفح الواجهة، لكن العمليات تحتاج إلى الإنترنت.</p>
+              </div>
+              <button
+                type="button"
+                onClick={refreshApp}
+                className="shrink-0 rounded-xl bg-white text-amber-900 px-3 py-2 text-xs border border-amber-200"
+              >
+                إعادة تحميل
+              </button>
+            </div>
+          )}
+
+          {updateAvailable && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm">يوجد تحديث جديد للتطبيق.</p>
+                <p className="text-xs opacity-80">ثبّت التحديث لإعادة تحميل أحدث نسخة.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void applyUpdate()}
+                className="shrink-0 rounded-xl bg-blue-600 text-white px-3 py-2 text-xs"
+              >
+                تحديث الآن
+              </button>
+            </div>
+          )}
+        </div>
+
         <Outlet />
       </div>
 

@@ -17,5 +17,9 @@ export default mergeConfig(
         '**/supabase/functions/**',
       ],
     },
+    preview: {
+      host: true, // optional: same idea as --host; you can keep using CLI only
+      allowedHosts: ['anass-macbook-pro.local'],
+    },
   }),
 )

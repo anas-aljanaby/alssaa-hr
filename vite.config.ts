@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
@@ -9,6 +10,22 @@ export default defineConfig({
     // Tailwind is not being actively used – do not remove them
     react(),
     tailwindcss(),
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src/pwa',
+      filename: 'sw.ts',
+      injectRegister: false,
+      registerType: 'prompt',
+      manifest: false,
+      includeAssets: [
+        'manifest.webmanifest',
+        'pwa/apple-touch-icon.png',
+        'pwa/icon-192.png',
+        'pwa/icon-512.png',
+        'pwa/maskable-192.png',
+        'pwa/maskable-512.png',
+      ],
+    }),
   ],
   resolve: {
     alias: {
@@ -18,5 +35,5 @@ export default defineConfig({
   },
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
-  assetsInclude: ['**/*.svg', '**/*.csv'],
+  assetsInclude: ['**/*.svg', '**/*.csv']
 })

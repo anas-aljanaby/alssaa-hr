@@ -2,9 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Bell, CheckCircle2, Clock, FileText, Info, Settings } from 'lucide-react';
 import { useApp } from '@/app/contexts/AppContext';
+import { usePwa } from '@/app/contexts/PwaContext';
+import { EmptyState } from '@/app/components/shared/EmptyState';
 import * as notificationsService from '@/lib/services/notifications.service';
 import type { Notification } from '@/lib/services/notifications.service';
 import { getTimeAgoLabel } from '@/lib/ui-helpers';
+import { isOfflineError } from '@/lib/network';
 
 type NotificationsDropdownProps = {
   userId: string;
@@ -13,8 +16,10 @@ type NotificationsDropdownProps = {
 
 export function NotificationsDropdown({ userId, onClose }: NotificationsDropdownProps) {
   const { markNotificationRead, markAllNotificationsRead } = useApp();
+  const { isOffline, refreshApp } = usePwa();
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,15 +28,28 @@ export function NotificationsDropdown({ userId, onClose }: NotificationsDropdown
       try {
         setLoading(true);
         const data = await notificationsService.getUserNotifications(userId);
+        if (!cancelled) setLoadError(null);
         if (!cancelled) setNotifications(data);
-      } catch {
-        if (!cancelled) toast.error('فشل تحميل الإشعارات');
+      } catch (error) {
+        if (!cancelled) {
+          const message = isOfflineError(error)
+            ? 'تعذر تحميل الإشعارات بدون اتصال بالإنترنت.'
+            : 'فشل تحميل الإشعارات.';
+          setLoadError(message);
+          toast.error(message);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
     loadNotifications();
+
+    if (isOffline) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const unsubscribe = notificationsService.subscribeToUserNotifications(userId, (event) => {
       setNotifications((prev) => {
@@ -44,7 +62,7 @@ export function NotificationsDropdown({ userId, onClose }: NotificationsDropdown
       cancelled = true;
       unsubscribe();
     };
-  }, [userId]);
+  }, [isOffline, userId]);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read_status).length,
@@ -112,6 +130,14 @@ export function NotificationsDropdown({ userId, onClose }: NotificationsDropdown
                 <div key={i} className="bg-gray-100 rounded-xl h-16 animate-pulse" />
               ))}
             </div>
+          ) : loadError && notifications.length === 0 ? (
+            <EmptyState
+              icon={<Bell className="w-10 h-10 mx-auto mb-2 opacity-50" />}
+              title="تعذر تحميل الإشعارات"
+              description={loadError}
+              actionLabel="إعادة المحاولة"
+              onAction={refreshApp}
+            />
           ) : notifications.length === 0 ? (
             <div className="text-center py-10 text-gray-400">
               <Bell className="w-10 h-10 mx-auto mb-2 opacity-50" />

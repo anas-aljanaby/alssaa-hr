@@ -1,19 +1,61 @@
 {
-  "name": "شبكة الساعة - الموارد البشرية",
+  "name": "شبكة الساعة | الموارد البشرية",
   "short_name": "شبكة الساعة",
-  "description": "نظام إدارة الحضور والإجازات في شبكة الساعة",
+  "description": "نظام إدارة الحضور والإجازات لشبكة الساعة.",
   "lang": "ar",
   "dir": "rtl",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#1d4ed8",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#155dfc",
+  "shortcuts": [
+    {
+      "name": "الرئيسية",
+      "short_name": "الرئيسية",
+      "url": "/"
+    },
+    {
+      "name": "الحضور",
+      "short_name": "الحضور",
+      "url": "/attendance"
+    },
+    {
+      "name": "الطلبات",
+      "short_name": "الطلبات",
+      "url": "/requests"
+    },
+    {
+      "name": "الإشعارات",
+      "short_name": "الإشعارات",
+      "url": "/notifications"
+    }
+  ],
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/pwa/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/pwa/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

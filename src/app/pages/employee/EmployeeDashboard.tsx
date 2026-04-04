@@ -28,6 +28,8 @@ import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { getStatusColor } from '@/lib/ui-helpers';
 import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { useQuickPunch } from '../../hooks/useQuickPunch';
+import { UnavailableState } from '../../components/shared/UnavailableState';
+import { isOfflineError } from '@/lib/network';
 
 export function EmployeeDashboard() {
   const { currentUser } = useAuth();
@@ -38,6 +40,7 @@ export function EmployeeDashboard() {
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
   const [department, setDepartment] = useState<Department | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const quickPunch = useQuickPunch({
     userId: currentUser?.uid,
     onLogUpdated: setTodayLog,
@@ -89,13 +92,18 @@ export function EmployeeDashboard() {
           ? departmentsService.getDepartmentById(currentUser.departmentId)
           : Promise.resolve(null),
       ]);
+      setLoadError(null);
       setTodayLog(log);
       setStats(monthStats);
       setLeaveBalance(balance);
       setUserRequests(reqs);
       setDepartment(dept);
-    } catch {
-      toast.error('فشل تحميل البيانات');
+    } catch (error) {
+      const message = isOfflineError(error)
+        ? 'تعذر تحميل لوحة التحكم بدون اتصال بالإنترنت.'
+        : 'فشل تحميل البيانات.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -105,6 +113,19 @@ export function EmployeeDashboard() {
 
   if (loading) {
     return <DashboardSkeleton />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <UnavailableState
+          title="تعذر تحميل لوحة التحكم"
+          description={loadError}
+          actionLabel="إعادة المحاولة"
+          onAction={() => void loadData()}
+        />
+      </div>
+    );
   }
 
   const pendingRequests = userRequests.filter((r) => r.status === 'pending');

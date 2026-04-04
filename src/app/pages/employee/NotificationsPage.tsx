@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import { usePwa } from '../../contexts/PwaContext';
 import { toast } from 'sonner';
 import * as notificationsService from '@/lib/services/notifications.service';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import type { Notification } from '@/lib/services/notifications.service';
+import { EmptyState } from '../../components/shared/EmptyState';
+import { UnavailableState } from '../../components/shared/UnavailableState';
 import {
   Bell,
   Clock,
@@ -14,12 +17,15 @@ import {
   Info,
 } from 'lucide-react';
 import { getTimeAgoLabel } from '@/lib/ui-helpers';
+import { isOfflineError } from '@/lib/network';
 
 export function NotificationsPage() {
   const { currentUser } = useAuth();
   const { markNotificationRead, markAllNotificationsRead } = useApp();
+  const { isOffline } = usePwa();
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -28,7 +34,7 @@ export function NotificationsPage() {
 
   useRealtimeSubscription(
     () => {
-      if (!currentUser) return undefined;
+      if (!currentUser || isOffline) return undefined;
       return notificationsService.subscribeToUserNotifications(currentUser.uid, (event) => {
         if (event.eventType === 'INSERT') {
           setNotifications((prev) => [event.new, ...prev]);
@@ -39,7 +45,7 @@ export function NotificationsPage() {
         }
       });
     },
-    [currentUser?.uid]
+    [currentUser?.uid, isOffline]
   );
 
   async function loadNotifications() {
@@ -47,9 +53,14 @@ export function NotificationsPage() {
     try {
       setLoading(true);
       const data = await notificationsService.getUserNotifications(currentUser.uid);
+      setLoadError(null);
       setNotifications(data);
-    } catch {
-      toast.error('فشل تحميل الإشعارات');
+    } catch (error) {
+      const message = isOfflineError(error)
+        ? 'تعذر تحميل الإشعارات بدون اتصال بالإنترنت.'
+        : 'فشل تحميل الإشعارات.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -118,11 +129,18 @@ export function NotificationsPage() {
             <div key={i} className="bg-gray-100 rounded-xl h-20 animate-pulse" />
           ))}
         </div>
+      ) : loadError && notifications.length === 0 ? (
+        <UnavailableState
+          title="تعذر تحميل الإشعارات"
+          description={loadError}
+          actionLabel="إعادة المحاولة"
+          onAction={() => void loadNotifications()}
+        />
       ) : notifications.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Bell className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>لا توجد إشعارات</p>
-        </div>
+        <EmptyState
+          icon={<Bell className="w-12 h-12 mx-auto mb-2 opacity-50" />}
+          title="لا توجد إشعارات"
+        />
       ) : (
         <div className="space-y-2">
           {notifications.map((notif) => (
