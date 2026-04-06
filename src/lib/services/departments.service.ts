@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import * as profilesService from './profiles.service';
 import type { Tables, InsertTables, UpdateTables } from '../database.types';
+import type { Profile } from './profiles.service';
 
 export type Department = Tables<'departments'>;
 export type DepartmentInsert = InsertTables<'departments'>;
@@ -56,6 +57,45 @@ export async function getDepartmentByManagerUid(managerUid: string): Promise<Dep
 
   if (error) throw error;
   return data;
+}
+
+export async function setDepartmentManager(
+  departmentId: string,
+  managerId: string | null
+): Promise<Department> {
+  return updateDepartment(departmentId, { manager_uid: managerId });
+}
+
+export async function listAttachableDepartmentEmployees(): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(profilesService.PROFILE_SELECT_COLUMNS)
+    .eq('role', 'employee')
+    .is('department_id', null)
+    .order('name_ar');
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function attachDepartmentMember(
+  departmentId: string,
+  userId: string
+): Promise<Profile> {
+  return profilesService.updateUser(userId, { department_id: departmentId });
+}
+
+export async function detachDepartmentMember(
+  departmentId: string,
+  userId: string
+): Promise<Profile> {
+  const department = await getDepartmentById(departmentId);
+
+  if (department?.manager_uid === userId) {
+    await setDepartmentManager(departmentId, null);
+  }
+
+  return profilesService.updateUser(userId, { department_id: null });
 }
 
 export async function createDepartment(dept: DepartmentInsert): Promise<Department> {

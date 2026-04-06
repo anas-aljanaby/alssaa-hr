@@ -20,6 +20,9 @@ describe('getDepartmentErrorMessage', () => {
     ['42501', 'صلاحية'],
     ['PGRST301', 'انتهت الجلسة'],
     ['MANAGER_ROLE_REQUIRED', 'مدير قسم'],
+    ['MANAGER_ALREADY_ASSIGNED_TO_DEPARTMENT', 'لأكثر من قسم واحد'],
+    ['MANAGER_MUST_BE_DEPARTMENT_MEMBER', 'أعضاء هذا القسم'],
+    ['MANAGER_ROLE_INVALID', 'موظف أو مدير قسم'],
   ])('maps error code %s to expected Arabic message', (code, fragment) => {
     const result = getDepartmentErrorMessage({ code }, fallback);
     expect(result).toContain(fragment);
@@ -28,6 +31,12 @@ describe('getDepartmentErrorMessage', () => {
   it('matches "MANAGER_ROLE_REQUIRED" via message string', () => {
     const result = getDepartmentErrorMessage(new Error('MANAGER_ROLE_REQUIRED'), fallback);
     expect(result).toContain('مدير قسم');
+  });
+
+  it('matches manager assignment messages via message string', () => {
+    expect(getDepartmentErrorMessage(new Error('MANAGER_ALREADY_ASSIGNED_TO_DEPARTMENT'), fallback)).toContain('لأكثر من قسم واحد');
+    expect(getDepartmentErrorMessage(new Error('MANAGER_MUST_BE_DEPARTMENT_MEMBER'), fallback)).toContain('أعضاء هذا القسم');
+    expect(getDepartmentErrorMessage(new Error('MANAGER_ROLE_INVALID'), fallback)).toContain('موظف أو مدير قسم');
   });
 
   it('detects duplicate/unique constraint via message regex', () => {

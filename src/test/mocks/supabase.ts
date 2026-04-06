@@ -23,6 +23,7 @@ function createQueryBuilder(dequeue: () => MockQueryResult) {
     'update',
     'delete',
     'eq',
+    'is',
     'neq',
     'in',
     'gte',

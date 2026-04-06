@@ -72,4 +72,90 @@ describe('departments.service', () => {
     const rows = await getDepartmentWithEmployeeCount();
     expect(rows[0].employee_count).toBe(2);
   });
+
+  it('setDepartmentManager updates manager_uid', async () => {
+    sb.queueResult({ data: { ...dept, manager_uid: 'u1' }, error: null });
+    const { setDepartmentManager } = await import('./departments.service');
+    const row = await setDepartmentManager('d1', 'u1');
+    expect(row.manager_uid).toBe('u1');
+  });
+
+  it('listAttachableDepartmentEmployees returns unattached employees', async () => {
+    sb.queueResult({
+      data: [
+        {
+          id: 'u1',
+          org_id: 'o1',
+          employee_id: 'E1',
+          name: 'N',
+          name_ar: 'ن',
+          email: 'n@example.com',
+          role: 'employee',
+          department_id: null,
+          avatar_url: null,
+          join_date: '2025-01-01',
+          work_days: null,
+          work_start_time: null,
+          work_end_time: null,
+        },
+      ],
+      error: null,
+    });
+    const { listAttachableDepartmentEmployees } = await import('./departments.service');
+    const rows = await listAttachableDepartmentEmployees();
+    expect(rows).toHaveLength(1);
+    expect(sb.from).toHaveBeenCalledWith('profiles');
+  });
+
+  it('attachDepartmentMember updates the profile department', async () => {
+    sb.queueResult({
+      data: {
+        id: 'u1',
+        org_id: 'o1',
+        employee_id: 'E1',
+        name: 'N',
+        name_ar: 'ن',
+        email: 'n@example.com',
+        phone: '',
+        role: 'employee',
+        department_id: 'd1',
+        avatar_url: null,
+        join_date: '2025-01-01',
+        work_days: null,
+        work_start_time: null,
+        work_end_time: null,
+      },
+      error: null,
+    });
+    const { attachDepartmentMember } = await import('./departments.service');
+    const row = await attachDepartmentMember('d1', 'u1');
+    expect(row.department_id).toBe('d1');
+  });
+
+  it('detachDepartmentMember clears manager first when needed', async () => {
+    sb.queueResult({ data: { ...dept, manager_uid: 'u1' }, error: null });
+    sb.queueResult({ data: { ...dept, manager_uid: null }, error: null });
+    sb.queueResult({
+      data: {
+        id: 'u1',
+        org_id: 'o1',
+        employee_id: 'E1',
+        name: 'N',
+        name_ar: 'ن',
+        email: 'n@example.com',
+        phone: '',
+        role: 'employee',
+        department_id: null,
+        avatar_url: null,
+        join_date: '2025-01-01',
+        work_days: null,
+        work_start_time: null,
+        work_end_time: null,
+      },
+      error: null,
+    });
+    const { detachDepartmentMember } = await import('./departments.service');
+    const row = await detachDepartmentMember('d1', 'u1');
+    expect(row.department_id).toBeNull();
+  });
 });

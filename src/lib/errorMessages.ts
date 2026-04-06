@@ -24,6 +24,9 @@ const MESSAGES: Record<string, string> = {
   '42501': 'ليس لديك صلاحية تنفيذ هذه العملية',
   'PGRST301': 'انتهت الجلسة أو لا تملك الصلاحية',
   MANAGER_ROLE_REQUIRED: 'يجب أن يكون مدير القسم من المستخدمين بدور مدير قسم',
+  MANAGER_ALREADY_ASSIGNED_TO_DEPARTMENT: 'لا يمكن تعيين هذا المستخدم مديراً لأكثر من قسم واحد',
+  MANAGER_MUST_BE_DEPARTMENT_MEMBER: 'اختر مدير القسم من أعضاء هذا القسم فقط',
+  MANAGER_ROLE_INVALID: 'يجب اختيار موظف أو مدير قسم من أعضاء القسم',
 };
 
 /** Returns a user-friendly Arabic message for department-related errors, or a generic fallback. */
@@ -32,6 +35,9 @@ export function getDepartmentErrorMessage(err: unknown, fallback: string): strin
   if (code && MESSAGES[code]) return MESSAGES[code];
   const msg = getErrorMessage(err);
   if (msg === 'MANAGER_ROLE_REQUIRED') return MESSAGES.MANAGER_ROLE_REQUIRED;
+  if (msg === 'MANAGER_ALREADY_ASSIGNED_TO_DEPARTMENT') return MESSAGES.MANAGER_ALREADY_ASSIGNED_TO_DEPARTMENT;
+  if (msg === 'MANAGER_MUST_BE_DEPARTMENT_MEMBER') return MESSAGES.MANAGER_MUST_BE_DEPARTMENT_MEMBER;
+  if (msg === 'MANAGER_ROLE_INVALID') return MESSAGES.MANAGER_ROLE_INVALID;
   if (msg && /unique|duplicate|already exists/i.test(msg)) return MESSAGES['23505'];
   if (msg && /permission|denied|policy|RLS/i.test(msg)) return MESSAGES['42501'];
   if (msg && /foreign key|violates/i.test(msg)) return MESSAGES['23503'];

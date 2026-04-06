@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DepartmentsPage } from './DepartmentsPage';
@@ -42,6 +42,16 @@ vi.mock('@/lib/services/departments.service', () => ({
       employee_count: 2,
     },
   ]),
+  listAttachableDepartmentEmployees: vi.fn().mockResolvedValue([
+    {
+      id: 'employee-1',
+      name_ar: 'موظف اختبار طويل الاسم جدا',
+      role: 'employee',
+      employee_id: 'EMP-1234',
+      email: 'employee.long.name@example.com',
+      department_id: null,
+    },
+  ]),
 }));
 
 vi.mock('@/lib/services/profiles.service', () => ({
@@ -51,7 +61,24 @@ vi.mock('@/lib/services/profiles.service', () => ({
       name_ar: 'مدير القسم',
       role: 'manager',
       employee_id: 'M-1',
+      email: 'manager@example.com',
       department_id: 'dept-1',
+    },
+    {
+      id: 'employee-1',
+      name_ar: 'موظف اختبار طويل الاسم جدا',
+      role: 'employee',
+      employee_id: 'EMP-1234',
+      email: 'employee.long.name@example.com',
+      department_id: null,
+    },
+    {
+      id: 'employee-2',
+      name_ar: 'موظف مرتبط',
+      role: 'employee',
+      employee_id: 'EMP-9999',
+      email: 'assigned@example.com',
+      department_id: 'dept-2',
     },
   ]),
   getDepartmentEmployees: vi.fn().mockResolvedValue([]),
@@ -77,6 +104,44 @@ describe('DepartmentsPage role permissions', () => {
     await waitFor(() => {
       expect(screen.getByText('قسم جديد')).toBeInTheDocument();
     });
+  });
+
+  it('shows attach-user options with readable name and email instead of employee id', async () => {
+    mockUser = { uid: 'admin-1', role: 'admin' };
+    render(
+      <MemoryRouter>
+        <DepartmentsPage />
+      </MemoryRouter>
+    );
+
+    const expandButton = await screen.findByLabelText('توسيع القسم');
+    fireEvent.click(expandButton);
+    const attachButton = await screen.findByLabelText('اضافة موظف للقسمقسم الاختبار');
+    fireEvent.click(attachButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('موظف اختبار طويل الاس... - employee.long.name@exampl...')).toBeInTheDocument();
+    });
+
+    const optionLabels = screen.getAllByRole('option').map((option) => option.textContent ?? '');
+    expect(optionLabels).toContain('موظف اختبار طويل الاس... - employee.long.name@exampl...');
+    expect(optionLabels.some((label) => label.includes('EMP-1234'))).toBe(false);
+    expect(optionLabels.some((label) => label.includes('موظف مرتبط'))).toBe(false);
+  });
+
+  it('does not show manager selection in create department modal', async () => {
+    mockUser = { uid: 'admin-1', role: 'admin' };
+    render(
+      <MemoryRouter>
+        <DepartmentsPage />
+      </MemoryRouter>
+    );
+
+    const createButton = await screen.findByText('قسم جديد');
+    fireEvent.click(createButton);
+
+    expect(screen.queryAllByRole('combobox')).toHaveLength(1);
+    expect(screen.getByText('سيتم إنشاء القسم بدون مدير. بعد إضافة أعضاء للقسم يمكنك اختيار مدير من شاشة التعديل.')).toBeInTheDocument();
   });
 
   it('manager is read-only: no create, no delete', async () => {

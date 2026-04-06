@@ -8,6 +8,7 @@ import type { Department } from '@/lib/services/departments.service';
 import type { Profile } from '@/lib/services/profiles.service';
 import { createDepartmentSchema, updateDepartmentSchema } from '@/lib/validations';
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
+import { displayProfileEmail } from '@/lib/profileDisplay';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Pagination, usePagination } from '@/app/components/Pagination';
@@ -20,14 +21,32 @@ import {
   Users,
   Crown,
   UserPlus,
+  UserMinus,
   X,
   ChevronDown,
   ChevronUp,
   Search,
 } from 'lucide-react';
 
-const INITIAL_FORM = { nameAr: '', nameEn: '', managerId: '' };
+const INITIAL_CREATE_FORM = { nameAr: '', nameEn: '' };
+const INITIAL_EDIT_FORM = { nameAr: '', nameEn: '', managerId: '' };
 const DEPARTMENTS_PAGE_SIZE = 20;
+const ATTACH_USER_NAME_MAX = 24;
+const ATTACH_USER_EMAIL_MAX = 28;
+
+function truncateText(value: string, maxLength: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+function formatAttachUserLabel(profile: Profile): string {
+  const name = truncateText(profile.name_ar || 'بدون اسم', ATTACH_USER_NAME_MAX);
+  const email = displayProfileEmail(profile.email);
+
+  if (email === '—') return name;
+  return `${name} - ${truncateText(email, ATTACH_USER_EMAIL_MAX)}`;
+}
 
 export function DepartmentsPage() {
   const { currentUser } = useAuth();
@@ -38,13 +57,15 @@ export function DepartmentsPage() {
   const [deptEmployeesById, setDeptEmployeesById] = useState<Record<string, Profile[]>>({});
   const [expandLoadingById, setExpandLoadingById] = useState<Record<string, boolean>>({});
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState(INITIAL_FORM);
+  const [formData, setFormData] = useState(INITIAL_CREATE_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [editingDept, setEditingDept] = useState<(Department & { employee_count: number }) | null>(null);
-  const [editFormData, setEditFormData] = useState(INITIAL_FORM);
+  const [editFormData, setEditFormData] = useState(INITIAL_EDIT_FORM);
   const [deptToDelete, setDeptToDelete] = useState<(Department & { employee_count: number }) | null>(null);
   const [deptToAttachUser, setDeptToAttachUser] = useState<(Department & { employee_count: number }) | null>(null);
   const [selectedAttachUserId, setSelectedAttachUserId] = useState('');
+  const [attachableUsers, setAttachableUsers] = useState<Profile[]>([]);
+  const [attachableUsersLoading, setAttachableUsersLoading] = useState(false);
   const [attachingUser, setAttachingUser] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [createFormErrors, setCreateFormErrors] = useState<{ nameAr?: string; nameEn?: string; managerId?: string }>({});
@@ -81,15 +102,26 @@ export function DepartmentsPage() {
     [allProfiles]
   );
 
-  const managers = useMemo(
-    () => allProfiles.filter((p) => p.role === 'manager'),
-    [allProfiles]
+  const managerFilterOptions = useMemo(
+    () =>
+      departments
+        .map((department) => department.manager_uid)
+        .filter((managerId): managerId is string => !!managerId)
+        .map((managerId) => profilesMap.get(managerId))
+        .filter((profile): profile is Profile => !!profile),
+    [departments, profilesMap]
   );
 
-  /** All employees + managers: options when assigning a department manager (employees are auto-upgraded to manager). */
-  const managerOptions = useMemo(
-    () => allProfiles.filter((p) => p.role === 'employee' || p.role === 'manager'),
-    [allProfiles]
+  const editManagerOptions = useMemo(
+    () => {
+      if (!editingDept) return [];
+      return allProfiles.filter(
+        (profile) =>
+          (profile.role === 'employee' || profile.role === 'manager') &&
+          profile.department_id === editingDept.id
+      );
+    },
+    [allProfiles, editingDept]
   );
 
   const filteredDepartments = useMemo(() => {
@@ -163,7 +195,7 @@ export function DepartmentsPage() {
       return;
     }
     setCreateFormErrors({});
-    const { nameAr, nameEn, managerId } = parsed.data;
+    const { nameAr, nameEn } = parsed.data;
     const nameArTrim = nameAr.trim();
     const dupAr = departments.some((d) => d.name_ar === nameArTrim);
     const dupEn =
@@ -178,14 +210,7 @@ export function DepartmentsPage() {
       const created = await departmentsService.createDepartment({
         name: nameEn,
         name_ar: nameAr,
-        manager_uid: managerId ?? null,
       });
-      if (managerId) {
-        await profilesService.updateUser(managerId, {
-          role: 'manager',
-          department_id: created.id,
-        });
-      }
       await auditService.createAuditLog({
         actor_id: currentUser.uid,
         action: 'department_created',
@@ -196,7 +221,7 @@ export function DepartmentsPage() {
       });
       toast.success('تم إضافة القسم بنجاح');
       setShowForm(false);
-      setFormData(INITIAL_FORM);
+      setFormData(INITIAL_CREATE_FORM);
       setCreateFormErrors({});
       await loadData();
     } catch (err) {
@@ -251,6 +276,10 @@ export function DepartmentsPage() {
       toast.error('اسم القسم (عربي أو إنجليزي) مستخدم مسبقاً في هذه المؤسسة');
       return;
     }
+    if (managerId && departments.some((d) => d.id !== editingDept.id && d.manager_uid === managerId)) {
+      toast.error('لا يمكن تعيين هذا المستخدم مديراً لأكثر من قسم واحد');
+      return;
+    }
     setSubmitting(true);
     try {
       const updatePayload: departmentsService.DepartmentUpdate = {
@@ -261,12 +290,6 @@ export function DepartmentsPage() {
         updatePayload.manager_uid = managerId ?? null;
       }
       await departmentsService.updateDepartment(editingDept.id, updatePayload);
-      if (isAdmin && managerId) {
-        await profilesService.updateUser(managerId, {
-          role: 'manager',
-          department_id: editingDept.id,
-        });
-      }
       await auditService.createAuditLog({
         actor_id: currentUser.uid,
         action: 'department_updated',
@@ -277,7 +300,7 @@ export function DepartmentsPage() {
       });
       toast.success('تم تحديث القسم بنجاح');
       setEditingDept(null);
-      setEditFormData(INITIAL_FORM);
+      setEditFormData(INITIAL_EDIT_FORM);
       setEditFormErrors({});
       await loadData();
     } catch (err) {
@@ -329,13 +352,23 @@ export function DepartmentsPage() {
     }
   };
 
-  const openAttachUserModal = (dept: Department & { employee_count: number }) => {
+  const openAttachUserModal = async (dept: Department & { employee_count: number }) => {
     if (!canAttachUsers || !canEditDepartments) {
       toast.error('ليس لديك صلاحية تعديل الأقسام');
       return;
     }
     setDeptToAttachUser(dept);
     setSelectedAttachUserId('');
+    setAttachableUsers([]);
+    setAttachableUsersLoading(true);
+    try {
+      const users = await departmentsService.listAttachableDepartmentEmployees();
+      setAttachableUsers(users);
+    } catch (err) {
+      toast.error(getDepartmentErrorMessage(err, 'فشل تحميل الموظفين المتاحين'));
+    } finally {
+      setAttachableUsersLoading(false);
+    }
   };
 
   const handleAttachUserToDepartment = async (e: React.FormEvent) => {
@@ -347,12 +380,22 @@ export function DepartmentsPage() {
     }
     setAttachingUser(true);
     try {
-      await profilesService.updateUser(selectedAttachUserId, {
-        department_id: deptToAttachUser.id,
+      const attachedProfile = await departmentsService.attachDepartmentMember(
+        deptToAttachUser.id,
+        selectedAttachUserId
+      );
+      await auditService.createAuditLog({
+        actor_id: currentUser.uid,
+        action: 'department_member_attached',
+        action_ar: 'إضافة عضو إلى قسم',
+        target_id: deptToAttachUser.id,
+        target_type: 'department',
+        details: `${attachedProfile.name_ar} -> ${deptToAttachUser.name_ar}`,
       });
       toast.success('تم اضافة الموظف للقسم');
       setDeptToAttachUser(null);
       setSelectedAttachUserId('');
+      setAttachableUsers([]);
       await loadData();
       if (expandedDeptIds.has(deptToAttachUser.id)) {
         const emps = await profilesService.getDepartmentEmployees(deptToAttachUser.id);
@@ -362,6 +405,48 @@ export function DepartmentsPage() {
       toast.error(getDepartmentErrorMessage(err, 'فشل اضافة الموظف للقسم'));
     } finally {
       setAttachingUser(false);
+    }
+  };
+
+  const handleDetachUserFromDepartment = async (
+    dept: Department & { employee_count: number },
+    employee: Profile
+  ) => {
+    if (!canAttachUsers || !canEditDepartments) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
+
+    const isDepartmentManager = dept.manager_uid === employee.id;
+    const confirmed = window.confirm(
+      isDepartmentManager
+        ? `سيتم إزالة ${employee.name_ar} من قسم "${dept.name_ar}" وإلغاء تعيينه كمدير للقسم. هل تريد المتابعة؟`
+        : `هل تريد إزالة ${employee.name_ar} من قسم "${dept.name_ar}"؟`
+    );
+    if (!confirmed) return;
+
+    try {
+      await departmentsService.detachDepartmentMember(dept.id, employee.id);
+      await auditService.createAuditLog({
+        actor_id: currentUser.uid,
+        action: isDepartmentManager ? 'department_manager_detached' : 'department_member_detached',
+        action_ar: isDepartmentManager ? 'إزالة مدير من القسم' : 'إزالة عضو من القسم',
+        target_id: dept.id,
+        target_type: 'department',
+        details: `${employee.name_ar} <- ${dept.name_ar}`,
+      });
+      toast.success(
+        isDepartmentManager
+          ? 'تمت إزالة مدير القسم من القسم وإلغاء تعيينه'
+          : 'تمت إزالة الموظف من القسم'
+      );
+      await loadData();
+      if (expandedDeptIds.has(dept.id)) {
+        const emps = await profilesService.getDepartmentEmployees(dept.id);
+        setDeptEmployeesById((prev) => ({ ...prev, [dept.id]: emps }));
+      }
+    } catch (err) {
+      toast.error(getDepartmentErrorMessage(err, 'فشل إزالة الموظف من القسم'));
     }
   };
 
@@ -419,15 +504,6 @@ export function DepartmentsPage() {
     'bg-amber-100 text-amber-600',
     'bg-rose-100 text-rose-600',
   ];
-
-  const attachableUsers = useMemo(() => {
-    if (!deptToAttachUser) return [];
-    return allProfiles.filter(
-      (profile) =>
-        (profile.role === 'employee' || profile.role === 'manager') &&
-        profile.department_id !== deptToAttachUser.id
-    );
-  }, [allProfiles, deptToAttachUser]);
 
   if (loading) {
     return (
@@ -487,7 +563,7 @@ export function DepartmentsPage() {
             aria-label="تصفية حسب المدير"
           >
             <option value="">جميع المديرين</option>
-            {managers.map((u) => (
+            {managerFilterOptions.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name_ar}
               </option>
@@ -641,33 +717,50 @@ export function DepartmentsPage() {
                   ) : (
                     <div className="space-y-2">
                       {deptEmployees.map((emp) => (
-                        <Link
+                        <div
                           key={emp.id}
-                          to={`/user-details/${emp.id}`}
                           className={`flex items-center justify-between p-2.5 rounded-xl transition-colors hover:opacity-90 ${deptColors[colorIdx]}`}
-                          onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="flex items-center gap-2">
+                          <Link
+                            to={`/user-details/${emp.id}`}
+                            className="flex items-center gap-2 min-w-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <div
                               className={`w-8 h-8 rounded-full flex items-center justify-center ${iconColors[colorIdx]}`}
                             >
                               <span className="text-xs">{emp.name_ar.charAt(0)}</span>
                             </div>
-                            <div>
+                            <div className="min-w-0">
                               <p className="text-sm text-gray-800">{emp.name_ar}</p>
                               <p className="text-xs text-gray-500">{emp.employee_id}</p>
                             </div>
+                          </Link>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                emp.id === dept.manager_uid
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {emp.id === dept.manager_uid ? 'مدير القسم' : 'موظف'}
+                            </span>
+                            {canAttachUsers && canEditDepartments && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleDetachUserFromDepartment(dept, emp);
+                                }}
+                                className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"
+                                aria-label={`إزالة ${emp.name_ar} من القسم`}
+                              >
+                                <UserMinus className="w-3.5 h-3.5 text-red-500" />
+                              </button>
+                            )}
                           </div>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-full ${
-                              emp.role === 'manager'
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-blue-100 text-blue-700'
-                            }`}
-                          >
-                            {emp.role === 'manager' ? 'مدير' : 'موظف'}
-                          </span>
-                        </Link>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -755,30 +848,9 @@ export function DepartmentsPage() {
                   <p id="create-nameEn-error" className="text-sm text-red-600 mt-1">{createFormErrors.nameEn}</p>
                 )}
               </div>
-              <div>
-                <label className="block mb-1.5 text-gray-700">مدير القسم</label>
-                <select
-                  value={formData.managerId}
-                  onChange={(e) => {
-                    setFormData((p) => ({ ...p, managerId: e.target.value }));
-                    if (createFormErrors.managerId) setCreateFormErrors((p) => ({ ...p, managerId: undefined }));
-                  }}
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${createFormErrors.managerId ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
-                  aria-invalid={!!createFormErrors.managerId}
-                  aria-describedby={createFormErrors.managerId ? 'create-managerId-error' : undefined}
-                >
-                  <option value="">-- اختيار --</option>
-                  {managerOptions.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name_ar}
-                      {u.role === 'manager' ? ' (مدير)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {createFormErrors.managerId && (
-                  <p id="create-managerId-error" className="text-sm text-red-600 mt-1">{createFormErrors.managerId}</p>
-                )}
-              </div>
+              <p className="text-xs text-gray-500">
+                سيتم إنشاء القسم بدون مدير. بعد إضافة أعضاء للقسم يمكنك اختيار مدير من شاشة التعديل.
+              </p>
               <button
                 type="submit"
                 disabled={submitting}
@@ -872,13 +944,21 @@ export function DepartmentsPage() {
                   aria-describedby={editFormErrors.managerId ? 'edit-managerId-error' : undefined}
                 >
                   <option value="">-- اختيار --</option>
-                  {managerOptions.map((u) => (
+                  {editManagerOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name_ar}
                       {u.role === 'manager' ? ' (مدير)' : ''}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  اختر مدير القسم من أعضاء هذا القسم فقط. إذا لم تجد الموظف هنا، أضفه أولاً كعضو ثم عد لتعيينه مديراً.
+                </p>
+                {editManagerOptions.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    لا يوجد أعضاء في هذا القسم حالياً، لذلك لا يمكن تعيين مدير بعد.
+                  </p>
+                )}
                 {editFormErrors.managerId && (
                   <p id="edit-managerId-error" className="text-sm text-red-600 mt-1">{editFormErrors.managerId}</p>
                 )}
@@ -970,7 +1050,7 @@ export function DepartmentsPage() {
               </button>
             </div>
             <p className="text-sm text-gray-600 mb-3">
-              اختر موظفاً لاضافته لقسم &quot;{deptToAttachUser.name_ar}&quot;.
+              اختر موظفاً بدون قسم لإضافته إلى قسم &quot;{deptToAttachUser.name_ar}&quot;. إذا كان الموظف مرتبطاً بقسم آخر فيجب إزالته منه أولاً.
             </p>
             <form className="space-y-4" onSubmit={handleAttachUserToDepartment}>
               <div>
@@ -983,13 +1063,17 @@ export function DepartmentsPage() {
                   <option value="">-- اختيار --</option>
                   {attachableUsers.map((profile) => (
                     <option key={profile.id} value={profile.id}>
-                      {profile.name_ar} ({profile.employee_id})
+                      {formatAttachUserLabel(profile)}
                     </option>
                   ))}
                 </select>
-                {attachableUsers.length === 0 && (
+                {attachableUsersLoading ? (
                   <p className="text-xs text-gray-500 mt-1">
-                    لا يوجد موظفون متاحون للاضافة حالياً.
+                    جاري تحميل الموظفين المتاحين...
+                  </p>
+                ) : attachableUsers.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    لا يوجد موظفون بدون قسم متاحون للإضافة حالياً.
                   </p>
                 )}
               </div>

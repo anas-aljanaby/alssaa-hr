@@ -10,7 +10,7 @@ import { updateDepartmentSchema } from '@/lib/validations';
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
-import { Building2, Users, Crown, ArrowRight, Edit2, Trash2, X } from 'lucide-react';
+import { Building2, Users, Crown, ArrowRight, Edit2, Trash2, UserMinus, X } from 'lucide-react';
 
 const INITIAL_EDIT_FORM = { nameAr: '', nameEn: '', managerId: '' };
 
@@ -27,10 +27,13 @@ export function DepartmentDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [managers, setManagers] = useState<Profile[]>([]);
   const [allDepartments, setAllDepartments] = useState<(Department & { employee_count: number })[]>([]);
   useBodyScrollLock(showEditModal || showDeleteConfirm);
   const isAdmin = currentUser?.role === 'admin';
+
+  const editManagerOptions = employees.filter(
+    (employee) => employee.role === 'employee' || employee.role === 'manager'
+  );
 
   useEffect(() => {
     if (!deptId) {
@@ -76,12 +79,8 @@ export function DepartmentDetailsPage() {
     });
     setEditFormErrors({});
     try {
-      const [depts, profs] = await Promise.all([
-        departmentsService.getDepartmentWithEmployeeCount(),
-        profilesService.listUsers(),
-      ]);
+      const depts = await departmentsService.getDepartmentWithEmployeeCount();
       setAllDepartments(depts);
-      setManagers(profs.filter((p) => p.role === 'employee' || p.role === 'manager'));
       setShowEditModal(true);
     } catch (err) {
       toast.error(getDepartmentErrorMessage(err, 'فشل تحميل البيانات'));
@@ -119,6 +118,10 @@ export function DepartmentDetailsPage() {
       toast.error('اسم القسم (عربي أو إنجليزي) مستخدم مسبقاً في هذه المؤسسة');
       return;
     }
+    if (managerId && allDepartments.some((d) => d.id !== department.id && d.manager_uid === managerId)) {
+      toast.error('لا يمكن تعيين هذا المستخدم مديراً لأكثر من قسم واحد');
+      return;
+    }
     setSubmitting(true);
     try {
       const updatePayload: departmentsService.DepartmentUpdate = {
@@ -149,6 +152,46 @@ export function DepartmentDetailsPage() {
       toast.error(getDepartmentErrorMessage(err, 'فشل تحديث القسم'));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDetachEmployee = async (employee: Profile) => {
+    if (!department || !isAdmin) {
+      toast.error('ليس لديك صلاحية تعديل الأقسام');
+      return;
+    }
+
+    const isDepartmentManager = department.manager_uid === employee.id;
+    const confirmed = window.confirm(
+      isDepartmentManager
+        ? `سيتم إزالة ${employee.name_ar} من القسم وإلغاء تعيينه كمدير للقسم. هل تريد المتابعة؟`
+        : `هل تريد إزالة ${employee.name_ar} من هذا القسم؟`
+    );
+    if (!confirmed) return;
+
+    try {
+      await departmentsService.detachDepartmentMember(department.id, employee.id);
+      await auditService.createAuditLog({
+        actor_id: currentUser!.uid,
+        action: isDepartmentManager ? 'department_manager_detached' : 'department_member_detached',
+        action_ar: isDepartmentManager ? 'إزالة مدير من القسم' : 'إزالة عضو من القسم',
+        target_id: department.id,
+        target_type: 'department',
+        details: `${employee.name_ar} <- ${department.name_ar}`,
+      });
+      toast.success(
+        isDepartmentManager
+          ? 'تمت إزالة مدير القسم من القسم وإلغاء تعيينه'
+          : 'تمت إزالة الموظف من القسم'
+      );
+      const [dept, emps] = await Promise.all([
+        departmentsService.getDepartmentById(department.id),
+        profilesService.getDepartmentEmployees(department.id),
+      ]);
+      if (dept) setDepartment({ ...dept, employee_count: emps.length });
+      setEmployees(emps);
+    } catch (err) {
+      toast.error(getDepartmentErrorMessage(err, 'فشل إزالة الموظف من القسم'));
     }
   };
 
@@ -289,13 +332,27 @@ export function DepartmentDetailsPage() {
                     <p className="text-xs text-gray-500">{emp.employee_id}</p>
                   </div>
                 </div>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${
-                    emp.role === 'manager' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
-                  }`}
-                >
-                  {emp.role === 'manager' ? 'مدير' : 'موظف'}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${
+                      emp.id === department.manager_uid
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {emp.id === department.manager_uid ? 'مدير القسم' : 'موظف'}
+                  </span>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDetachEmployee(emp)}
+                      className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                      aria-label={`إزالة ${emp.name_ar} من القسم`}
+                    >
+                      <UserMinus className="w-3.5 h-3.5 text-red-500" />
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -374,13 +431,21 @@ export function DepartmentDetailsPage() {
                   className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${editFormErrors.managerId ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'}`}
                 >
                   <option value="">-- اختيار --</option>
-                  {managers.map((u) => (
+                  {editManagerOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name_ar}
                       {u.role === 'manager' ? ' (مدير)' : ''}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  اختر مدير القسم من أعضاء هذا القسم فقط. إذا لم تجد الموظف هنا، أضفه أولاً كعضو ثم عد لتعيينه مديراً.
+                </p>
+                {editManagerOptions.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    لا يوجد أعضاء في هذا القسم حالياً، لذلك لا يمكن تعيين مدير بعد.
+                  </p>
+                )}
                 {editFormErrors.managerId && (
                   <p className="text-sm text-red-600 mt-1">{editFormErrors.managerId}</p>
                 )}

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePwa } from '../../contexts/PwaContext';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Department } from '@/lib/services/departments.service';
 import { displayProfileEmail } from '@/lib/profileDisplay';
@@ -18,14 +17,10 @@ import {
   Calendar,
   BadgeCheck,
   Clock,
-  Download,
-  RefreshCw,
-  Smartphone,
 } from 'lucide-react';
 
 export function MorePage() {
   const { currentUser, logout } = useAuth();
-  const { isInstalled, isInstallable, isOffline, updateAvailable, install, applyUpdate, refreshApp } = usePwa();
   const navigate = useNavigate();
   const [department, setDepartment] = useState<Department | null>(null);
 
@@ -73,51 +68,6 @@ export function MorePage() {
               } as const,
             ]
           : []),
-      ],
-    },
-    {
-      title: 'التطبيق',
-      items: [
-        ...(!isInstalled
-          ? [
-              {
-                icon: Smartphone,
-                label: isInstallable ? 'تثبيت التطبيق' : 'إضافة للشاشة الرئيسية',
-                subtitle: isInstallable
-                  ? 'تثبيت مباشر للوصول السريع من الهاتف'
-                  : 'يمكنك إضافته للشاشة الرئيسية من قائمة المتصفح',
-                color: 'text-blue-600',
-                bgColor: 'bg-blue-50',
-                onClick: () => {
-                  void install();
-                },
-              } as const,
-            ]
-          : []),
-        ...(updateAvailable
-          ? [
-              {
-                icon: Download,
-                label: 'تثبيت التحديث الجديد',
-                subtitle: 'سيعاد تحميل التطبيق بعد التحديث',
-                color: 'text-emerald-600',
-                bgColor: 'bg-emerald-50',
-                onClick: () => {
-                  void applyUpdate();
-                },
-              } as const,
-            ]
-          : []),
-        {
-          icon: RefreshCw,
-          label: 'إعادة تحميل التطبيق',
-          subtitle: isOffline
-            ? 'سيحاول استعادة أحدث حالة عند توفر الإنترنت'
-            : 'تحديث يدوي للواجهة والبيانات',
-          color: 'text-slate-600',
-          bgColor: 'bg-slate-50',
-          onClick: () => refreshApp(),
-        },
       ],
     },
     {
