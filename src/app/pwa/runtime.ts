@@ -33,6 +33,10 @@ let initialized = false;
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null;
 
+function isLocalhostHost(hostname: string) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
 function emit() {
   for (const listener of listeners) listener();
 }
@@ -131,7 +135,11 @@ export function initializePwa() {
   standaloneMedia.addEventListener?.('change', syncInstallState);
   fullscreenMedia.addEventListener?.('change', syncInstallState);
 
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  if (
+    'serviceWorker' in navigator &&
+    import.meta.env.PROD &&
+    !isLocalhostHost(window.location.hostname)
+  ) {
     updateServiceWorker = registerSW({
       immediate: true,
       onNeedRefresh() {

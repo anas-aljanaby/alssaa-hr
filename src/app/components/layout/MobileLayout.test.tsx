@@ -49,14 +49,14 @@ vi.mock('@/app/components/notifications/NotificationsDropdown', () => ({
 }));
 
 describe('MobileLayout', () => {
-  it('shows departments tab and toggles top notifications dropdown', async () => {
+  it('shows team attendance tab and toggles top notifications dropdown', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <MobileLayout />
       </MemoryRouter>
     );
 
-    expect(screen.getByText('الأقسام')).toBeInTheDocument();
+    expect(screen.getByText('حضور الفريق')).toBeInTheDocument();
     expect(screen.getByText('أنت الآن في وضع عدم الاتصال.')).toBeInTheDocument();
     expect(screen.getByText('يوجد تحديث جديد للتطبيق.')).toBeInTheDocument();
     expect(screen.queryByText('الإشعارات')).not.toBeInTheDocument();

@@ -57,6 +57,7 @@ describe('attendance.service', () => {
   beforeEach(() => {
     sb.clearQueue();
     sb.clearChannelInstances();
+    vi.mocked(sb.rpc).mockReset();
     setNowFn(() => new Date(2025, 5, 11, 10, 0, 0));
   });
 
@@ -183,6 +184,85 @@ describe('attendance.service', () => {
     sb.queueResult({ data: null, error: { message: 'db' } });
     const { getTodayLog } = await import('./attendance.service');
     await expect(getTodayLog('u1')).rejects.toEqual({ message: 'db' });
+  });
+
+  it('getRedactedDepartmentAvailability maps RPC rows', async () => {
+    vi.mocked(sb.rpc).mockResolvedValue({
+      data: [
+        {
+          user_id: 'u1',
+          name_ar: 'علي',
+          employee_id: 'EMP-1',
+          role: 'employee',
+          avatar_url: null,
+          department_id: 'd1',
+          department_name_ar: 'التحرير',
+          availability_state: 'available_now',
+        },
+      ],
+      error: null,
+    } as never);
+
+    const { getRedactedDepartmentAvailability } = await import('./attendance.service');
+    const rows = await getRedactedDepartmentAvailability({ departmentId: 'd1' });
+
+    expect(sb.rpc).toHaveBeenCalledWith('get_redacted_department_availability', {
+      p_department_id: 'd1',
+    });
+    expect(rows).toEqual([
+      expect.objectContaining({
+        userId: 'u1',
+        nameAr: 'علي',
+        departmentNameAr: 'التحرير',
+        availabilityState: 'available_now',
+      }),
+    ]);
+  });
+
+  it('getTeamAttendanceDay maps RPC rows', async () => {
+    vi.mocked(sb.rpc).mockResolvedValue({
+      data: [
+        {
+          user_id: 'u1',
+          name_ar: 'منى',
+          employee_id: 'EMP-2',
+          role: 'employee',
+          avatar_url: null,
+          department_id: 'd1',
+          department_name_ar: 'الأخبار',
+          date: '2025-06-11',
+          effective_status: 'late',
+          display_status: 'late',
+          first_check_in: '08:20',
+          last_check_out: null,
+          total_work_minutes: 120,
+          total_overtime_minutes: 0,
+          session_count: 1,
+          is_checked_in_now: true,
+          has_auto_punch_out: false,
+          needs_review: false,
+          is_short_day: false,
+        },
+      ],
+      error: null,
+    } as never);
+
+    const { getTeamAttendanceDay } = await import('./attendance.service');
+    const rows = await getTeamAttendanceDay({ date: '2025-06-11', departmentId: 'd1' });
+
+    expect(sb.rpc).toHaveBeenCalledWith('get_team_attendance_day', {
+      p_date: '2025-06-11',
+      p_department_id: 'd1',
+    });
+    expect(rows).toEqual([
+      expect.objectContaining({
+        userId: 'u1',
+        nameAr: 'منى',
+        effectiveStatus: 'late',
+        displayStatus: 'late',
+        isCheckedInNow: true,
+      }),
+    ]);
   });
 
   it('getAttendanceToday combines log and shift', async () => {
@@ -633,4 +713,3 @@ describe('attendance.service', () => {
     });
   });
 });
-

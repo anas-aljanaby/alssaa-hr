@@ -5,12 +5,14 @@ import { MobileLayout } from './components/layout/MobileLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FullPageSpinner } from './components/skeletons';
 import { RequireAdmin } from './components/RequireAdmin';
+import { RequireManagerOrAdmin } from './components/RequireManagerOrAdmin';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const AuthCallbackPage = React.lazy(() => import('./pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
 const SetPasswordPage = React.lazy(() => import('./pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
 const DashboardRouter = React.lazy(() => import('./pages/DashboardRouter').then(m => ({ default: m.DashboardRouter })));
 const AttendancePage = React.lazy(() => import('./pages/employee/AttendancePage').then(m => ({ default: m.AttendancePage })));
+const TeamAttendancePage = React.lazy(() => import('./pages/team/TeamAttendancePage').then(m => ({ default: m.TeamAttendancePage })));
 const RequestsPage = React.lazy(() => import('./pages/employee/RequestsPage').then(m => ({ default: m.RequestsPage })));
 const NotificationsPage = React.lazy(() => import('./pages/employee/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
 const MorePage = React.lazy(() => import('./pages/employee/MorePage').then(m => ({ default: m.MorePage })));
@@ -62,6 +64,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Lazy><DashboardRouter /></Lazy> },
           { path: 'attendance', element: <Lazy><AttendancePage /></Lazy> },
+          { path: 'team-attendance', element: <Lazy><TeamAttendancePage /></Lazy> },
           { path: 'requests', element: <Lazy><RequestsPage /></Lazy> },
           { path: 'notifications', element: <Lazy><NotificationsPage /></Lazy> },
           { path: 'more', element: <Lazy><MorePage /></Lazy> },
@@ -70,8 +73,8 @@ export const router = createBrowserRouter([
           { path: 'terms-conditions', element: <Lazy><TermsPage /></Lazy> },
           { path: 'approvals', element: <Lazy><ApprovalsPage /></Lazy> },
           { path: 'users', element: <Lazy><RequireAdmin><UsersPage /></RequireAdmin></Lazy> },
-          { path: 'departments', element: <Lazy><DepartmentsPage /></Lazy> },
-          { path: 'departments/:deptId', element: <Lazy><DepartmentDetailsPage /></Lazy> },
+          { path: 'departments', element: <Lazy><RequireManagerOrAdmin><DepartmentsPage /></RequireManagerOrAdmin></Lazy> },
+          { path: 'departments/:deptId', element: <Lazy><RequireManagerOrAdmin><DepartmentDetailsPage /></RequireManagerOrAdmin></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
           { path: 'transfer-general-manager', element: <Lazy><RequireAdmin><TransferGeneralManagerPage /></RequireAdmin></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },

@@ -63,6 +63,7 @@ vi.mock('./pages/AuthCallbackPage', () => ({ AuthCallbackPage: () => <div data-t
 vi.mock('./pages/SetPasswordPage', () => ({ SetPasswordPage: () => <div data-testid="page-set-password">set-password</div> }));
 vi.mock('./pages/DashboardRouter', () => ({ DashboardRouter: () => <div data-testid="page-dashboard-router">dashboard-router</div> }));
 vi.mock('./pages/employee/AttendancePage', () => ({ AttendancePage: () => <div data-testid="page-attendance">attendance</div> }));
+vi.mock('./pages/team/TeamAttendancePage', () => ({ TeamAttendancePage: () => <div data-testid="page-team-attendance">team-attendance</div> }));
 vi.mock('./pages/employee/RequestsPage', () => ({ RequestsPage: () => <div data-testid="page-requests">requests</div> }));
 vi.mock('./pages/employee/NotificationsPage', () => ({ NotificationsPage: () => <div data-testid="page-notifications">notifications</div> }));
 vi.mock('./pages/employee/MorePage', () => ({ MorePage: () => <div data-testid="page-more">more</div> }));
@@ -111,17 +112,20 @@ describe('route rendering smoke tests', () => {
 
     { path: '/', role: 'employee', expectedTestId: 'page-dashboard-router' },
     { path: '/attendance', role: 'employee', expectedTestId: 'page-attendance' },
+    { path: '/team-attendance', role: 'employee', expectedTestId: 'page-team-attendance' },
     { path: '/requests', role: 'employee', expectedTestId: 'page-requests' },
-    { path: '/departments', role: 'employee', expectedTestId: 'page-departments' },
+    { path: '/departments', role: 'employee', expectedTestId: 'page-dashboard-router' },
     { path: '/more', role: 'employee', expectedTestId: 'page-more' },
     { path: '/attendance-policy', role: 'employee', expectedTestId: 'page-attendance-policy' },
     { path: '/security-privacy', role: 'employee', expectedTestId: 'page-security-privacy' },
     { path: '/terms-conditions', role: 'employee', expectedTestId: 'page-terms-conditions' },
 
     { path: '/approvals', role: 'manager', expectedTestId: 'page-approvals' },
+    { path: '/team-attendance', role: 'manager', expectedTestId: 'page-team-attendance' },
     { path: '/departments', role: 'manager', expectedTestId: 'page-departments' },
 
     { path: '/users', role: 'admin', expectedTestId: 'page-users' },
+    { path: '/team-attendance', role: 'admin', expectedTestId: 'page-team-attendance' },
     { path: '/departments', role: 'admin', expectedTestId: 'page-departments' },
     { path: '/departments/test-dept', role: 'admin', expectedTestId: 'page-department-details' },
     { path: '/reports', role: 'admin', expectedTestId: 'page-reports' },

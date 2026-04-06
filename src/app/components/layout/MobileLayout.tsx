@@ -13,8 +13,7 @@ import {
   MoreHorizontal,
   Users,
   CheckSquare,
-  BarChart3,
-  Building2,
+  UsersRound,
 } from 'lucide-react';
 
 export function MobileLayout() {
@@ -104,7 +103,7 @@ export function MobileLayout() {
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/attendance', icon: Clock, label: 'الحضور' },
     { path: '/requests', icon: FileText, label: 'الطلبات' },
-    { path: '/departments', icon: Building2, label: 'الأقسام' },
+    { path: '/team-attendance', icon: UsersRound, label: 'حضور الفريق' },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
 
@@ -112,7 +111,7 @@ export function MobileLayout() {
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/attendance', icon: Clock, label: 'الحضور' },
     { path: '/approvals', icon: CheckSquare, label: 'الموافقات', badge: pendingApprovals },
-    { path: '/departments', icon: Building2, label: 'الأقسام' },
+    { path: '/team-attendance', icon: UsersRound, label: 'حضور الفريق' },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
 
@@ -120,7 +119,7 @@ export function MobileLayout() {
     { path: '/', icon: Home, label: 'الرئيسية' },
     { path: '/users', icon: Users, label: 'المستخدمون' },
     { path: '/approvals', icon: CheckSquare, label: 'الموافقات', badge: pendingApprovals },
-    { path: '/departments', icon: Building2, label: 'الأقسام' },
+    { path: '/team-attendance', icon: UsersRound, label: 'حضور الفريق' },
     { path: '/more', icon: MoreHorizontal, label: 'المزيد' },
   ];
 
@@ -143,6 +142,7 @@ export function MobileLayout() {
       '/security-privacy',
       '/terms-conditions',
       '/reports',
+      '/departments',
       '/transfer-general-manager',
     ];
 

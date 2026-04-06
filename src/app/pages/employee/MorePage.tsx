@@ -159,11 +159,34 @@ export function MorePage() {
                 onClick: () => navigate('/attendance'),
               },
               {
+                icon: Building2,
+                label: 'إدارة الأقسام',
+                color: 'text-amber-600',
+                bgColor: 'bg-amber-50',
+                onClick: () => navigate('/departments'),
+              },
+              {
                 icon: FileText,
                 label: 'طلباتي',
                 color: 'text-blue-500',
                 bgColor: 'bg-blue-50',
                 onClick: () => navigate('/requests'),
+              },
+            ],
+          } as const,
+        ]
+      : []),
+    ...(currentUser.role === 'manager'
+      ? [
+          {
+            title: 'الإدارة',
+            items: [
+              {
+                icon: Building2,
+                label: 'إدارة الأقسام',
+                color: 'text-amber-600',
+                bgColor: 'bg-amber-50',
+                onClick: () => navigate('/departments'),
               },
             ],
           } as const,
