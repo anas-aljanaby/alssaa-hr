@@ -27,7 +27,7 @@ import { StatCard } from '../../components/shared/StatCard';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { getStatusColor } from '@/lib/ui-helpers';
 import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
-import { useQuickPunch } from '../../hooks/useQuickPunch';
+import { useTodayPunch } from '../../hooks/useTodayPunch';
 import { UnavailableState } from '../../components/shared/UnavailableState';
 import { isOfflineError } from '@/lib/network';
 
@@ -41,7 +41,7 @@ export function EmployeeDashboard() {
   const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
   const [department, setDepartment] = useState<Department | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const quickPunch = useQuickPunch({
+  const todayPunch = useTodayPunch({
     userId: currentUser?.uid,
     onLogUpdated: setTodayLog,
   });
@@ -56,10 +56,10 @@ export function EmployeeDashboard() {
       if (!currentUser) return undefined;
       return attendanceService.subscribeToUserAttendance(currentUser.uid, (event) => {
         setTodayLog(event.new);
-        quickPunch.refreshToday();
+        todayPunch.refreshToday();
       });
     },
-    [currentUser?.uid, quickPunch.refreshToday]
+    [currentUser?.uid, todayPunch.refreshToday]
   );
 
   useRealtimeSubscription(
@@ -169,14 +169,14 @@ export function EmployeeDashboard() {
         }
       />
 
-      {quickPunch.loading ? (
+      {todayPunch.loading ? (
         <div className="bg-gray-100 rounded-2xl h-64 animate-pulse" />
       ) : (
         <TodayStatusCard
-          today={quickPunch.today}
-          actionLoading={quickPunch.actionLoading}
-          onCheckIn={quickPunch.handleCheckIn}
-          onCheckOut={quickPunch.handleCheckOut}
+          today={todayPunch.today}
+          actionLoading={todayPunch.actionLoading}
+          onCheckIn={todayPunch.handleCheckIn}
+          onCheckOut={todayPunch.handleCheckOut}
         />
       )}
 

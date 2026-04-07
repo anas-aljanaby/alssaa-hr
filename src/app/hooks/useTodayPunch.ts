@@ -6,12 +6,12 @@ import { isOfflineError } from '@/lib/network';
 
 const EMPTY_TODAY: TodayRecord = { log: null, punches: [], shift: null };
 
-interface UseQuickPunchOptions {
+interface UseTodayPunchOptions {
   userId?: string;
   onLogUpdated?: (log: AttendanceLog | null) => void;
 }
 
-export function useQuickPunch({ userId, onLogUpdated }: UseQuickPunchOptions) {
+export function useTodayPunch({ userId, onLogUpdated }: UseTodayPunchOptions) {
   const { checkIn, checkOut } = useApp();
 
   const [today, setToday] = useState<TodayRecord>(EMPTY_TODAY);

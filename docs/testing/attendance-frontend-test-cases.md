@@ -19,17 +19,17 @@ This document tracks attendance frontend/UI test coverage for the web app and cl
 
 ## 21. Completed-Day CTA vs Mid-Shift Resume
 
-> Corresponding test files: `src/app/components/attendance/TodayStatusCard.test.tsx`, `src/app/components/attendance/QuickPunchCard.test.tsx`
+> Corresponding test file: `src/app/components/attendance/TodayStatusCard.test.tsx`
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
 | 21.1 | [x] | Working day, first session ended early (`13:15` -> `13:16`), now is `13:20` (before `workEndTime`) on `TodayStatusCard` | Main action must not imply overtime-only flow and must not open overtime confirmation dialog unless current time is actually overtime | Implemented as a regression guard; currently fails and exposes the bug |
-| 21.2 | [x] | Same as 21.1 on `QuickPunchCard` | CTA copy should remain regular resume/punch-in behavior, not overtime-only wording | Implemented as a regression guard; currently fails and exposes the bug |
+| 21.2 | [x] | Same as 21.1 on `TodayStatusCard` (single canonical card) | CTA copy should remain regular resume/punch-in behavior, not overtime-only wording | Implemented as a regression guard; currently fails and exposes the bug |
 | 21.3 | [x] | True overtime context (post-shift, e.g. `18:01`) on completed day | Overtime confirmation dialog is allowed and overtime CTA copy is acceptable | Boundary test implemented |
 
 ## 22. Open Second Session Rendering
 
-> Corresponding test files: `src/app/components/attendance/TodayStatusCard.test.tsx`, `src/app/components/attendance/QuickPunchCard.test.tsx`, `src/app/pages/employee/AttendancePage.test.tsx`
+> Corresponding test files: `src/app/components/attendance/TodayStatusCard.test.tsx`, `src/app/pages/employee/AttendancePage.test.tsx`
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |

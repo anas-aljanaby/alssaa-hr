@@ -29,8 +29,8 @@ import {
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { StatCard } from '../../components/shared/StatCard';
-import { QuickPunchCard } from '../../components/attendance/QuickPunchCard';
-import { useQuickPunch } from '../../hooks/useQuickPunch';
+import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
+import { useTodayPunch } from '../../hooks/useTodayPunch';
 import { UnavailableState } from '../../components/shared/UnavailableState';
 import { isOfflineError } from '@/lib/network';
 
@@ -58,7 +58,7 @@ export function ManagerDashboard() {
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
   const [activeTab, setActiveTab] = useState<ManagerTab>('overview');
   const [loadError, setLoadError] = useState<string | null>(null);
-  const quickPunch = useQuickPunch({
+  const todayPunch = useTodayPunch({
     userId: currentUser?.uid,
   });
 
@@ -302,14 +302,16 @@ export function ManagerDashboard() {
         }
       />
 
-      <QuickPunchCard
-        today={quickPunch.today}
-        loading={quickPunch.loading}
-        actionLoading={quickPunch.actionLoading}
-        onCheckIn={quickPunch.handleCheckIn}
-        onCheckOut={quickPunch.handleCheckOut}
-        onOpenAttendance={() => navigate('/attendance')}
-      />
+      {todayPunch.loading ? (
+        <div className="bg-gray-100 rounded-2xl h-64 animate-pulse" />
+      ) : (
+        <TodayStatusCard
+          today={todayPunch.today}
+          actionLoading={todayPunch.actionLoading}
+          onCheckIn={todayPunch.handleCheckIn}
+          onCheckOut={todayPunch.handleCheckOut}
+        />
+      )}
 
       <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">
         <div className="grid grid-cols-2 gap-1">

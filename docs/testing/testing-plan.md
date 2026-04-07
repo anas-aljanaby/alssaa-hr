@@ -178,7 +178,7 @@ Test with `@testing-library/react` `renderHook`:
 
 Test: state initialization, key state transitions.
 
-### Task 4.3 — `src/app/hooks/useQuickPunch.ts`
+### Task 4.3 — `src/app/hooks/useTodayPunch.ts`
 **Priority: 🟠 High**
 
 Test: calls attendance service correctly, manages loading/error/success states, in-flight guard against parallel punch requests.
@@ -203,8 +203,8 @@ Not every component needs a test. Focus on components with **logic**, not pure d
 ### Task 5.2 — `RequireAdmin.tsx`
 **Priority: 🔴 Critical** — security gate. Verify redirect for non-admin roles.
 
-### Task 5.3 — `QuickPunchCard.tsx`
-**Priority: 🟠 High** — verify button states, loading, success/error display.
+### Task 5.3 — `TodayStatusCard.tsx`
+**Priority: 🟠 High** — verify punch-in/out states, timers, and overtime confirmation behavior.
 
 ### Task 5.4 — `TodayStatusCard.tsx` + `TodayPunchLog.tsx`
 **Priority: 🟡 Medium**

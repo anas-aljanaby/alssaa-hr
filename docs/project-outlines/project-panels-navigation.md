@@ -70,7 +70,7 @@ This file documents the **Admin**, **Manager**, and **Employee** panels as paren
 - **Bottom Navbar (top level)**
   - **`الرئيسية` (`/`)**  
     Reach: tap `الرئيسية` in bottom navbar.
-    - Main content: manager dashboard header + quick punch card.
+    - Main content: manager dashboard header + today status card.
     - **Tab: `نظرة عامة`**
       - Team daily summary cards, pending requests preview, top team employee list.
     - **Tab: `التحليلات`**
@@ -125,7 +125,7 @@ This file documents the **Admin**, **Manager**, and **Employee** panels as paren
 - **Bottom Navbar (top level)**
   - **`الرئيسية` (`/`)**  
     Reach: tap `الرئيسية` in bottom navbar.
-    - Main content: personal dashboard (today status, quick punch, monthly stats, leave balance).
+    - Main content: personal dashboard (today status card, monthly stats, leave balance).
     - Request snapshots: pending requests and upcoming approved leaves.
     - **`تفاصيل الموظف` (`/user-details/:currentUserId`)**  
       Reach: from `الرئيسية`, tap profile avatar/header.
