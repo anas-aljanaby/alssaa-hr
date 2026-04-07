@@ -2,14 +2,15 @@
 This repository contains a web app for an HR attendance workflow (clock-in/clock-out) with role-based access for employees, managers, and administrators.
 
 At a high level, the frontend handles:
-- Authentication and session setup (login / signup / auth callback / set-password)
+- Authentication and session setup (login / auth callback / set-password, with `/signup` currently redirected to login)
 - Employee attendance actions (punch in/out, attendance views, requests/notifications)
-- Manager + admin workflows (approvals, reporting, user/department management)
+- Team, manager, and admin workflows (team attendance, approvals, reporting, user/department management)
 
 The backend is powered by Supabase:
 - A Postgres database defined via SQL migrations
 - Supabase Auth for identity
 - Supabase Edge Functions (serverless endpoints) for attendance-related operations and admin-only actions
+- Shared role guards in routing (`RequireAdmin` and `RequireManagerOrAdmin`) for protected surfaces
 
 ## Tech Stack
 ### Frontend
@@ -25,10 +26,10 @@ The backend is powered by Supabase:
 - RTL / Arabic UI: the app is rendered with `<html lang="ar" dir="rtl">` (see `index.html`)
 
 ### Backend (Supabase)
-- Supabase Postgres schema managed in `supabase/migrations/*.sql`
+- Supabase Postgres schema managed in `supabase/migrations/*.sql` (currently through `014_departments_manager_membership_guard.sql`)
 - Supabase Auth (used by the app via the Supabase client)
 - Supabase Edge Functions in `supabase/functions/*/index.ts` (Deno)
-  - Includes attendance check-in/out logic and automation such as `auto-punch-out`
+  - Includes attendance check-in/out logic and automation such as `auto-punch-out` and `mark-absent`
 
 ### Deployment / Tooling
 - `npm run dev`, `npm run build`, `npm run preview` (Vite)
@@ -61,15 +62,15 @@ The repo uses two test runners: **Vitest** for the Vite app (TypeScript/React an
 - Run the full Edge suite with `npm run test:edge` (not part of `npm test`).
 
 ### Documentation
-- `docs/testing-plan.md` describes the phased rollout and priorities for expanding coverage.
+- `docs/testing/testing-plan.md` describes the phased rollout and priorities for expanding coverage.
 
 ## General Repository Structure
 - `src/`
   - `main.tsx`: React entrypoint (mounts the app)
   - `app/`
-    - `routes.tsx`: the main route tree (login/signup/auth/callback + dashboard routes)
+    - `routes.tsx`: the main route tree (auth flows + dashboard routes, including team attendance)
     - `pages/`: screens grouped by role (e.g., `employee/`, `manager/`, `admin/`)
-    - `components/`: shared UI building blocks (layouts, cards, attendance widgets, etc.)
+    - `components/`: shared UI building blocks (layouts, cards, attendance and notifications widgets, etc.)
     - `contexts/`: React contexts (notably auth/app/dev-time state)
     - `hooks/`: reusable hooks (attendance and realtime helpers)
   - `lib/`
@@ -85,7 +86,7 @@ The repo uses two test runners: **Vitest** for the Vite app (TypeScript/React an
   - `GM_MANAGER_SYNC_TEST_CHECKLIST.md`: helper documentation for manager sync testing
 
 - `docs/`
-  - Project documentation and operational policies (attendance, policies, testing plan and checklists)
+  - Project documentation and operational policies (attendance policies, testing plans, and checklists)
 
 - `scripts/`
   - `deploy-functions.sh`: deploy script for the Edge Functions

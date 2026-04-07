@@ -10,9 +10,11 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 | `ATTRIBUTIONS.md` | Third-party / asset attributions |
 | `index.html` | Vite HTML shell (RTL Arabic title, mounts `#root`) |
 | `package.json` / `package-lock.json` | NPM dependencies and scripts |
+| `deno.lock` | Deno dependency lockfile (Edge Function test/runtime deps) |
 | `tsconfig.json` | TypeScript compiler options (app) |
 | `tsconfig.node.json` | TypeScript options for Node tooling (e.g. Vite config) |
 | `vite.config.ts` | Vite: React, Tailwind plugin, `@` → `src` alias |
+| `vitest.config.ts` | Vitest configuration (jsdom, setup, exclusions) |
 | `vercel.json` | Vercel deployment config |
 
 ## `scripts/`
@@ -38,7 +40,6 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 | File | Description |
 |------|-------------|
 | `LoginPage.tsx` | Login screen |
-| `SignUpPage.tsx` | Sign-up screen |
 | `AuthCallbackPage.tsx` | OAuth / magic-link callback handler |
 | `SetPasswordPage.tsx` | Invite / password setup flow |
 | `DashboardRouter.tsx` | Role-based dashboard redirect (employee/manager/admin) |
@@ -60,6 +61,7 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 | `employee/HelpSupportPage.tsx` | Help / support |
 | `manager/ManagerDashboard.tsx` | Manager home |
 | `manager/ApprovalsPage.tsx` | Manager approvals queue |
+| `team/TeamAttendancePage.tsx` | Team attendance monitoring page |
 
 ### `src/app/contexts/`
 
@@ -90,7 +92,9 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 | `RequireAdmin.tsx` | Wraps routes needing admin role |
 | `Pagination.tsx` | List pagination control |
 | `PasswordChecklist.tsx` | Password strength / rules UI |
+| `PasswordGenerateCopyRow.tsx` | Generate/copy password helper row |
 | `PendingRequestsCard.tsx` | Card summarizing pending requests |
+| `RequireManagerOrAdmin.tsx` | Wraps routes needing manager/admin role |
 | `skeletons.tsx` | Loading skeletons (e.g. full-page spinner) |
 
 ### `src/app/components/layout/`
@@ -110,6 +114,12 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 | `TodayPunchLog.tsx` | Today’s punch timeline |
 | `DayDetailsSheet.tsx` | Sheet/drawer for one day’s detail |
 | `MonthCalendarHeatmap.tsx` | Month calendar / heatmap for attendance |
+
+### `src/app/components/notifications/`
+
+| File | Description |
+|------|-------------|
+| `NotificationsDropdown.tsx` | Header dropdown preview for recent notifications |
 
 ### `src/app/components/dashboard/`
 
@@ -202,10 +212,15 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 |------|-------------|
 | `supabase.ts` | Typed Supabase browser client (`VITE_*` env) |
 | `database.types.ts` | Generated / maintained DB types for Supabase |
+| `authSnapshot.ts` | Auth/user snapshot normalization helpers |
+| `network.ts` | Network error and response utility helpers |
+| `generatePassword.ts` | Password generation helpers for admin flows |
+| `profileDisplay.ts` | Profile presentation/formatting helpers |
 | `services/index.ts` | Barrel re-export of services |
 | `services/auth.service.ts` | Auth API helpers |
 | `services/attendance.service.ts` | Attendance queries / punch calls |
 | `services/requests.service.ts` | Leave / request workflows |
+| `services/overtime-requests.service.ts` | Overtime request workflows |
 | `services/notifications.service.ts` | Notifications CRUD / fetch |
 | `services/profiles.service.ts` | User profiles |
 | `services/departments.service.ts` | Departments |
@@ -241,6 +256,15 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 | `003_reset_demo_data.sql` | Demo data reset |
 | `004_seed_demo.sql` | Demo seed data |
 | `005_add_real_org.sql` | Real org migration / seed |
+| `006_attendance_sessions_and_daily_summary.sql` | Attendance sessions and daily summary structures |
+| `007_backfill_attendance_sessions_columns.sql` | Backfill/repair attendance session columns |
+| `008_sync_profile_email_from_auth.sql` | Keep profile email synced from auth identities |
+| `009_departments_manager_limited_update.sql` | Restrict manager department update scope |
+| `010_departments_revoke_manager_update.sql` | Revoke broad manager department updates |
+| `011_leave_recalculate_daily_summary.sql` | Recalculate daily summary for leave handling |
+| `012_departments_optional_english_name.sql` | Add optional English department name |
+| `013_team_attendance_functions.sql` | Team attendance database functions |
+| `014_departments_manager_membership_guard.sql` | Enforce manager membership guard on department ops |
 
 ### `supabase/functions/`
 
@@ -250,8 +274,12 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 | `invite-user/index.ts` | Edge: admin invite user (service role) |
 | `delete-user/index.ts` | Edge: admin delete auth user |
 | `auto-punch-out/index.ts` | Edge: scheduled auto punch-out + notification |
+| `mark-absent/index.ts` | Edge: mark absent records for eligible users |
 | `dev-seed-attendance/index.ts` | Edge: dev-only attendance seed |
 | `dev-reset-attendance/index.ts` | Edge: dev-only clear dev attendance rows |
+| `_shared/bearer.ts` | Shared bearer-token parsing/auth helpers |
+| `_shared/cors.ts` | Shared CORS response helpers |
+| `_shared/queued_supabase.ts` | Shared Supabase queue/serialization helper |
 
 ### `supabase/` (misc)
 
