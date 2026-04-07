@@ -5,7 +5,6 @@ import { MobileLayout } from './components/layout/MobileLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FullPageSpinner } from './components/skeletons';
 import { RequireAdmin } from './components/RequireAdmin';
-import { RequireManagerOrAdmin } from './components/RequireManagerOrAdmin';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const AuthCallbackPage = React.lazy(() => import('./pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
@@ -73,8 +72,8 @@ export const router = createBrowserRouter([
           { path: 'terms-conditions', element: <Lazy><TermsPage /></Lazy> },
           { path: 'approvals', element: <Lazy><ApprovalsPage /></Lazy> },
           { path: 'users', element: <Lazy><RequireAdmin><UsersPage /></RequireAdmin></Lazy> },
-          { path: 'departments', element: <Lazy><RequireManagerOrAdmin><DepartmentsPage /></RequireManagerOrAdmin></Lazy> },
-          { path: 'departments/:deptId', element: <Lazy><RequireManagerOrAdmin><DepartmentDetailsPage /></RequireManagerOrAdmin></Lazy> },
+          { path: 'departments', element: <Lazy><DepartmentsPage /></Lazy> },
+          { path: 'departments/:deptId', element: <Lazy><DepartmentDetailsPage /></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
           { path: 'transfer-general-manager', element: <Lazy><RequireAdmin><TransferGeneralManagerPage /></RequireAdmin></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },

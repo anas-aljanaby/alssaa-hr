@@ -142,6 +142,22 @@ export function MorePage() {
           } as const,
         ]
       : []),
+    ...(currentUser.role === 'employee'
+      ? [
+          {
+            title: 'الأقسام',
+            items: [
+              {
+                icon: Building2,
+                label: 'departments',
+                color: 'text-amber-600',
+                bgColor: 'bg-amber-50',
+                onClick: () => navigate('/departments'),
+              },
+            ],
+          } as const,
+        ]
+      : []),
     ...(currentUser.role === 'manager' || currentUser.role === 'admin'
       ? [
           {

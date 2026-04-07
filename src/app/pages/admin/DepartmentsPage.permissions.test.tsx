@@ -41,6 +41,13 @@ vi.mock('@/lib/services/departments.service', () => ({
       manager_uid: 'manager-1',
       employee_count: 2,
     },
+    {
+      id: 'dept-2',
+      name_ar: 'قسم آخر',
+      name: 'Another Department',
+      manager_uid: 'manager-2',
+      employee_count: 1,
+    },
   ]),
   listAttachableDepartmentEmployees: vi.fn().mockResolvedValue([
     {
@@ -114,8 +121,8 @@ describe('DepartmentsPage role permissions', () => {
       </MemoryRouter>
     );
 
-    const expandButton = await screen.findByLabelText('توسيع القسم');
-    fireEvent.click(expandButton);
+    const expandButtons = await screen.findAllByLabelText('توسيع القسم');
+    fireEvent.click(expandButtons[0]);
     const attachButton = await screen.findByLabelText('اضافة موظف للقسمقسم الاختبار');
     fireEvent.click(attachButton);
 
@@ -144,7 +151,7 @@ describe('DepartmentsPage role permissions', () => {
     expect(screen.getByText('سيتم إنشاء القسم بدون مدير. بعد إضافة أعضاء للقسم يمكنك اختيار مدير من شاشة التعديل.')).toBeInTheDocument();
   });
 
-  it('manager is read-only: no create, no delete', async () => {
+  it('manager can manage members only for own department', async () => {
     mockUser = { uid: 'manager-1', role: 'manager', departmentId: 'dept-1' };
     render(
       <MemoryRouter>
@@ -156,6 +163,16 @@ describe('DepartmentsPage role permissions', () => {
       expect(screen.getByText('قسم الاختبار')).toBeInTheDocument();
       expect(screen.queryByText('قسم جديد')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('حذف القسم')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('تعديل القسم')).not.toBeInTheDocument();
+    });
+
+    const expandButtons = screen.getAllByLabelText('توسيع القسم');
+    fireEvent.click(expandButtons[0]);
+    fireEvent.click(expandButtons[1]);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('اضافة موظف للقسمقسم الاختبار')).toBeInTheDocument();
+      expect(screen.queryByLabelText('اضافة موظف للقسمقسم آخر')).not.toBeInTheDocument();
     });
   });
 
