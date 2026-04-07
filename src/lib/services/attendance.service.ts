@@ -58,6 +58,7 @@ export interface MonthDaySummary {
 
 export type TeamAttendanceDisplayStatus = AttendanceEffectiveStatus | 'overtime_offday' | null;
 export type AvailabilityState = 'available_now' | 'unavailable_now';
+export type AttendanceDayAvailabilityState = 'present_on_date' | 'not_present_on_date';
 
 export interface TeamAttendanceDayRow {
   userId: string;
@@ -92,9 +93,23 @@ export interface SafeAvailabilityRow {
   availabilityState: AvailabilityState;
 }
 
+export interface SafeAttendanceDayRow {
+  userId: string;
+  nameAr: string;
+  employeeId: string;
+  role: ProfileRole;
+  avatarUrl: string | null;
+  departmentId: string | null;
+  departmentNameAr: string | null;
+  date: string;
+  attendanceState: AttendanceDayAvailabilityState;
+}
+
 type TeamAttendanceDayRpcRow = Database['public']['Functions']['get_team_attendance_day']['Returns'][number];
 type RedactedAvailabilityRpcRow =
   Database['public']['Functions']['get_redacted_department_availability']['Returns'][number];
+type RedactedAttendanceDayRpcRow =
+  Database['public']['Functions']['get_redacted_team_attendance_day']['Returns'][number];
 
 function resolveCalendarStatus(
   dateStr: string,
@@ -1072,6 +1087,20 @@ function mapSafeAvailabilityRow(row: RedactedAvailabilityRpcRow): SafeAvailabili
   };
 }
 
+function mapSafeAttendanceDayRow(row: RedactedAttendanceDayRpcRow): SafeAttendanceDayRow {
+  return {
+    userId: row.user_id,
+    nameAr: row.name_ar,
+    employeeId: row.employee_id,
+    role: row.role as ProfileRole,
+    avatarUrl: row.avatar_url,
+    departmentId: row.department_id,
+    departmentNameAr: row.department_name_ar,
+    date: row.date,
+    attendanceState: row.attendance_state as AttendanceDayAvailabilityState,
+  };
+}
+
 export async function getTeamAttendanceDay(params: {
   date: string;
   departmentId?: string | null;
@@ -1094,6 +1123,19 @@ export async function getRedactedDepartmentAvailability(params: {
 
   if (error) throw error;
   return (data ?? []).map(mapSafeAvailabilityRow);
+}
+
+export async function getRedactedTeamAttendanceDay(params: {
+  date: string;
+  departmentId?: string | null;
+}): Promise<SafeAttendanceDayRow[]> {
+  const { data, error } = await supabase.rpc('get_redacted_team_attendance_day', {
+    p_date: params.date,
+    p_department_id: params.departmentId ?? null,
+  });
+
+  if (error) throw error;
+  return (data ?? []).map(mapSafeAttendanceDayRow);
 }
 
 export type AttendanceChangeEvent = {

@@ -1,23 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Drawer,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
 } from '@/app/components/ui/drawer';
-import { LogIn, LogOut, Clock } from 'lucide-react';
+import { Clock, LogIn, LogOut } from 'lucide-react';
 import type { DayRecord, PunchEntry } from '@/lib/services/attendance.service';
-import { getAttendanceDay } from '@/lib/services/attendance.service';
+import { getAttendanceDay, wallTimeToMinutes } from '@/lib/services/attendance.service';
 import { getStatusTheme } from './attendanceStatusTheme';
+
+export type DayDetailsSheetTone = 'green' | 'amber' | 'red' | 'blue' | 'gray';
+
+export interface DayDetailsSheetSummary {
+  employeeName: string;
+  departmentName: string | null;
+  statusLabel: string;
+  statusTone: DayDetailsSheetTone;
+}
 
 interface Props {
   userId: string;
   date: string | null;
+  summary?: DayDetailsSheetSummary | null;
   onClose: () => void;
 }
 
 function formatDateAr(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('ar-IQ', {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('ar-IQ', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -25,52 +35,144 @@ function formatDateAr(dateStr: string): string {
   });
 }
 
-function formatTime(t: string): string {
+function formatTime(t: string | null | undefined): string {
+  if (!t) return '—';
   return t.slice(0, 5);
 }
 
-function PunchRow({ punch, isLast, isAutoPunchOut }: { punch: PunchEntry; isLast: boolean; isAutoPunchOut?: boolean }) {
+function formatMinutes(minutes: number): string {
+  if (minutes <= 0) return '—';
+  return `${Math.floor(minutes / 60)}س ${minutes % 60}د`;
+}
+
+function toneClasses(tone: DayDetailsSheetTone): string {
+  const classMap: Record<DayDetailsSheetTone, string> = {
+    green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    amber: 'bg-amber-50 text-amber-700 border-amber-200',
+    red: 'bg-rose-50 text-rose-700 border-rose-200',
+    blue: 'bg-blue-50 text-blue-700 border-blue-200',
+    gray: 'bg-slate-100 text-slate-700 border-slate-200',
+  };
+  return classMap[tone];
+}
+
+function PunchRow({
+  punch,
+  isLast,
+  isAutoPunchOut,
+}: {
+  punch: PunchEntry;
+  isLast: boolean;
+  isAutoPunchOut?: boolean;
+}) {
   const isIn = punch.type === 'clock_in';
+
   return (
-    <div className="flex items-start gap-3 relative">
-      {!isLast && (
+    <div className="relative flex items-start gap-3">
+      {!isLast ? (
         <div className="absolute right-[19px] top-7 bottom-0 w-0.5 bg-gray-100" />
-      )}
-      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${
-        isIn ? 'bg-emerald-100' : 'bg-rose-100'
-      }`}>
-        {isIn
-          ? <LogIn className="w-4 h-4 text-emerald-600" />
-          : <LogOut className="w-4 h-4 text-rose-500" />
-        }
+      ) : null}
+      <div
+        className={`z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+          isIn ? 'bg-emerald-100' : 'bg-rose-100'
+        }`}
+      >
+        {isIn ? (
+          <LogIn className="h-4 w-4 text-emerald-600" />
+        ) : (
+          <LogOut className="h-4 w-4 text-rose-500" />
+        )}
       </div>
+
       <div className="flex-1 pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-800">
-              {formatTime(punch.timestamp)}
-            </span>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-sm font-medium text-gray-800">{formatTime(punch.timestamp)}</span>
             <span className="text-xs text-gray-500">
-              {isIn ? '← تسجيل حضور' : '→ تسجيل انصراف'}
+              {isIn ? 'تسجيل حضور' : 'تسجيل انصراف'}
             </span>
-            {!isIn && isAutoPunchOut && (
-              <span className="px-1.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isIn && isAutoPunchOut ? (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
                 انصراف تلقائي
               </span>
-            )}
+            ) : null}
+            {punch.isOvertime ? (
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">
+                إضافي
+              </span>
+            ) : null}
           </div>
-          {punch.isOvertime && (
-            <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-              عمل إضافي
-            </span>
-          )}
         </div>
       </div>
     </div>
   );
 }
 
-export function DayDetailsSheet({ userId, date, onClose }: Props) {
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
+      <p className="text-[11px] text-gray-500">{label}</p>
+      <p className="mt-1 text-sm font-medium text-gray-800">{value}</p>
+    </div>
+  );
+}
+
+function deriveStatusMeta(record: DayRecord | null, summary: DayDetailsSheetSummary | null) {
+  if (summary) return summary;
+
+  const displayStatus =
+    record?.summary?.effective_status ??
+    (((record?.summary?.session_count ?? 0) > 0 && !record?.summary?.effective_status)
+      ? 'overtime_offday'
+      : record?.log?.status);
+
+  if (
+    displayStatus &&
+    (displayStatus === 'present' ||
+      displayStatus === 'late' ||
+      displayStatus === 'absent' ||
+      displayStatus === 'on_leave' ||
+      displayStatus === 'overtime_only' ||
+      displayStatus === 'overtime_offday')
+  ) {
+    const theme = getStatusTheme(displayStatus);
+    return {
+      employeeName: 'تفاصيل اليوم',
+      departmentName: null,
+      statusLabel: theme.label,
+      statusTone:
+        displayStatus === 'present'
+          ? 'green'
+          : displayStatus === 'late'
+            ? 'amber'
+            : displayStatus === 'absent'
+              ? 'red'
+              : displayStatus === 'on_leave'
+                ? 'blue'
+                : 'gray',
+    } satisfies DayDetailsSheetSummary;
+  }
+
+  return null;
+}
+
+function calculateLateMinutes(record: DayRecord | null): number | null {
+  if (!record?.shift || record.summary?.effective_status !== 'late') return null;
+  const firstCheckIn = record.summary?.first_check_in ?? record.log?.check_in_time ?? null;
+  if (!firstCheckIn) return null;
+
+  const lateMinutes =
+    wallTimeToMinutes(firstCheckIn) -
+    wallTimeToMinutes(record.shift.workStartTime) -
+    record.shift.gracePeriodMinutes;
+
+  return lateMinutes > 0 ? lateMinutes : null;
+}
+
+export function DayDetailsSheet({ userId, date, summary = null, onClose }: Props) {
   const [record, setRecord] = useState<DayRecord | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -82,88 +184,102 @@ export function DayDetailsSheet({ userId, date, onClose }: Props) {
       .then(setRecord)
       .catch(() => setRecord(null))
       .finally(() => setLoading(false));
-  }, [userId, date]);
+  }, [date, userId]);
 
   const open = !!date;
-  const displayStatus = record?.summary?.effective_status
-    ?? (((record?.summary?.session_count ?? 0) > 0 && !record?.summary?.effective_status) ? 'overtime_offday' : record?.log?.status);
-  const displayStatusTheme = displayStatus
-    && (displayStatus === 'present' || displayStatus === 'late' || displayStatus === 'absent' || displayStatus === 'on_leave' || displayStatus === 'overtime_only' || displayStatus === 'overtime_offday')
-    ? getStatusTheme(displayStatus)
-    : null;
-
-  const sessionMap = new Map((record?.sessions ?? []).map((s) => [s.id, s]));
+  const statusMeta = useMemo(() => deriveStatusMeta(record, summary), [record, summary]);
+  const sessionMap = new Map((record?.sessions ?? []).map((session) => [session.id, session]));
+  const lateMinutes = useMemo(() => calculateLateMinutes(record), [record]);
+  const regularSessions = (record?.sessions ?? []).filter((session) => !session.is_overtime);
+  const overtimeSessions = (record?.sessions ?? []).filter((session) => session.is_overtime);
+  const regularMinutes = regularSessions.reduce((sum, session) => sum + (session.duration_minutes ?? 0), 0);
+  const overtimeMinutes = overtimeSessions.reduce((sum, session) => sum + (session.duration_minutes ?? 0), 0);
 
   return (
-    <Drawer open={open} onOpenChange={(o) => { if (!o) onClose(); }} direction="bottom">
-      <DrawerContent className="max-h-[85vh] overflow-y-auto">
+    <Drawer open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }} direction="bottom">
+      <DrawerContent className="max-h-[88vh] overflow-y-auto">
         <DrawerHeader className="pb-2">
-          <DrawerTitle className="text-base text-right">
-            {date ? formatDateAr(date) : ''}
-          </DrawerTitle>
+          <DrawerTitle className="text-right text-base">تفاصيل اليوم</DrawerTitle>
         </DrawerHeader>
 
         <div className="px-4 pb-8">
           {loading ? (
             <div className="space-y-3 animate-pulse">
-              <div className="h-5 bg-gray-100 rounded w-1/2" />
-              <div className="h-4 bg-gray-100 rounded w-1/3" />
-              <div className="h-12 bg-gray-100 rounded" />
-              <div className="h-12 bg-gray-100 rounded" />
+              <div className="h-5 w-1/2 rounded bg-gray-100" />
+              <div className="h-4 w-1/3 rounded bg-gray-100" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="h-16 rounded-2xl bg-gray-100" />
+                <div className="h-16 rounded-2xl bg-gray-100" />
+              </div>
             </div>
           ) : record ? (
             <>
-              {/* Shift */}
-              {record.shift && (
-                <p className="text-sm text-gray-500 mb-3">
-                  الدوام: {formatTime(record.shift.workStartTime)} — {formatTime(record.shift.workEndTime)}
-                </p>
-              )}
+              <div className="rounded-3xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold text-gray-900">
+                      {statusMeta?.employeeName ?? summary?.employeeName ?? 'تفاصيل اليوم'}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {summary?.departmentName ? `${summary.departmentName} • ` : ''}
+                      {date ? formatDateAr(date) : ''}
+                    </p>
+                  </div>
 
-              {/* Status + total hours */}
-              <div className="flex items-center gap-3 mb-4">
-                {displayStatus && (
-                  <span
-                    className="px-2.5 py-1 text-xs rounded-full border bg-gray-100 text-gray-600 border-gray-200"
-                    style={displayStatusTheme?.badgeSoftStyle}
-                  >
-                    {displayStatusTheme?.label ?? displayStatus}
-                  </span>
-                )}
-                {record.totalMinutesWorked > 0 && (
-                  <span className="text-sm text-gray-600">
-                    إجمالي العمل: <span className="font-semibold">{Math.floor(record.totalMinutesWorked / 60)}س {record.totalMinutesWorked % 60}د</span>
-                  </span>
-                )}
+                  {statusMeta ? (
+                    <span className={`rounded-full border px-2.5 py-1 text-[11px] ${toneClasses(statusMeta.statusTone)}`}>
+                      {statusMeta.statusLabel}
+                    </span>
+                  ) : null}
+                </div>
+
+                {record.shift ? (
+                  <p className="mt-3 text-xs text-gray-500">
+                    الدوام: {formatTime(record.shift.workStartTime)} - {formatTime(record.shift.workEndTime)}
+                  </p>
+                ) : null}
               </div>
 
-              {/* Punch log */}
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">سجل الحضور</h3>
-              {record.punches.length === 0 ? (
-                <div className="text-center py-6 text-gray-400">
-                  <Clock className="w-8 h-8 mx-auto mb-1.5 opacity-40" />
-                  <p className="text-sm">لا توجد بيانات لهذا اليوم</p>
-                </div>
-              ) : (
-                <div>
-                  {record.punches.map((punch, i) => {
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <MetricCard label="أول دخول" value={formatTime(record.summary?.first_check_in ?? record.log?.check_in_time)} />
+                <MetricCard label="آخر خروج" value={formatTime(record.summary?.last_check_out ?? record.log?.check_out_time)} />
+                <MetricCard label="إجمالي العمل" value={formatMinutes(record.totalMinutesWorked)} />
+                <MetricCard label="جلسات عادية" value={regularSessions.length > 0 ? `${regularSessions.length} • ${formatMinutes(regularMinutes)}` : '—'} />
+                <MetricCard label="جلسات إضافية" value={overtimeSessions.length > 0 ? `${overtimeSessions.length} • ${formatMinutes(overtimeMinutes)}` : '—'} />
+                <MetricCard label="التأخر" value={lateMinutes != null ? `${lateMinutes} د` : '—'} />
+              </div>
+
+              <div className="mt-5">
+                <h3 className="mb-3 text-sm font-semibold text-gray-700">سجل اليوم</h3>
+                {record.punches.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-gray-200 py-8 text-center text-gray-400">
+                    <Clock className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                    <p className="text-sm">لا توجد حركات حضور لهذا اليوم</p>
+                  </div>
+                ) : (
+                  <div className="rounded-3xl border border-gray-200 bg-white px-4 py-4">
+                    {record.punches.map((punch, index) => {
                       const sessionId = punch.id.replace(/-(in|out)$/, '');
                       const session = sessionMap.get(sessionId);
+
                       return (
-                    <PunchRow
-                      key={punch.id}
-                      punch={punch}
-                      isLast={i === record.punches.length - 1}
-                      isAutoPunchOut={punch.type === 'clock_out' ? session?.is_auto_punch_out : undefined}
-                    />
+                        <PunchRow
+                          key={punch.id}
+                          punch={punch}
+                          isLast={index === record.punches.length - 1}
+                          isAutoPunchOut={
+                            punch.type === 'clock_out' ? session?.is_auto_punch_out : undefined
+                          }
+                        />
                       );
                     })}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </>
           ) : (
-            <div className="text-center py-6 text-gray-400">
-              <p className="text-sm">تعذر تحميل البيانات</p>
+            <div className="py-6 text-center text-gray-400">
+              <p className="text-sm">تعذر تحميل بيانات هذا اليوم</p>
             </div>
           )}
         </div>

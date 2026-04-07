@@ -219,6 +219,41 @@ describe('attendance.service', () => {
     ]);
   });
 
+  it('getRedactedTeamAttendanceDay maps RPC rows', async () => {
+    vi.mocked(sb.rpc).mockResolvedValue({
+      data: [
+        {
+          user_id: 'u2',
+          name_ar: 'ليلى',
+          employee_id: 'EMP-4',
+          role: 'employee',
+          avatar_url: null,
+          department_id: 'd2',
+          department_name_ar: 'التقنية',
+          date: '2025-06-11',
+          attendance_state: 'present_on_date',
+        },
+      ],
+      error: null,
+    } as never);
+
+    const { getRedactedTeamAttendanceDay } = await import('./attendance.service');
+    const rows = await getRedactedTeamAttendanceDay({ date: '2025-06-11', departmentId: 'd2' });
+
+    expect(sb.rpc).toHaveBeenCalledWith('get_redacted_team_attendance_day', {
+      p_date: '2025-06-11',
+      p_department_id: 'd2',
+    });
+    expect(rows).toEqual([
+      expect.objectContaining({
+        userId: 'u2',
+        nameAr: 'ليلى',
+        departmentNameAr: 'التقنية',
+        attendanceState: 'present_on_date',
+      }),
+    ]);
+  });
+
   it('getTeamAttendanceDay maps RPC rows', async () => {
     vi.mocked(sb.rpc).mockResolvedValue({
       data: [

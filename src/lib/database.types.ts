@@ -931,6 +931,23 @@ export interface Database {
           availability_state: string;
         }[];
       };
+      get_redacted_team_attendance_day: {
+        Args: {
+          p_date: string;
+          p_department_id?: string | null;
+        };
+        Returns: {
+          user_id: string;
+          name_ar: string;
+          employee_id: string;
+          role: string;
+          avatar_url: string | null;
+          department_id: string | null;
+          department_name_ar: string | null;
+          date: string;
+          attendance_state: string;
+        }[];
+      };
       get_team_attendance_day: {
         Args: {
           p_date: string;
