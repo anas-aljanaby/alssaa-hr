@@ -151,10 +151,17 @@ export function DepartmentsPage() {
   if (!currentUser) return null;
 
   const isAdmin = currentUser.role === 'admin';
+  const isManager = currentUser.role === 'manager';
+  const isManagerDepartment = (deptId: string) => (
+    isManager && currentUser.departmentId === deptId
+  );
+  const canManageDepartmentMembers = (deptId: string) => (
+    isAdmin || isManagerDepartment(deptId)
+  );
   const canCreateDepartment = isAdmin;
   const canDeleteDepartment = isAdmin;
-  const canAttachUsers = isAdmin;
-  const canEditDepartments = isAdmin;
+  const canEditDepartmentDetails = isAdmin;
+  const pageTitle = isAdmin || isManager ? 'إدارة الأقسام' : 'صفحة الأقسام';
 
   const handleExpand = async (deptId: string) => {
     if (expandedDeptIds.has(deptId)) {
@@ -232,7 +239,7 @@ export function DepartmentsPage() {
   };
 
   const openEditModal = (dept: Department & { employee_count: number }) => {
-    if (!canEditDepartments) {
+    if (!canEditDepartmentDetails) {
       toast.error('ليس لديك صلاحية تعديل الأقسام');
       return;
     }
@@ -248,7 +255,7 @@ export function DepartmentsPage() {
   const handleEditDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDept) return;
-    if (!canEditDepartments) {
+    if (!canEditDepartmentDetails) {
       toast.error('ليس لديك صلاحية تعديل الأقسام');
       return;
     }
@@ -353,7 +360,7 @@ export function DepartmentsPage() {
   };
 
   const openAttachUserModal = async (dept: Department & { employee_count: number }) => {
-    if (!canAttachUsers || !canEditDepartments) {
+    if (!canManageDepartmentMembers(dept.id)) {
       toast.error('ليس لديك صلاحية تعديل الأقسام');
       return;
     }
@@ -374,7 +381,7 @@ export function DepartmentsPage() {
   const handleAttachUserToDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deptToAttachUser || !selectedAttachUserId) return;
-    if (!canAttachUsers || !canEditDepartments) {
+    if (!canManageDepartmentMembers(deptToAttachUser.id)) {
       toast.error('ليس لديك صلاحية تعديل الأقسام');
       return;
     }
@@ -412,7 +419,7 @@ export function DepartmentsPage() {
     dept: Department & { employee_count: number },
     employee: Profile
   ) => {
-    if (!canAttachUsers || !canEditDepartments) {
+    if (!canManageDepartmentMembers(dept.id)) {
       toast.error('ليس لديك صلاحية تعديل الأقسام');
       return;
     }
@@ -507,7 +514,7 @@ export function DepartmentsPage() {
 
   if (loading) {
     return (
-      <PageLayout title="الأقسام" backPath="/more">
+      <PageLayout title={pageTitle} backPath="/more">
       <div className="space-y-4">
         <div className="bg-gray-100 rounded-2xl h-16 animate-pulse" />
         {[...Array(4)].map((_, i) => (
@@ -519,7 +526,7 @@ export function DepartmentsPage() {
   }
 
   return (
-    <PageLayout title="الأقسام" backPath="/more">
+    <PageLayout title={pageTitle} backPath="/more">
     <div className="space-y-4">
       {canCreateDepartment && (
         <div className="flex items-center justify-end">
@@ -664,9 +671,9 @@ export function DepartmentsPage() {
                     </div>
                   </div>
                 </div>
-                {(canEditDepartments || canDeleteDepartment) && (
+                {(canEditDepartmentDetails || canDeleteDepartment) && (
                   <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {canEditDepartments && (
+                    {canEditDepartmentDetails && (
                       <button
                         type="button"
                         onClick={() => openEditModal(dept)}
@@ -694,7 +701,7 @@ export function DepartmentsPage() {
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-gray-400">أعضاء القسم</p>
-                    {canAttachUsers && canEditDepartments && (
+                    {canManageDepartmentMembers(dept.id) && (
                       <button
                         type="button"
                         onClick={() => openAttachUserModal(dept)}
@@ -746,7 +753,7 @@ export function DepartmentsPage() {
                             >
                               {emp.id === dept.manager_uid ? 'مدير القسم' : 'موظف'}
                             </span>
-                            {canAttachUsers && canEditDepartments && (
+                            {canManageDepartmentMembers(dept.id) && (
                               <button
                                 type="button"
                                 onClick={(e) => {
