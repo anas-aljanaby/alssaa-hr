@@ -149,7 +149,7 @@ export function MorePage() {
             items: [
               {
                 icon: Building2,
-                label: 'departments',
+                label: 'الأقسام',
                 color: 'text-amber-600',
                 bgColor: 'bg-amber-50',
                 onClick: () => navigate('/departments'),
