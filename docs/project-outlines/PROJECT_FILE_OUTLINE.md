@@ -75,7 +75,7 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 
 | File | Description |
 |------|-------------|
-| `useQuickPunch.ts` | Hook for quick punch-in/out UX |
+| `useTodayPunch.ts` | Hook for today punch-in/out UX |
 
 ### `src/app/data/`
 
@@ -109,7 +109,6 @@ One line per file (filename + short purpose). Excludes `docs/`, `node_modules/`,
 
 | File | Description |
 |------|-------------|
-| `QuickPunchCard.tsx` | Primary punch in/out card |
 | `TodayStatusCard.tsx` | Today’s attendance status summary |
 | `TodayPunchLog.tsx` | Today’s punch timeline |
 | `DayDetailsSheet.tsx` | Sheet/drawer for one day’s detail |

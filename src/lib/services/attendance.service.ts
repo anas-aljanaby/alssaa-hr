@@ -192,7 +192,7 @@ export function getActiveCheckInWallTime(today: TodayRecord): string | null {
   return null;
 }
 
-/** Shared punch CTAs / badges for today card and quick punch (same inputs → same behavior). */
+/** Shared punch CTAs / badges for today status UIs (same inputs → same behavior). */
 export interface TodayPunchUiState {
   isCheckedIn: boolean;
   activeCheckInWallTime: string | null;
