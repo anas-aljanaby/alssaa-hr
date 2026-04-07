@@ -68,17 +68,6 @@ export function MorePage() {
               } as const,
             ]
           : []),
-        ...(currentUser.role === 'employee'
-          ? [
-              {
-                icon: Building2,
-                label: 'departments',
-                color: 'text-amber-600',
-                bgColor: 'bg-amber-50',
-                onClick: () => navigate('/departments'),
-              } as const,
-            ]
-          : []),
       ],
     },
     {
@@ -145,6 +134,22 @@ export function MorePage() {
               {
                 icon: Building2,
                 label: 'إدارة الأقسام',
+                color: 'text-amber-600',
+                bgColor: 'bg-amber-50',
+                onClick: () => navigate('/departments'),
+              },
+            ],
+          } as const,
+        ]
+      : []),
+    ...(currentUser.role === 'employee'
+      ? [
+          {
+            title: 'الأقسام',
+            items: [
+              {
+                icon: Building2,
+                label: 'departments',
                 color: 'text-amber-600',
                 bgColor: 'bg-amber-50',
                 onClick: () => navigate('/departments'),
