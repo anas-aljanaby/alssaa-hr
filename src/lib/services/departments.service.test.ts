@@ -8,6 +8,7 @@ const dept = {
   org_id: 'o1',
   name: 'Tech',
   name_ar: 'تقنية',
+  color: '#2563EB',
   manager_uid: null as string | null,
   created_at: '2025-01-01T00:00:00Z',
 };
@@ -39,6 +40,7 @@ describe('departments.service', () => {
   });
 
   it('createDepartment inserts', async () => {
+    sb.queueResult({ data: [dept], error: null });
     sb.queueResult({ data: dept, error: null });
     const { createDepartment } = await import('./departments.service');
     const row = await createDepartment({

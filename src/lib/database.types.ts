@@ -115,6 +115,7 @@ export interface Database {
           org_id: string;
           name: string | null;
           name_ar: string;
+          color: string;
           manager_uid: string | null;
           created_at: string;
         };
@@ -123,6 +124,7 @@ export interface Database {
           org_id?: string;
           name?: string | null;
           name_ar: string;
+          color?: string;
           manager_uid?: string | null;
           created_at?: string;
         };
@@ -131,6 +133,7 @@ export interface Database {
           org_id?: string;
           name?: string | null;
           name_ar?: string;
+          color?: string;
           manager_uid?: string | null;
           created_at?: string;
         };

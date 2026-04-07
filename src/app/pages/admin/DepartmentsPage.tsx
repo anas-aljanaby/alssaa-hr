@@ -8,6 +8,7 @@ import type { Department } from '@/lib/services/departments.service';
 import type { Profile } from '@/lib/services/profiles.service';
 import { createDepartmentSchema, updateDepartmentSchema } from '@/lib/validations';
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
+import { getDepartmentColorTokens } from '@/lib/departmentColors';
 import { displayProfileEmail } from '@/lib/profileDisplay';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
@@ -489,22 +490,6 @@ export function DepartmentsPage() {
     }
   }, [showForm, editingDept]);
 
-  const deptColors = [
-    'bg-blue-50 border-blue-200',
-    'bg-emerald-50 border-emerald-200',
-    'bg-purple-50 border-purple-200',
-    'bg-amber-50 border-amber-200',
-    'bg-rose-50 border-rose-200',
-  ];
-
-  const iconColors = [
-    'bg-blue-100 text-blue-600',
-    'bg-emerald-100 text-emerald-600',
-    'bg-purple-100 text-purple-600',
-    'bg-amber-100 text-amber-600',
-    'bg-rose-100 text-rose-600',
-  ];
-
   if (loading) {
     return (
       <PageLayout title="الأقسام" backPath="/more">
@@ -595,12 +580,12 @@ export function DepartmentsPage() {
           </div>
         ) : (
         <>
-        {paginatedDepartments.map((dept, idx) => {
+        {paginatedDepartments.map((dept) => {
           const manager = profilesMap.get(dept.manager_uid ?? '');
           const isExpanded = expandedDeptIds.has(dept.id);
-          const colorIdx = idx % deptColors.length;
           const expandLoading = !!expandLoadingById[dept.id];
           const deptEmployees = deptEmployeesById[dept.id] ?? [];
+          const colorTokens = getDepartmentColorTokens(dept.color);
 
           return (
             <div
@@ -628,7 +613,8 @@ export function DepartmentsPage() {
                     )}
                   </button>
                   <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${iconColors[colorIdx]}`}
+                    className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                    style={colorTokens.iconStyle}
                   >
                     <Building2 className="w-5 h-5" />
                   </div>
@@ -719,7 +705,8 @@ export function DepartmentsPage() {
                       {deptEmployees.map((emp) => (
                         <div
                           key={emp.id}
-                          className={`flex items-center justify-between p-2.5 rounded-xl transition-colors hover:opacity-90 ${deptColors[colorIdx]}`}
+                          className="flex items-center justify-between rounded-xl border p-2.5 transition-colors hover:opacity-90"
+                          style={colorTokens.rowStyle}
                         >
                           <Link
                             to={`/user-details/${emp.id}`}
@@ -727,7 +714,8 @@ export function DepartmentsPage() {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <div
-                              className={`w-8 h-8 rounded-full flex items-center justify-center ${iconColors[colorIdx]}`}
+                              className="w-8 h-8 rounded-full flex items-center justify-center"
+                              style={colorTokens.iconStyle}
                             >
                               <span className="text-xs">{emp.name_ar.charAt(0)}</span>
                             </div>

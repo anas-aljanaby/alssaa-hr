@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import * as profilesService from './profiles.service';
 import type { Tables, InsertTables, UpdateTables } from '../database.types';
 import type { Profile } from './profiles.service';
+import { getNextDepartmentColor } from '../departmentColors';
 
 export type Department = Tables<'departments'>;
 export type DepartmentInsert = InsertTables<'departments'>;
@@ -99,9 +100,16 @@ export async function detachDepartmentMember(
 }
 
 export async function createDepartment(dept: DepartmentInsert): Promise<Department> {
+  const payload = { ...dept };
+
+  if (!payload.color) {
+    const departments = await listDepartments();
+    payload.color = getNextDepartmentColor(departments.map((department) => department.color));
+  }
+
   const { data, error } = await supabase
     .from('departments')
-    .insert(dept)
+    .insert(payload)
     .select()
     .single();
 

@@ -8,6 +8,7 @@ import {
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { cn } from '@/app/components/ui/utils';
+import { getDepartmentColorTokens } from '@/lib/departmentColors';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Department } from '@/lib/services/departments.service';
@@ -85,6 +86,7 @@ interface BoardSection {
   presentRows: AttendanceBoardRow[];
   notPresentRows: AttendanceBoardRow[];
   defaultExpanded: boolean;
+  color: string | null;
 }
 
 interface StatusChipOption {
@@ -592,6 +594,10 @@ function buildSections(params: {
           params.selectedDepartmentId != null ||
           params.mode === 'date' ||
           allRows.some((row) => row.group === 'present'),
+        color:
+          key === NO_DEPARTMENT_KEY
+            ? null
+            : params.departments.find((department) => department.id === key)?.color ?? null,
       } satisfies BoardSection;
     })
     .filter((section): section is BoardSection => section != null);
@@ -670,7 +676,7 @@ function StatusCountChips({
               className={cn(
                 'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap transition-colors',
                 active
-                  ? 'border-slate-900 bg-slate-900 text-white'
+                  ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
                   : cn('bg-white text-gray-700', toneClasses(option.tone))
               )}
             >
@@ -752,6 +758,7 @@ function DepartmentAttendanceSection({
   onToggle: () => void;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
+  const colorTokens = getDepartmentColorTokens(section.color);
   const presentHeading =
     boardMode === 'live'
       ? 'موجودون الآن'
@@ -770,19 +777,25 @@ function DepartmentAttendanceSection({
       <button
         type="button"
         onClick={onToggle}
-        className="sticky top-[7.2rem] z-10 flex w-full items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-4 py-3 text-right backdrop-blur supports-[backdrop-filter]:bg-white/80"
+        className="flex w-full items-center justify-between gap-3 border-b px-4 py-3 text-right"
+        style={colorTokens.headerStyle}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-gray-900">{section.name}</p>
           <p className="mt-0.5 truncate text-[11px] text-gray-500">{section.summaryText}</p>
         </div>
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: colorTokens.value }}
+          aria-hidden="true"
+        />
         <ChevronDown
           className={cn('h-4 w-4 shrink-0 text-gray-400 transition-transform', expanded ? 'rotate-180' : '')}
         />
       </button>
 
       {expanded ? (
-        <div className="px-4 py-2">
+        <div className="px-4 py-2" style={colorTokens.sectionAccentStyle}>
           {section.presentRows.length > 0 ? (
             <div className="pb-1">
               <p className="pb-2 pt-1 text-[11px] font-medium text-gray-500">{presentHeading}</p>
@@ -1107,7 +1120,7 @@ export function TeamAttendancePage() {
               onClick={() => setMode('live')}
               className={cn(
                 'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
-                mode === 'live' ? 'bg-slate-900 text-white' : 'text-gray-600'
+                mode === 'live' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-blue-50'
               )}
             >
               الآن
@@ -1117,7 +1130,7 @@ export function TeamAttendancePage() {
               onClick={() => setMode('date')}
               className={cn(
                 'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
-                mode === 'date' ? 'bg-slate-900 text-white' : 'text-gray-600'
+                mode === 'date' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-blue-50'
               )}
             >
               اليوم/التاريخ
@@ -1150,8 +1163,8 @@ export function TeamAttendancePage() {
                     className={cn(
                       'rounded-full border px-3 py-2 text-xs transition-colors',
                       selectedDate === todayDate
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-gray-200 bg-gray-50 text-gray-700'
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-blue-100 bg-blue-50 text-blue-700'
                     )}
                   >
                     اليوم
@@ -1162,8 +1175,8 @@ export function TeamAttendancePage() {
                     className={cn(
                       'rounded-full border px-3 py-2 text-xs transition-colors',
                       selectedDate === yesterdayDate
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-gray-200 bg-gray-50 text-gray-700'
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-blue-100 bg-blue-50 text-blue-700'
                     )}
                   >
                     أمس
@@ -1258,13 +1271,14 @@ export function TeamAttendancePage() {
                 boardMode={mode}
                 isTodayInDateMode={isTodayInDateMode}
                 expanded={isExpanded}
-                onToggle={() =>
+                onToggle={
                   forceExpanded
-                    ? undefined
-                    : setExpandedSections((current) => ({
-                        ...current,
-                        [section.id]: !isExpanded,
-                      }))
+                    ? () => {}
+                    : () =>
+                        setExpandedSections((current) => ({
+                          ...current,
+                          [section.id]: !isExpanded,
+                        }))
                 }
                 onOpenDetails={setSelectedDetailRow}
               />
