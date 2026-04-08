@@ -34,8 +34,9 @@ export function useAppTopBarState() {
 }
 
 export function useAppTopBar(config: AppTopBarConfig | null) {
-  const context = useContext(AppTopBarContext);
+  const setTopBar = useContext(AppTopBarContext)?.setTopBar;
   const ownerRef = useRef<symbol | null>(null);
+  const hasConfig = config != null;
   const title = config?.title;
   const meta = config?.meta;
   const backPath = config?.backPath;
@@ -46,16 +47,17 @@ export function useAppTopBar(config: AppTopBarConfig | null) {
   }
 
   useEffect(() => {
-    if (!context) return;
+    if (!setTopBar) return;
 
-    const { setTopBar } = context;
     const owner = ownerRef.current!;
 
-    if (config == null) {
+    if (!hasConfig) {
       setTopBar((current) => (current?.owner === owner ? null : current));
       return;
     }
 
+    // Depend on the stable setter, not the whole context value, to avoid
+    // effect cleanup/re-run loops whenever topBar state changes.
     setTopBar((current) => {
       if (
         current?.owner === owner &&
@@ -79,5 +81,5 @@ export function useAppTopBar(config: AppTopBarConfig | null) {
     return () => {
       setTopBar((current) => (current?.owner === owner ? null : current));
     };
-  }, [action, backPath, context, meta, title]);
+  }, [action, backPath, hasConfig, meta, setTopBar, title]);
 }

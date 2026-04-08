@@ -1,0 +1,25 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e7]
+      - heading "شبكة الساعة" [level=1] [ref=e11]
+      - paragraph [ref=e12]: نظام إدارة الحضور والإجازات
+    - generic [ref=e13]:
+      - heading "تسجيل الدخول" [level=2] [ref=e14]
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]: البريد الإلكتروني
+          - textbox "example@alssaa.tv" [ref=e18]
+        - generic [ref=e19]:
+          - generic [ref=e20]: كلمة المرور
+          - generic [ref=e21]:
+            - textbox "••••••••" [ref=e22]
+            - button "إظهار كلمة المرور" [ref=e23]:
+              - img [ref=e24]
+        - generic [ref=e27]:
+          - checkbox "تذكرني على هذا الجهاز" [checked] [ref=e28]
+          - text: تذكرني على هذا الجهاز
+        - button "تسجيل الدخول" [ref=e29]
+        - paragraph [ref=e30]: الحسابات تُنشأ من قبل الإدارة. إن لم يكن لديك بيانات الدخول، راجع مديرك المباشر.
+    - paragraph [ref=e31]: © 2026 شبكة الساعة - جميع الحقوق محفوظة
+  - region "Notifications alt+T"

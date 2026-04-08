@@ -1,0 +1,24 @@
+- generic [ref=e2]:
+  - generic [ref=e32]:
+    - generic [ref=e34]:
+      - heading "الرئيسية" [level=1] [ref=e37]
+      - button "الإشعارات" [ref=e39]:
+        - img [ref=e40]
+    - navigation [ref=e60]:
+      - generic [ref=e61]:
+        - button "الرئيسية" [ref=e62]:
+          - img [ref=e64]
+          - generic [ref=e67]: الرئيسية
+        - button "الحضور" [ref=e69]:
+          - img [ref=e71]
+          - generic [ref=e74]: الحضور
+        - button "الموافقات" [ref=e75]:
+          - img [ref=e77]
+          - generic [ref=e80]: الموافقات
+        - button "حضور الفريق" [ref=e81]:
+          - img [ref=e83]
+          - generic [ref=e87]: حضور الفريق
+        - button "المزيد" [ref=e88]:
+          - img [ref=e90]
+          - generic [ref=e94]: المزيد
+  - region "Notifications alt+T"
