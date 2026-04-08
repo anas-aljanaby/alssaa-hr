@@ -18,6 +18,9 @@ import {
   UsersRound,
 } from 'lucide-react';
 
+const MOBILE_TOP_BAR_OFFSET = 'calc(env(safe-area-inset-top, 0px) + 3.5rem)';
+const MOBILE_SAFE_AREA_TOP = 'env(safe-area-inset-top, 0px)';
+
 export function MobileLayout() {
   return (
     <AppTopBarProvider>
@@ -228,8 +231,15 @@ function MobileLayoutContent() {
   };
 
   return (
-    <div dir="rtl" className="min-h-screen bg-background flex flex-col">
-      <div className="fixed inset-x-0 top-0 z-[1000] bg-white shadow-[0_1px_8px_rgba(15,23,42,0.08)]">
+    <div
+      dir="rtl"
+      className="min-h-screen bg-background flex flex-col"
+      style={{ '--mobile-top-bar-offset': MOBILE_TOP_BAR_OFFSET } as React.CSSProperties}
+    >
+      <div
+        className="fixed inset-x-0 top-0 z-[1000] bg-white shadow-[0_1px_8px_rgba(15,23,42,0.08)]"
+        style={{ paddingTop: MOBILE_SAFE_AREA_TOP }}
+      >
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between gap-3 px-4">
           <div className="flex min-w-0 items-center gap-2">
             {resolvedTopBar.backPath ? (
@@ -277,7 +287,7 @@ function MobileLayoutContent() {
         <NotificationsDropdown userId={currentUser.uid} onClose={() => setNotificationsOpen(false)} />
       )}
 
-      <div className="flex-1 pb-20 pt-14">
+      <div className="flex-1 pb-20" style={{ paddingTop: 'var(--mobile-top-bar-offset, 3.5rem)' }}>
         <div className="sticky top-0 z-30 px-4 pt-2 space-y-2">
           {isOffline && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">

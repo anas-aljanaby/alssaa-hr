@@ -334,6 +334,14 @@ describe('TeamAttendancePage', () => {
       });
     });
 
+    const stickyFilters = screen.getByTestId('team-attendance-sticky-filters');
+    const datePicker = screen.getByTestId('team-attendance-date-picker');
+    const departmentSelect = screen.getByRole('combobox');
+
+    expect(stickyFilters).toHaveClass('sticky');
+    expect(stickyFilters).toHaveStyle({ top: 'var(--mobile-top-bar-offset, 3.5rem)' });
+    expect(stickyFilters).not.toContainElement(datePicker);
+    expect(stickyFilters).not.toContainElement(departmentSelect);
     expect(screen.getByDisplayValue('2026-04-06')).toBeInTheDocument();
     expect(screen.getAllByText(/غير حاضر/).length).toBeGreaterThan(0);
   });

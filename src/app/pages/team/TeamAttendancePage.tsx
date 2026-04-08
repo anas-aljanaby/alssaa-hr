@@ -31,6 +31,7 @@ import {
 const ALL_DEPARTMENTS = '__all_departments__';
 const NO_DEPARTMENT_KEY = '__no_department__';
 const LIVE_REFRESH_INTERVAL_MS = 45_000;
+const MOBILE_TOP_BAR_OFFSET = 'var(--mobile-top-bar-offset, 3.5rem)';
 
 type TeamAttendanceMode = 'live' | 'date';
 type BoardTone = 'green' | 'amber' | 'red' | 'blue' | 'gray';
@@ -1105,10 +1106,42 @@ export function TeamAttendancePage() {
   if (!currentUser) return null;
 
   return (
-    <div className="mx-auto max-w-xl bg-gray-50 px-4 pb-24 pt-2">
-      <div className="sticky top-0 z-20 -mx-4 mb-2 border-b border-gray-200 bg-gray-50/95 px-4 pb-2 backdrop-blur supports-[backdrop-filter]:bg-gray-50/85">
+    <div className="mx-auto max-w-xl bg-gray-50 px-4 pb-24">
+      <div
+        data-testid="team-attendance-sticky-filters"
+        className="sticky z-20 -mx-4 border-b border-gray-200 bg-gray-50 px-4 pb-2 pt-2"
+        style={{ top: MOBILE_TOP_BAR_OFFSET }}
+      >
         <div className="rounded-3xl border border-gray-200 bg-white p-2 shadow-sm">
-          <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_auto] items-center gap-2">
+          <StatusCountChips
+            options={chipOptions}
+            activeFilter={statusFilter}
+            onChange={setStatusFilter}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3 pt-3">
+        <div className="rounded-3xl border border-gray-200 bg-white p-2 shadow-sm">
+          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] items-center gap-2">
+            <div className="min-w-0">
+              <div className="relative min-w-0">
+                <Building2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <select
+                  value={selectedDepartmentId}
+                  onChange={(event) => setSelectedDepartmentId(event.target.value)}
+                  className="h-10 w-full rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
+                >
+                  <option value={ALL_DEPARTMENTS}>كل الأقسام</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name_ar}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="grid min-w-0 grid-cols-2 rounded-2xl bg-slate-50 p-1 ring-1 ring-gray-200">
               <button
                 type="button"
@@ -1132,24 +1165,6 @@ export function TeamAttendancePage() {
               </button>
             </div>
 
-            <div className="min-w-0">
-              <div className="relative min-w-0">
-                <Building2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <select
-                  value={selectedDepartmentId}
-                  onChange={(event) => setSelectedDepartmentId(event.target.value)}
-                  className="h-10 w-full rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
-                >
-                  <option value={ALL_DEPARTMENTS}>كل الأقسام</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name_ar}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             <Button
               type="button"
               variant="outline"
@@ -1161,9 +1176,14 @@ export function TeamAttendancePage() {
               <RefreshCcw className={cn('h-4 w-4', refreshing ? 'animate-spin' : '')} />
             </Button>
           </div>
+        </div>
 
-          {mode === 'date' ? (
-            <div className="mt-2 flex items-center gap-2">
+        {mode === 'date' ? (
+          <div
+            data-testid="team-attendance-date-picker"
+            className="rounded-3xl border border-gray-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+          >
+            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
               <button
                 type="button"
                 onClick={() => setSelectedDate(todayDate)}
@@ -1188,7 +1208,7 @@ export function TeamAttendancePage() {
               >
                 أمس
               </button>
-              <div className="relative min-w-0 flex-1">
+              <div className="relative basis-full min-w-0 sm:flex-1">
                 <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type="date"
@@ -1196,23 +1216,13 @@ export function TeamAttendancePage() {
                   max={todayDate}
                   onChange={(event) => setSelectedDate(event.target.value)}
                   dir="ltr"
-                  className="h-10 w-full rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
+                  className="block h-10 w-full min-w-0 rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
                 />
               </div>
             </div>
-          ) : null}
-
-          <div className="mt-2">
-            <StatusCountChips
-              options={chipOptions}
-              activeFilter={statusFilter}
-              onChange={setStatusFilter}
-            />
           </div>
-        </div>
-      </div>
+        ) : null}
 
-      <div className="space-y-3">
         {loading ? <ContentSkeleton /> : null}
 
         {!loading && errorMessage ? (
