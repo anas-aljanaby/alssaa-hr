@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addUserSchema, updateProfileSchema, type AddUserFormData, type UpdateProfileFormData } from '@/lib/validations';
 import { toast } from 'sonner';
+import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as policyService from '@/lib/services/policy.service';
@@ -151,6 +152,29 @@ export function UsersPage() {
     return value && value.length > 0 ? value : '—';
   };
 
+  const topBarAction = useMemo(
+    () => (
+      <button
+        type="button"
+        onClick={() => {
+          setShowForm(true);
+          setShowAddUserPassword(false);
+        }}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700"
+        aria-label="إضافة مستخدم"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    ),
+    []
+  );
+
+  useAppTopBar({
+    title: 'إدارة المستخدمين',
+    meta: `${filteredUsers.length} مستخدم`,
+    action: topBarAction,
+  });
+
   if (loading) {
     return <UsersPageSkeleton />;
   }
@@ -236,21 +260,7 @@ export function UsersPage() {
   };
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-gray-800">إدارة المستخدمين</h1>
-        <button
-          onClick={() => {
-            setShowForm(true);
-            setShowAddUserPassword(false);
-          }}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          إضافة
-        </button>
-      </div>
-
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
       <div className="relative">
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
         <input

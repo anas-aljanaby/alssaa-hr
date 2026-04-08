@@ -287,7 +287,7 @@ export function ManagerDashboard() {
     }`;
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
       <DashboardHeader
         gradientClassName="bg-gradient-to-l from-emerald-600 to-emerald-700"
         title={currentUser.nameAr}
@@ -331,7 +331,7 @@ export function ManagerDashboard() {
       {activeTab === 'overview' && (
         <>
           <div>
-            <h3 className="mb-3 text-gray-800">ملخص اليوم</h3>
+            <h3 className="mb-2 text-gray-800">ملخص اليوم</h3>
             <div className="grid grid-cols-2 gap-3">
               <StatCard
                 icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}

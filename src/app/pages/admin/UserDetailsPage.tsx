@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
@@ -334,68 +335,6 @@ export function UserDetailsPage() {
     }
   }
 
-  if (!currentUser || !userId) {
-    return (
-      <div className="p-4 max-w-lg mx-auto">
-        <div className="bg-red-50 rounded-xl p-6 text-center border border-red-100">
-          <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-          <p className="text-red-800">خطأ في تحميل البيانات</p>
-          <button
-            onClick={handleBack}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700"
-          >
-            العودة
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!canAccess) {
-    return (
-      <div className="p-4 max-w-lg mx-auto">
-        <div className="bg-amber-50 rounded-xl p-6 text-center border border-amber-100">
-          <Shield className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-          <h2 className="text-gray-800 mb-2">غير مصرح</h2>
-          <p className="text-amber-800 text-sm mb-4">ليس لديك صلاحية لعرض تفاصيل هذا الموظف</p>
-          <button
-            onClick={handleBack}
-            className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700"
-          >
-            العودة
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="p-4 max-w-lg mx-auto space-y-4">
-        <div className="bg-gray-100 rounded-2xl h-48 animate-pulse" />
-        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
-        <div className="bg-gray-100 rounded-2xl h-40 animate-pulse" />
-        <div className="bg-gray-100 rounded-2xl h-32 animate-pulse" />
-      </div>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <div className="p-4 max-w-lg mx-auto">
-        <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
-          <p className="text-gray-600">الموظف غير موجود</p>
-          <button
-            onClick={handleBack}
-            className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700"
-          >
-            العودة
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const roleLabel = (role: string) => {
     switch (role) {
       case 'admin': return 'مدير عام';
@@ -479,9 +418,14 @@ export function UserDetailsPage() {
     }
   };
 
-  const canDeleteUser = currentUser.role === 'admin' && currentUser.uid !== profile.id && profile.role !== 'admin';
+  const canDeleteUser =
+    currentUser?.role === 'admin' &&
+    !!profile &&
+    currentUser.uid !== profile.id &&
+    profile.role !== 'admin';
 
   const handleDeleteUser = async () => {
+    if (!profile) return;
     setDeletingUser(true);
     try {
       await profilesService.deleteUser({ user_id: profile.id });
@@ -500,7 +444,7 @@ export function UserDetailsPage() {
   };
 
   const handleExportAttendance = () => {
-    if (filteredSummaries.length === 0) return;
+    if (filteredSummaries.length === 0 || !profile) return;
     const rows = filteredSummaries.map((d) => ({
       'التاريخ': d.date,
       'الحالة': getAttendanceStatusAr(d.status as 'present' | 'late' | 'absent' | 'on_leave'),
@@ -512,64 +456,133 @@ export function UserDetailsPage() {
     const name = `حضور_${profile.name_ar}_${dateFrom}_إلى_${dateTo}.xlsx`;
     XLSX.writeFile(wb, name);
   };
+  const canDeleteTopBarUser =
+    currentUser?.role === 'admin' &&
+    !!profile &&
+    currentUser.uid !== profile.id &&
+    profile.role !== 'admin';
+  const topBarAction = useMemo(
+    () =>
+      currentUser?.role === 'admin' ? (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setShowAuditLog(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
+            aria-label="سجل النشاط"
+          >
+            <History className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={openEditModal}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
+            aria-label="تعديل الملف الشخصي"
+          >
+            <Edit2 className="h-4 w-4" />
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
+                aria-label="خيارات إضافية"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={!canDeleteTopBarUser || deletingUser}
+                variant="destructive"
+                onSelect={() => setShowDeleteConfirm(true)}
+                className="cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                حذف المستخدم
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : null,
+    [canDeleteTopBarUser, currentUser?.role, deletingUser, openEditModal]
+  );
 
-  return (
-    <div className="p-4 max-w-lg mx-auto space-y-4 pb-20">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+  useAppTopBar(
+    currentUser
+      ? {
+          title: currentUser.uid === userId ? 'الملف الشخصي' : 'تفاصيل الموظف',
+          meta: profile?.name_ar,
+          backPath,
+          action: topBarAction,
+        }
+      : null
+  );
+
+  if (!currentUser || !userId) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <div className="bg-red-50 rounded-xl p-6 text-center border border-red-100">
+          <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-red-800">خطأ في تحميل البيانات</p>
           <button
             onClick={handleBack}
-            className="flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50"
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700"
           >
-            <span className="sr-only">رجوع</span>
-            <span aria-hidden="true" className="text-lg leading-none">
-              ‹
-            </span>
+            العودة
           </button>
-          <h1 className="text-gray-800">تفاصيل الموظف</h1>
         </div>
-        {currentUser.role === 'admin' && (
-          <div className="flex gap-1">
-            <button
-              onClick={() => setShowAuditLog(true)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <History className="w-5 h-5 text-gray-600" />
-            </button>
-            <button
-              type="button"
-              onClick={openEditModal}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="تعديل الملف الشخصي"
-            >
-              <Edit2 className="w-5 h-5 text-gray-600" />
-            </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="خيارات إضافية"
-                >
-                  <MoreVertical className="w-5 h-5 text-gray-600" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={!canDeleteUser || deletingUser}
-                  variant="destructive"
-                  onSelect={() => setShowDeleteConfirm(true)}
-                  className="cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  حذف المستخدم
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
       </div>
+    );
+  }
 
+  if (!canAccess) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <div className="bg-amber-50 rounded-xl p-6 text-center border border-amber-100">
+          <Shield className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+          <h2 className="text-gray-800 mb-2">غير مصرح</h2>
+          <p className="text-amber-800 text-sm mb-4">ليس لديك صلاحية لعرض تفاصيل هذا الموظف</p>
+          <button
+            onClick={handleBack}
+            className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700"
+          >
+            العودة
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 max-w-lg mx-auto space-y-4">
+        <div className="bg-gray-100 rounded-2xl h-48 animate-pulse" />
+        <div className="bg-gray-100 rounded-xl h-12 animate-pulse" />
+        <div className="bg-gray-100 rounded-2xl h-40 animate-pulse" />
+        <div className="bg-gray-100 rounded-2xl h-32 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="p-4 max-w-lg mx-auto">
+        <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
+          <p className="text-gray-600">الموظف غير موجود</p>
+          <button
+            onClick={handleBack}
+            className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700"
+          >
+            العودة
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-20 pt-3">
       {/* Profile Header */}
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-start gap-4">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router';
+import { useAppTopBar } from '../../contexts/AppTopBarContext';
 
 interface PageLayoutProps {
   title?: string;
@@ -16,41 +16,19 @@ interface PageLayoutProps {
 }
 
 export function PageLayout({ title, action, backPath, children }: PageLayoutProps) {
-  const navigate = useNavigate();
-
-  const handleBack = () => {
-    if (!backPath) return;
-    if (backPath === 'back') {
-      navigate(-1);
-    } else {
-      navigate(backPath);
-    }
-  };
+  useAppTopBar(
+    title || action || backPath
+      ? {
+          title,
+          action,
+          backPath,
+        }
+      : null
+  );
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      {title && (
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            {backPath && (
-              <button
-                type="button"
-                onClick={handleBack}
-                className="flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50"
-              >
-                <span className="sr-only">رجوع</span>
-                <span aria-hidden="true" className="text-lg leading-none">
-                  ‹
-                </span>
-              </button>
-            )}
-            <h1 className="text-gray-800 font-semibold text-lg">{title}</h1>
-          </div>
-          {action && <div className="ml-2">{action}</div>}
-        </div>
-      )}
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
       {children}
     </div>
   );
 }
-

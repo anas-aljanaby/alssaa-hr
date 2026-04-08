@@ -58,7 +58,6 @@ export const router = createBrowserRouter([
         element: <Lazy><SetPasswordPage /></Lazy>,
       },
       {
-        path: '*',
         element: <MobileLayout />,
         children: [
           { index: true, element: <Lazy><DashboardRouter /></Lazy> },
@@ -77,8 +76,11 @@ export const router = createBrowserRouter([
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
           { path: 'transfer-general-manager', element: <Lazy><RequireAdmin><TransferGeneralManagerPage /></RequireAdmin></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
-          { path: '*', element: <Navigate to="/" replace /> },
         ],
+      },
+      {
+        path: '*',
+        element: <Navigate to="/" replace />,
       },
     ],
   },

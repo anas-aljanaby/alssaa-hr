@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as profilesService from '@/lib/services/profiles.service';
@@ -9,8 +9,9 @@ import type { Profile } from '@/lib/services/profiles.service';
 import { updateDepartmentSchema } from '@/lib/validations';
 import { getDepartmentErrorMessage } from '@/lib/errorMessages';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { useAppTopBar } from '@/app/contexts/AppTopBarContext';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
-import { Building2, Users, Crown, ArrowRight, Edit2, Trash2, UserMinus, X } from 'lucide-react';
+import { Building2, Users, Crown, Edit2, Trash2, UserMinus, X } from 'lucide-react';
 
 const INITIAL_EDIT_FORM = { nameAr: '', nameEn: '', managerId: '' };
 
@@ -230,6 +231,16 @@ export function DepartmentDetailsPage() {
     }
   }, []);
 
+  useAppTopBar(
+    currentUser
+      ? {
+          title: department?.name_ar ?? 'تفاصيل القسم',
+          meta: department?.name ?? 'تفاصيل القسم',
+          backPath: '/departments',
+        }
+      : null
+  );
+
   if (!currentUser) {
     return null;
   }
@@ -247,17 +258,7 @@ export function DepartmentDetailsPage() {
   const manager = employees.find((p) => p.id === department.manager_uid);
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      <nav aria-label="تنقل">
-        <Link
-          to="/departments"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-800 font-medium mb-2"
-        >
-          <ArrowRight className="w-4 h-4" aria-hidden />
-          العودة إلى الأقسام
-        </Link>
-      </nav>
-
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center justify-between gap-3">

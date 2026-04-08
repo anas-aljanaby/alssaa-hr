@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MobileLayout } from './MobileLayout';
 
 vi.mock('@/app/contexts/AuthContext', () => ({
@@ -49,6 +49,14 @@ vi.mock('@/app/components/notifications/NotificationsDropdown', () => ({
 }));
 
 describe('MobileLayout', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'scrollTo', {
+      value: vi.fn(),
+      writable: true,
+      configurable: true,
+    });
+  });
+
   it('shows team attendance tab and toggles top notifications dropdown', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -63,5 +71,28 @@ describe('MobileLayout', () => {
 
     fireEvent.click(screen.getByLabelText('الإشعارات'));
     expect(await screen.findByTestId('notifications-dropdown')).toBeInTheDocument();
+  });
+
+  it('scrolls to top when bottom navigation changes route', async () => {
+    const scrollTo = vi.mocked(window.scrollTo);
+
+    render(
+      <MemoryRouter initialEntries={['/users']}>
+        <Routes>
+          <Route element={<MobileLayout />}>
+            <Route index element={<div data-testid="page-home">home</div>} />
+            <Route path="users" element={<div data-testid="page-users">users</div>} />
+            <Route path="approvals" element={<div data-testid="page-approvals">approvals</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    scrollTo.mockClear();
+
+    fireEvent.click(screen.getByText('الموافقات'));
+
+    expect(await screen.findByTestId('page-approvals')).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
   });
 });

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Department } from '@/lib/services/departments.service';
 import { displayProfileEmail } from '@/lib/profileDisplay';
@@ -31,6 +32,8 @@ export function MorePage() {
       .then(setDepartment)
       .catch(() => toast.error('فشل تحميل بيانات القسم'));
   }, [currentUser?.departmentId]);
+
+  useAppTopBar(currentUser ? { title: 'المزيد' } : null);
 
   if (!currentUser) return null;
 
@@ -177,9 +180,7 @@ export function MorePage() {
   ];
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      <h1 className="text-gray-800">المزيد</h1>
-
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
       {/* Profile Card */}
       <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-4">

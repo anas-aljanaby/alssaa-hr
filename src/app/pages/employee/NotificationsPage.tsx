@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { usePwa } from '../../contexts/PwaContext';
+import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import { toast } from 'sonner';
 import * as notificationsService from '@/lib/services/notifications.service';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
@@ -66,8 +67,6 @@ export function NotificationsPage() {
     }
   }
 
-  if (!currentUser) return null;
-
   const unreadCount = notifications.filter((n) => !n.read_status).length;
 
   const handleMarkRead = async (notifId: string) => {
@@ -77,10 +76,33 @@ export function NotificationsPage() {
     );
   };
 
-  const handleMarkAllRead = async () => {
+  const handleMarkAllRead = useCallback(async () => {
+    if (!currentUser) return;
     await markAllNotificationsRead(currentUser.uid);
     setNotifications((prev) => prev.map((n) => ({ ...n, read_status: true })));
-  };
+  }, [currentUser, markAllNotificationsRead]);
+
+  const topBarAction = useMemo(
+    () =>
+      unreadCount > 0 ? (
+        <button
+          type="button"
+          onClick={handleMarkAllRead}
+          className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-100"
+        >
+          تعليم الكل
+        </button>
+      ) : null,
+    [handleMarkAllRead, unreadCount]
+  );
+
+  useAppTopBar({
+    title: currentUser ? 'الإشعارات' : undefined,
+    meta: unreadCount > 0 ? `${unreadCount} غير مقروءة` : 'كلها مقروءة',
+    action: topBarAction,
+  });
+
+  if (!currentUser) return null;
 
   const typeIcon = (type: string) => {
     switch (type) {
@@ -103,26 +125,7 @@ export function NotificationsPage() {
   };
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-gray-800">الإشعارات</h1>
-          {unreadCount > 0 && (
-            <span className="px-2.5 py-0.5 bg-red-500 text-white rounded-full text-xs">
-              {unreadCount}
-            </span>
-          )}
-        </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={handleMarkAllRead}
-            className="text-xs text-blue-600 hover:text-blue-700"
-          >
-            تعليم الكل كمقروء
-          </button>
-        )}
-      </div>
-
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
       {loading ? (
         <div className="space-y-2">
           {[...Array(4)].map((_, i) => (

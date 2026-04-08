@@ -101,7 +101,7 @@ export function NotificationsDropdown({ userId, onClose }: NotificationsDropdown
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
         dir="rtl"
-        className="fixed top-16 left-4 right-4 max-w-lg mx-auto z-50 bg-white border border-gray-100 shadow-xl rounded-2xl overflow-hidden"
+        className="fixed left-4 right-4 top-[4.25rem] z-50 mx-auto max-w-lg overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl"
       >
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">

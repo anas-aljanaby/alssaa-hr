@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDevTime } from '../../contexts/DevTimeContext';
+import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import type {
@@ -180,8 +181,6 @@ export function AttendancePage() {
     updateUrlParams(nextYearValue, nextMonthValue, statusFilter);
   };
 
-  if (!currentUser) return null;
-
   const summaryMap = useMemo(
     () => new Map(monthlySummaries.map((s) => [s.date, s.status])),
     [monthlySummaries]
@@ -257,10 +256,15 @@ export function AttendancePage() {
       : `سجل الشهر - ${monthParam}`;
   const logLoading = sessionsLoading;
 
-  return (
-    <div className="p-4 max-w-lg mx-auto space-y-4 pb-24">
-      <h1 className="text-gray-800 font-semibold text-lg">الحضور والانصراف</h1>
+  useAppTopBar({
+    title: currentUser ? 'الحضور والانصراف' : undefined,
+    meta: monthParam,
+  });
 
+  if (!currentUser) return null;
+
+  return (
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
       {/* Section 1: Monthly Calendar Heatmap */}
       <MonthCalendarHeatmap
         year={selectedYear}

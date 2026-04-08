@@ -69,7 +69,6 @@
     "npm:tailwindcss@4.1.12": "4.1.12",
     "npm:tw-animate-css@1.3.8": "1.3.8",
     "npm:vaul@1.1.2": "1.1.2_react@19.2.4_react-dom@19.2.4__react@19.2.4",
-    "npm:vite@6.3.5": "6.3.5_picomatch@4.0.4",
     "npm:vitest@^4.1.1": "4.1.1_jsdom@29.0.1__css-tree@3.2.1_vite@6.3.5__picomatch@4.0.4_msw@2.12.14",
     "npm:xlsx@~0.18.5": "0.18.5",
     "npm:zod@^4.3.6": "4.3.6"
@@ -3873,7 +3872,7 @@
         "npm:tw-animate-css@1.3.8",
         "npm:vaul@1.1.2",
         "npm:vite-plugin-pwa@^1.2.0",
-        "npm:vite@6.3.5",
+        "npm:vite@^6.3.5",
         "npm:vitest@^4.1.1",
         "npm:xlsx@~0.18.5",
         "npm:zod@^4.3.6"

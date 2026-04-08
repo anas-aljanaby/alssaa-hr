@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { UserDetailsPage } from './UserDetailsPage';
 
@@ -20,6 +20,7 @@ const mockGetSummariesInRange = vi.hoisted(() => vi.fn());
 const mockGetUserBalance = vi.hoisted(() => vi.fn());
 const mockGetUserRequests = vi.hoisted(() => vi.fn());
 const mockGetAuditLogsForTarget = vi.hoisted(() => vi.fn());
+const mockGetPolicy = vi.hoisted(() => vi.fn());
 
 vi.mock('react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router')>();
@@ -97,6 +98,14 @@ vi.mock('@/lib/services/audit.service', async (importOriginal) => {
   return {
     ...actual,
     getAuditLogsForTarget: (...args: unknown[]) => mockGetAuditLogsForTarget(...args),
+  };
+});
+
+vi.mock('@/lib/services/policy.service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/services/policy.service')>();
+  return {
+    ...actual,
+    getPolicy: (...args: unknown[]) => mockGetPolicy(...args),
   };
 });
 
@@ -211,6 +220,11 @@ function setupSuccessfulDataLoad() {
   mockGetSummariesInRange.mockResolvedValue([
     { date: '2026-03-20', status: 'present', totalMinutesWorked: 435 },
   ]);
+  mockGetPolicy.mockResolvedValue(null);
+}
+
+function renderPage() {
+  return render(<UserDetailsPage />);
 }
 
 describe('UserDetailsPage', () => {
@@ -227,6 +241,7 @@ describe('UserDetailsPage', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    cleanup();
   });
 
   it('shows unauthorized state when employee opens another profile', () => {
@@ -234,20 +249,19 @@ describe('UserDetailsPage', () => {
       currentUser: { uid: 'employee-1', role: 'employee' },
     });
 
-    render(<UserDetailsPage />);
+    renderPage();
 
     expect(screen.getByText('غير مصرح')).toBeInTheDocument();
     expect(screen.getByText('ليس لديك صلاحية لعرض تفاصيل هذا الموظف')).toBeInTheDocument();
   });
 
   it('loads and shows profile information for admin', async () => {
-    render(<UserDetailsPage />);
+    renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('تفاصيل الموظف')).toBeInTheDocument();
+      expect(screen.getByText('سارة أحمد')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('سارة أحمد')).toBeInTheDocument();
     expect(screen.getByText('الموارد البشرية')).toBeInTheDocument();
     expect(screen.getByText('حالة اليوم')).toBeInTheDocument();
     expect(screen.getByText('أيام الحضور')).toBeInTheDocument();
@@ -256,7 +270,7 @@ describe('UserDetailsPage', () => {
   it('opens requests tab from request URL param', async () => {
     mockUseSearchParams.mockReturnValue([new URLSearchParams('request=req-1')]);
 
-    render(<UserDetailsPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('الطلبات')).toBeInTheDocument();
@@ -268,7 +282,7 @@ describe('UserDetailsPage', () => {
   });
 
   it('navigates to attendance filtered view from overview stat card', async () => {
-    render(<UserDetailsPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('أيام الحضور')).toBeInTheDocument();
