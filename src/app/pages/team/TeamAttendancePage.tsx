@@ -1121,7 +1121,7 @@ export function TeamAttendancePage() {
         </div>
       </div>
 
-      <div className="space-y-3 pt-3">
+      <div className="space-y-3 overflow-x-hidden pt-3">
         <div className="rounded-3xl border border-gray-200 bg-white p-2 shadow-sm">
           <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] items-center gap-2">
             <div className="min-w-0">
@@ -1176,52 +1176,51 @@ export function TeamAttendancePage() {
               <RefreshCcw className={cn('h-4 w-4', refreshing ? 'animate-spin' : '')} />
             </Button>
           </div>
-        </div>
-
-        {mode === 'date' ? (
-          <div
-            data-testid="team-attendance-date-picker"
-            className="rounded-3xl border border-gray-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-          >
-            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
-              <button
-                type="button"
-                onClick={() => setSelectedDate(todayDate)}
-                className={cn(
-                  'rounded-full border px-3 py-2 text-xs transition-colors',
-                  selectedDate === todayDate
-                    ? 'border-blue-600 bg-blue-600 text-white'
-                    : 'border-blue-100 bg-blue-50 text-blue-700'
-                )}
-              >
-                اليوم
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedDate(yesterdayDate)}
-                className={cn(
-                  'rounded-full border px-3 py-2 text-xs transition-colors',
-                  selectedDate === yesterdayDate
-                    ? 'border-blue-600 bg-blue-600 text-white'
-                    : 'border-blue-100 bg-blue-50 text-blue-700'
-                )}
-              >
-                أمس
-              </button>
-              <div className="relative basis-full min-w-0 sm:flex-1">
-                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  max={todayDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
-                  dir="ltr"
-                  className="block h-10 w-full min-w-0 rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
-                />
+          {mode === 'date' ? (
+            <div
+              data-testid="team-attendance-date-picker"
+              className="mt-2 max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-2"
+            >
+              <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(todayDate)}
+                  className={cn(
+                    'shrink-0 rounded-full border px-3 py-2 text-xs transition-colors',
+                    selectedDate === todayDate
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-blue-100 bg-blue-50 text-blue-700'
+                  )}
+                >
+                  اليوم
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(yesterdayDate)}
+                  className={cn(
+                    'shrink-0 rounded-full border px-3 py-2 text-xs transition-colors',
+                    selectedDate === yesterdayDate
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-blue-100 bg-blue-50 text-blue-700'
+                  )}
+                >
+                  أمس
+                </button>
+                <div className="relative min-w-[11.5rem] flex-1">
+                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    max={todayDate}
+                    onChange={(event) => setSelectedDate(event.target.value)}
+                    dir="ltr"
+                    className="block h-10 w-full rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
 
         {loading ? <ContentSkeleton /> : null}
 
