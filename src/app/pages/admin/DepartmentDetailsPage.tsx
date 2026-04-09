@@ -330,7 +330,6 @@ export function DepartmentDetailsPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-800">{emp.name_ar}</p>
-                    <p className="text-xs text-gray-500">{emp.employee_id}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

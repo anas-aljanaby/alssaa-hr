@@ -53,7 +53,7 @@ export function RequestCard({
   decidedAtLabel = 'وقت القرار:',
 }: RequestCardProps) {
   const requestWithMeta = request as LeaveRequest & {
-    approver_profile?: { id: string; name_ar: string; employee_id: string } | null;
+    approver_profile?: { id: string; name_ar: string } | null;
     decided_at?: string | null;
   };
   const user = profilesMap?.get(request.user_id);
@@ -86,7 +86,6 @@ export function RequestCard({
             </div>
             <div>
               <p className="text-sm text-gray-800">{user.name_ar ?? '—'}</p>
-              <p className="text-xs text-gray-500">{user.employee_id}</p>
             </div>
           </button>
           <StatusPill status={request.status} />
@@ -185,12 +184,7 @@ export function RequestCard({
               <div className="flex items-center gap-1.5 mb-1">
                 <UserCheck className="w-3.5 h-3.5" />
                 <span className="opacity-70">{approverLabel}</span>
-                <span>
-                  {requestWithMeta.approver_profile.name_ar}
-                  {requestWithMeta.approver_profile.employee_id
-                    ? ` (${requestWithMeta.approver_profile.employee_id})`
-                    : ''}
-                </span>
+                <span>{requestWithMeta.approver_profile.name_ar}</span>
               </div>
             )}
             {requestWithMeta.decided_at && (
@@ -260,4 +254,3 @@ function StatusIcon({ status }: { status: LeaveRequest['status'] }) {
   }
   return null;
 }
-

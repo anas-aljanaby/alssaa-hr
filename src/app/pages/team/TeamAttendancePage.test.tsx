@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TeamAttendancePage } from './TeamAttendancePage';
@@ -274,6 +275,15 @@ describe('TeamAttendancePage', () => {
       expect(screen.getByText('سارة')).toBeInTheDocument();
     });
 
+    const stickyFilters = screen.getByTestId('team-attendance-sticky-filters');
+    expect(within(stickyFilters).getByRole('button', { name: /الكل/i })).toBeInTheDocument();
+    expect(within(stickyFilters).getByRole('button', { name: /^موجودون الآن/ })).toBeInTheDocument();
+    expect(within(stickyFilters).getByRole('button', { name: /^متأخر/ })).toBeInTheDocument();
+    expect(within(stickyFilters).getByRole('button', { name: /^غائب/ })).toBeInTheDocument();
+    expect(within(stickyFilters).getByRole('button', { name: /^إجازة/ })).toBeInTheDocument();
+    expect(within(stickyFilters).getByRole('button', { name: /^أنهى الدوام/ })).toBeInTheDocument();
+    expect(within(stickyFilters).queryByRole('button', { name: /^غير موجودين الآن/ })).not.toBeInTheDocument();
+
     expect(attendanceService.getRedactedDepartmentAvailability).toHaveBeenCalledWith({
       departmentId: null,
     });
@@ -312,8 +322,12 @@ describe('TeamAttendancePage', () => {
       date: '2026-04-06',
       departmentId: 'dept-news',
     });
-    expect(screen.getAllByText('غير موجودين الآن').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: /أنهى الدوام/i })).not.toBeInTheDocument();
+    const filterBar = screen.getByTestId('team-attendance-sticky-filters');
+    expect(within(filterBar).getByRole('button', { name: /^متأخر/ })).toBeInTheDocument();
+    expect(within(filterBar).getByRole('button', { name: /^غائب/ })).toBeInTheDocument();
+    expect(within(filterBar).getByRole('button', { name: /^إجازة/ })).toBeInTheDocument();
+    expect(within(filterBar).getByRole('button', { name: /^أنهى الدوام/ })).toBeInTheDocument();
+    expect(within(filterBar).queryByRole('button', { name: /^غير موجودين الآن/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /علي/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /سارة/i })).not.toBeInTheDocument();
 

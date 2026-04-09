@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
@@ -12,9 +12,7 @@ import type { LeaveRequest } from '@/lib/services/requests.service';
 import { AdminDashboardSkeleton } from '../../components/skeletons';
 import { PendingRequestsCard } from '../../components/PendingRequestsCard';
 import {
-  EmployeeListUnified,
   AttendanceCharts,
-  type EmployeeWithTodayStatus,
 } from '../../components/dashboard';
 import {
   CheckCircle2,
@@ -47,7 +45,6 @@ export function AdminDashboard() {
   const [todayLogs, setTodayLogs] = useState<AttendanceLog[]>([]);
   const [pendingRequests, setPendingRequests] = useState<LeaveRequest[]>([]);
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
-  const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -128,18 +125,6 @@ export function AdminDashboard() {
         })
       );
       setWeekLogs(weekData);
-
-      const allNonAdmin = profs.filter((p) => p.role !== 'admin');
-      const monthLogsPerEmployee = await Promise.all(
-        allNonAdmin.map((emp) =>
-          attendanceService.getMonthlyLogs(
-            emp.id,
-            base.getFullYear(),
-            base.getMonth()
-          )
-        )
-      );
-      setMonthLogs(monthLogsPerEmployee.flat());
     } catch (error) {
       const message = isOfflineError(error)
         ? 'تعذر تحميل لوحة المدير العام بدون اتصال بالإنترنت.'
@@ -177,31 +162,6 @@ export function AdminDashboard() {
     () => new Map(profiles.map((p) => [p.id, p])),
     [profiles]
   );
-
-  const todayEmployeeStatus = useMemo((): EmployeeWithTodayStatus[] => {
-    const today = dateStr(now());
-    const logsMap = new Map(todayLogs.map((l) => [l.user_id, l]));
-    return allNonAdmin.filter((emp) => hasJoinedBy(today, emp.join_date)).map((emp) => {
-      const log = logsMap.get(emp.id);
-      return {
-        ...emp,
-        todayStatus: log?.status || ('absent' as const),
-        checkIn: log?.check_in_time || null,
-        checkOut: log?.check_out_time || null,
-        autoPunchOut: log?.auto_punch_out ?? false,
-      };
-    });
-  }, [allNonAdmin, todayLogs]);
-
-  const monthlyStats = useMemo(() => {
-    const lateCounts: Record<string, number> = {};
-    const absentCounts: Record<string, number> = {};
-    monthLogs.forEach((l) => {
-      if (l.status === 'late') lateCounts[l.user_id] = (lateCounts[l.user_id] || 0) + 1;
-      if (l.status === 'absent') absentCounts[l.user_id] = (absentCounts[l.user_id] || 0) + 1;
-    });
-    return { lateCounts, absentCounts };
-  }, [monthLogs]);
 
   const deptChartData = useMemo(() => {
     const today = dateStr(now());
@@ -327,13 +287,6 @@ export function AdminDashboard() {
           <PendingRequestsCard
             pendingRequests={pendingRequests}
             profilesMap={profilesMap}
-          />
-          <EmployeeListUnified
-            employees={todayEmployeeStatus}
-            lateCounts={monthlyStats.lateCounts}
-            absentCounts={monthlyStats.absentCounts}
-            limit={5}
-            to="/users"
           />
         </>
       )}

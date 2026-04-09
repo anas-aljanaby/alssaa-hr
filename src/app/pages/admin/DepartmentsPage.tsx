@@ -543,7 +543,7 @@ export function DepartmentsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="بحث بالاسم أو الرقم الوظيفي..."
+              placeholder="بحث بالاسم..."
               className="w-full pr-10 pl-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               aria-label="بحث الأقسام"
             />
@@ -728,7 +728,6 @@ export function DepartmentsPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm text-gray-800">{emp.name_ar}</p>
-                              <p className="text-xs text-gray-500">{emp.employee_id}</p>
                             </div>
                           </Link>
                           <div className="flex items-center gap-2 shrink-0">

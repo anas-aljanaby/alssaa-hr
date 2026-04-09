@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -14,9 +14,7 @@ import type { Department } from '@/lib/services/departments.service';
 import { DashboardSkeleton } from '../../components/skeletons';
 import { PendingRequestsCard } from '../../components/PendingRequestsCard';
 import {
-  EmployeeListUnified,
   AttendanceCharts,
-  type EmployeeWithTodayStatus,
 } from '../../components/dashboard';
 import { todayStr } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
@@ -54,7 +52,6 @@ export function ManagerDashboard() {
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [todayLogs, setTodayLogs] = useState<AttendanceLog[]>([]);
   const [pendingRequests, setPendingRequests] = useState<LeaveRequest[]>([]);
-  const [monthLogs, setMonthLogs] = useState<AttendanceLog[]>([]);
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
   const [activeTab, setActiveTab] = useState<ManagerTab>('overview');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -142,17 +139,6 @@ export function ManagerDashboard() {
       setTodayLogs(logs);
       setPendingRequests(reqs);
 
-      const monthLogsPerEmployee = await Promise.all(
-        emps.map((emp) =>
-          attendanceService.getMonthlyLogs(
-            emp.id,
-            base.getFullYear(),
-            base.getMonth()
-          )
-        )
-      );
-      setMonthLogs(monthLogsPerEmployee.flat());
-
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
       const weekDays = Array.from({ length: 5 }, (_, idx) => {
         const i = 4 - idx;
@@ -200,31 +186,6 @@ export function ManagerDashboard() {
       onLeave,
     };
   }, [todayLogs, employees]);
-
-  const monthlyStats = useMemo(() => {
-    const lateCounts: Record<string, number> = {};
-    const absentCounts: Record<string, number> = {};
-    monthLogs.forEach((l) => {
-      if (l.status === 'late') lateCounts[l.user_id] = (lateCounts[l.user_id] || 0) + 1;
-      if (l.status === 'absent') absentCounts[l.user_id] = (absentCounts[l.user_id] || 0) + 1;
-    });
-    return { lateCounts, absentCounts };
-  }, [monthLogs]);
-
-  const todayEmployeeStatus = useMemo((): EmployeeWithTodayStatus[] => {
-    const today = todayStr();
-    const logsMap = new Map(todayLogs.map((l) => [l.user_id, l]));
-    return employees.filter((emp) => hasJoinedBy(today, emp.join_date)).map((emp) => {
-      const log = logsMap.get(emp.id);
-      return {
-        ...emp,
-        todayStatus: log?.status || ('absent' as const),
-        checkIn: log?.check_in_time || null,
-        checkOut: log?.check_out_time || null,
-        autoPunchOut: log?.auto_punch_out ?? false,
-      };
-    });
-  }, [employees, todayLogs]);
 
   const profilesMap = useMemo(
     () => new Map(employees.map((e) => [e.id, e])),
@@ -362,13 +323,6 @@ export function ManagerDashboard() {
           <PendingRequestsCard
             pendingRequests={pendingRequests}
             profilesMap={profilesMap}
-          />
-          <EmployeeListUnified
-            employees={todayEmployeeStatus}
-            lateCounts={monthlyStats.lateCounts}
-            absentCounts={monthlyStats.absentCounts}
-            limit={5}
-            to="/users"
           />
         </>
       )}

@@ -103,7 +103,7 @@ export function UsersPage() {
   const filteredUsers = profiles.filter((u) => {
     const matchesSearch =
       u.name_ar.includes(searchQuery) ||
-      u.employee_id.includes(searchQuery);
+      (u.email ?? '').includes(searchQuery);
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -267,7 +267,7 @@ export function UsersPage() {
           type="text"
           value={searchQuery}
           onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-          placeholder="بحث بالاسم أو الرقم الوظيفي..."
+          placeholder="بحث بالاسم أو البريد الإلكتروني..."
           className="w-full pr-10 pl-4 py-3 border border-gray-200 rounded-xl bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
         />
       </div>

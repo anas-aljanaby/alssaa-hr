@@ -62,7 +62,6 @@ type BoardRowStatus =
 interface AttendanceBoardRow {
   userId: string;
   nameAr: string;
-  employeeId: string;
   role: 'employee' | 'manager' | 'admin';
   departmentId: string | null;
   departmentNameAr: string;
@@ -140,9 +139,9 @@ function roleMeta(role: AttendanceBoardRow['role']): string | null {
   return null;
 }
 
-function rowMetaText(employeeId: string, role: AttendanceBoardRow['role']): string {
+function rowMetaText(role: AttendanceBoardRow['role']): string | null {
   const meta = roleMeta(role);
-  return meta ? `${employeeId} • ${meta}` : employeeId;
+  return meta;
 }
 
 function toneClasses(tone: BoardTone): string {
@@ -278,7 +277,6 @@ function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
   return {
     userId: row.userId,
     nameAr: row.nameAr,
-    employeeId: row.employeeId,
     role: row.role,
     departmentId: row.departmentId,
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
@@ -288,7 +286,7 @@ function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
     statusLabel,
     statusTone,
     filterKeys,
-    metaText: rowMetaText(row.employeeId, row.role),
+    metaText: rowMetaText(row.role),
     factText,
     canViewDetailedStatus: true,
     canViewTimes: true,
@@ -336,7 +334,6 @@ function buildDetailedDayRow(row: TeamAttendanceDayRow, isToday: boolean): Atten
   return {
     userId: row.userId,
     nameAr: row.nameAr,
-    employeeId: row.employeeId,
     role: row.role,
     departmentId: row.departmentId,
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
@@ -346,7 +343,7 @@ function buildDetailedDayRow(row: TeamAttendanceDayRow, isToday: boolean): Atten
     statusLabel: dayStatusLabel(statusKey, isToday),
     statusTone: dayStatusTone(statusKey),
     filterKeys,
-    metaText: rowMetaText(row.employeeId, row.role),
+    metaText: rowMetaText(row.role),
     factText,
     canViewDetailedStatus: true,
     canViewTimes: true,
@@ -366,7 +363,6 @@ function buildGenericLiveRow(row: SafeAvailabilityRow): AttendanceBoardRow {
   return {
     userId: row.userId,
     nameAr: row.nameAr,
-    employeeId: row.employeeId,
     role: row.role,
     departmentId: row.departmentId,
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
@@ -376,7 +372,7 @@ function buildGenericLiveRow(row: SafeAvailabilityRow): AttendanceBoardRow {
     statusLabel: isPresent ? 'موجود الآن' : 'غير موجود الآن',
     statusTone: isPresent ? 'green' : 'gray',
     filterKeys: [isPresent ? 'present_now' : 'not_present_now'],
-    metaText: rowMetaText(row.employeeId, row.role),
+    metaText: rowMetaText(row.role),
     factText: null,
     canViewDetailedStatus: false,
     canViewTimes: false,
@@ -393,7 +389,6 @@ function buildGenericDayRow(row: SafeAttendanceDayRow, isToday: boolean): Attend
   return {
     userId: row.userId,
     nameAr: row.nameAr,
-    employeeId: row.employeeId,
     role: row.role,
     departmentId: row.departmentId,
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
@@ -403,7 +398,7 @@ function buildGenericDayRow(row: SafeAttendanceDayRow, isToday: boolean): Attend
     statusLabel: dayStatusLabel(statusKey, isToday),
     statusTone: dayStatusTone(statusKey),
     filterKeys: [isPresent ? 'present_day' : 'not_present_day'],
-    metaText: rowMetaText(row.employeeId, row.role),
+    metaText: rowMetaText(row.role),
     factText: null,
     canViewDetailedStatus: false,
     canViewTimes: false,
@@ -451,36 +446,23 @@ function filterCount(rows: AttendanceBoardRow[], key: AttendanceStatusFilter): n
 function buildChipOptions(params: {
   rows: AttendanceBoardRow[];
   mode: TeamAttendanceMode;
-  useDetailedFilters: boolean;
 }): StatusChipOption[] {
-  const blueprint: Array<Omit<StatusChipOption, 'count'>> = params.useDetailedFilters
-    ? params.mode === 'live'
-      ? [
-          { key: 'all', label: 'الكل', tone: 'gray' },
-          { key: 'present_now', label: 'موجودون الآن', tone: 'green' },
-          { key: 'late', label: 'متأخر', tone: 'amber' },
-          { key: 'absent', label: 'غائب', tone: 'red' },
-          { key: 'on_leave', label: 'إجازة', tone: 'blue' },
-          { key: 'finished', label: 'أنهى الدوام', tone: 'gray' },
-        ]
-      : [
-          { key: 'all', label: 'الكل', tone: 'gray' },
-          { key: 'present_day', label: 'حضر', tone: 'green' },
-          { key: 'late', label: 'تأخر', tone: 'amber' },
-          { key: 'absent', label: 'غائب', tone: 'red' },
-          { key: 'on_leave', label: 'إجازة', tone: 'blue' },
-        ]
-    : params.mode === 'live'
-      ? [
-          { key: 'all', label: 'الكل', tone: 'gray' },
-          { key: 'present_now', label: 'موجودون الآن', tone: 'green' },
-          { key: 'not_present_now', label: 'غير موجودين الآن', tone: 'gray' },
-        ]
-      : [
-          { key: 'all', label: 'الكل', tone: 'gray' },
-          { key: 'present_day', label: 'حضر', tone: 'green' },
-          { key: 'not_present_day', label: 'غير حاضر', tone: 'gray' },
-        ];
+  const blueprint: Array<Omit<StatusChipOption, 'count'>> = params.mode === 'live'
+    ? [
+        { key: 'all', label: 'الكل', tone: 'gray' },
+        { key: 'present_now', label: 'موجودون الآن', tone: 'green' },
+        { key: 'late', label: 'متأخر', tone: 'amber' },
+        { key: 'absent', label: 'غائب', tone: 'red' },
+        { key: 'on_leave', label: 'إجازة', tone: 'blue' },
+        { key: 'finished', label: 'أنهى الدوام', tone: 'gray' },
+      ]
+    : [
+        { key: 'all', label: 'الكل', tone: 'gray' },
+        { key: 'present_day', label: 'حضر', tone: 'green' },
+        { key: 'late', label: 'تأخر', tone: 'amber' },
+        { key: 'absent', label: 'غائب', tone: 'red' },
+        { key: 'on_leave', label: 'إجازة', tone: 'blue' },
+      ];
 
   return blueprint.map((option) => ({
     ...option,
@@ -895,13 +877,6 @@ export function TeamAttendancePage() {
     selectedDepartmentId === ALL_DEPARTMENTS ? null : selectedDepartmentId;
   const isTodayInDateMode = selectedDate === todayDate;
 
-  const useDetailedFilters =
-    !!currentUser &&
-    (currentUser.role === 'admin' ||
-      (currentUser.role === 'manager' &&
-        managerDepartmentId != null &&
-        selectedDepartmentDbId === managerDepartmentId));
-
   const loadBoard = useCallback(
     async (silent = false) => {
       if (!currentUser || !metaReady) return;
@@ -1039,9 +1014,8 @@ export function TeamAttendancePage() {
       buildChipOptions({
         rows: boardRows,
         mode,
-        useDetailedFilters,
       }),
-    [boardRows, mode, useDetailedFilters]
+    [boardRows, mode]
   );
 
   useEffect(() => {

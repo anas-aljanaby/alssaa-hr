@@ -54,7 +54,6 @@ export function OvertimeRequestCard({
             </div>
             <div>
               <p className="text-sm text-gray-800">{user.name_ar ?? '—'}</p>
-              <p className="text-xs text-gray-500">{user.employee_id}</p>
             </div>
           </button>
           <StatusPill status={request.status} />
@@ -121,12 +120,7 @@ export function OvertimeRequestCard({
             <div className="flex items-center gap-1.5 mb-1">
               <UserCheck className="w-3.5 h-3.5" />
               <span className="opacity-70">{approverLabel}</span>
-              <span>
-                {request.reviewer_profile.name_ar}
-                {request.reviewer_profile.employee_id
-                  ? ` (${request.reviewer_profile.employee_id})`
-                  : ''}
-              </span>
+              <span>{request.reviewer_profile.name_ar}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5" />
