@@ -4,11 +4,11 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import * as departmentsService from '@/lib/services/departments.service';
+import * as attendanceService from '@/lib/services/attendance.service';
 import type { Department } from '@/lib/services/departments.service';
 import { displayProfileEmail } from '@/lib/profileDisplay';
 import {
   User,
-  Settings,
   Shield,
   LogOut,
   ChevronLeft,
@@ -18,12 +18,15 @@ import {
   Calendar,
   BadgeCheck,
   Clock,
+  LoaderCircle,
+  WandSparkles,
 } from 'lucide-react';
 
 export function MorePage() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [department, setDepartment] = useState<Department | null>(null);
+  const [isRunningAutoPunchOut, setIsRunningAutoPunchOut] = useState(false);
 
   useEffect(() => {
     if (!currentUser?.departmentId) return;
@@ -40,6 +43,29 @@ export function MorePage() {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleRunAutoPunchOut = async () => {
+    if (isRunningAutoPunchOut) return;
+    setIsRunningAutoPunchOut(true);
+    try {
+      const result = await attendanceService.runAutoPunchOut();
+      if (result.total === 0 || result.message === 'No open sessions') {
+        toast.success('لا توجد جلسات مفتوحة تحتاج إلى تسجيل انصراف تلقائي');
+        return;
+      }
+
+      toast.success(
+        result.total != null
+          ? `تمت معالجة ${result.processed} من أصل ${result.total} جلسة مفتوحة`
+          : `تم تسجيل الانصراف التلقائي لـ ${result.processed} مستخدم`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تشغيل الانصراف التلقائي';
+      toast.error(message);
+    } finally {
+      setIsRunningAutoPunchOut(false);
+    }
   };
 
   const menuSections = [
@@ -271,6 +297,35 @@ export function MorePage() {
           })}
         </div>
       ))}
+
+      {currentUser.role === 'admin' && (
+        <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-100">
+            <span className="text-xs text-amber-700">إجراءات الحضور</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRunAutoPunchOut}
+            disabled={isRunningAutoPunchOut}
+            className="w-full flex items-center justify-between px-4 py-3.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60 hover:bg-amber-50"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-100">
+                {isRunningAutoPunchOut ? (
+                  <LoaderCircle className="w-4.5 h-4.5 text-amber-700 animate-spin" />
+                ) : (
+                  <WandSparkles className="w-4.5 h-4.5 text-amber-700" />
+                )}
+              </div>
+              <div className="text-right">
+                <span className="text-sm text-gray-800">تشغيل الانصراف التلقائي الآن</span>
+                <p className="text-xs text-gray-400">يغلق الجلسات المفتوحة المطابقة للسياسة فقط</p>
+              </div>
+            </div>
+            <ChevronLeft className="w-4 h-4 text-gray-300" />
+          </button>
+        </div>
+      )}
 
       <button
         onClick={handleLogout}

@@ -5,6 +5,7 @@
  */
 
 export * from './types';
+export * from './dayState';
 export * from './resolveDisplayStatus';
 export * from './statusConfig';
 export * from './chipConfig';

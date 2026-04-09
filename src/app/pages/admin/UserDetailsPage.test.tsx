@@ -10,10 +10,8 @@ const mockUseSearchParams = vi.hoisted(() => vi.fn());
 const mockGetUserById = vi.hoisted(() => vi.fn());
 const mockGetDepartmentById = vi.hoisted(() => vi.fn());
 const mockListDepartments = vi.hoisted(() => vi.fn());
-const mockGetTodayLog = vi.hoisted(() => vi.fn());
+const mockGetAttendanceToday = vi.hoisted(() => vi.fn());
 const mockGetMonthlyStats = vi.hoisted(() => vi.fn());
-const mockGetAllUserLogs = vi.hoisted(() => vi.fn());
-const mockGetLogsInRange = vi.hoisted(() => vi.fn());
 const mockGetAllTimeStats = vi.hoisted(() => vi.fn());
 const mockGetAllTimeSummaries = vi.hoisted(() => vi.fn());
 const mockGetSummariesInRange = vi.hoisted(() => vi.fn());
@@ -66,10 +64,8 @@ vi.mock('@/lib/services/attendance.service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/services/attendance.service')>();
   return {
     ...actual,
-    getTodayLog: (...args: unknown[]) => mockGetTodayLog(...args),
+    getAttendanceToday: (...args: unknown[]) => mockGetAttendanceToday(...args),
     getMonthlyStats: (...args: unknown[]) => mockGetMonthlyStats(...args),
-    getAllUserLogs: (...args: unknown[]) => mockGetAllUserLogs(...args),
-    getLogsInRange: (...args: unknown[]) => mockGetLogsInRange(...args),
     getAllTimeStats: (...args: unknown[]) => mockGetAllTimeStats(...args),
     getAllTimeSummaries: (...args: unknown[]) => mockGetAllTimeSummaries(...args),
     getSummariesInRange: (...args: unknown[]) => mockGetSummariesInRange(...args),
@@ -133,14 +129,65 @@ function setupSuccessfulDataLoad() {
     created_at: '2026-03-01T00:00:00.000Z',
   });
   mockListDepartments.mockResolvedValue([]);
-  mockGetTodayLog.mockResolvedValue({
-    id: 'att-today',
-    user_id: 'user-2',
-    date: '2026-03-20',
-    check_in_time: '08:45',
-    check_out_time: '16:05',
-    status: 'present',
-    auto_punch_out: false,
+  mockGetAttendanceToday.mockResolvedValue({
+    log: {
+      id: 'att-today',
+      user_id: 'user-2',
+      date: '2026-03-20',
+      check_in_time: '08:45',
+      check_out_time: '16:05',
+      status: 'present',
+      auto_punch_out: false,
+    },
+    punches: [],
+    shift: {
+      workStartTime: '08:00',
+      workEndTime: '16:00',
+      gracePeriodMinutes: 15,
+      bufferMinutesAfterShift: 30,
+      weeklyOffDays: [5, 6],
+      minimumRequiredMinutes: null,
+    },
+    sessions: [
+      {
+        id: 'session-1',
+        org_id: 'org-1',
+        user_id: 'user-2',
+        date: '2026-03-20',
+        check_in_time: '08:45',
+        check_out_time: '16:05',
+        status: 'present',
+        is_overtime: false,
+        is_auto_punch_out: false,
+        is_early_departure: false,
+        needs_review: false,
+        duration_minutes: 440,
+        last_action_at: '2026-03-20T16:05:00.000Z',
+        is_dev: false,
+        created_at: '2026-03-20T08:45:00.000Z',
+        updated_at: '2026-03-20T16:05:00.000Z',
+      },
+    ],
+    summary: {
+      id: 'summary-1',
+      org_id: 'org-1',
+      user_id: 'user-2',
+      date: '2026-03-20',
+      effective_status: 'present',
+      first_check_in: '08:45',
+      last_check_out: '16:05',
+      total_work_minutes: 440,
+      total_overtime_minutes: 0,
+      session_count: 1,
+      has_auto_punch_out: false,
+      is_short_day: false,
+      is_off_day: false,
+      is_holiday: false,
+      leave_request_id: null,
+      notes: null,
+      created_at: '2026-03-20T08:45:00.000Z',
+      updated_at: '2026-03-20T16:05:00.000Z',
+    },
   });
   mockGetMonthlyStats.mockResolvedValue({
     presentDays: 10,
@@ -149,37 +196,6 @@ function setupSuccessfulDataLoad() {
     leaveDays: 3,
     totalWorkingDays: 16,
   });
-  mockGetAllUserLogs.mockResolvedValue([
-    {
-      id: 'l1',
-      user_id: 'user-2',
-      date: '2026-03-20',
-      check_in_time: '08:45',
-      check_out_time: '16:05',
-      status: 'present',
-      auto_punch_out: false,
-    },
-    {
-      id: 'l2',
-      user_id: 'user-2',
-      date: '2026-03-19',
-      check_in_time: null,
-      check_out_time: null,
-      status: 'absent',
-      auto_punch_out: false,
-    },
-  ]);
-  mockGetLogsInRange.mockResolvedValue([
-    {
-      id: 'range-1',
-      user_id: 'user-2',
-      date: '2026-03-20',
-      check_in_time: '08:45',
-      check_out_time: '16:05',
-      status: 'present',
-      auto_punch_out: false,
-    },
-  ]);
   mockGetUserBalance.mockResolvedValue({
     id: 'bal-1',
     user_id: 'user-2',

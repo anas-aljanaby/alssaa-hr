@@ -42,6 +42,14 @@ function hasJoinedBy(day: string, joinDate: string | null | undefined): boolean 
 }
 
 type ManagerTab = 'overview' | 'analytics';
+type DashboardSummaryKey = 'present' | 'late' | 'absent' | 'on_leave';
+
+const DASHBOARD_FILTER_BY_SUMMARY_KEY: Record<DashboardSummaryKey, string> = {
+  present: 'present_now',
+  late: 'late',
+  absent: 'absent',
+  on_leave: 'on_leave',
+};
 
 export function ManagerDashboard() {
   const { currentUser } = useAuth();
@@ -60,6 +68,19 @@ export function ManagerDashboard() {
   });
 
   const employeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
+
+  const handleSummaryCardClick = useCallback(
+    (key: DashboardSummaryKey) => {
+      const params = new URLSearchParams({
+        mode: 'live',
+        date: todayStr(),
+        filter: DASHBOARD_FILTER_BY_SUMMARY_KEY[key],
+      });
+
+      navigate(`/team-attendance?${params.toString()}`);
+    },
+    [navigate]
+  );
 
   useEffect(() => {
     if (!currentUser) return;
@@ -299,24 +320,28 @@ export function ManagerDashboard() {
                 label="حاضرون"
                 value={todayStats.present}
                 color="bg-emerald-50 border-emerald-100"
+                onClick={() => handleSummaryCardClick('present')}
               />
               <StatCard
                 icon={<Timer className="w-5 h-5 text-amber-500" />}
                 label="متأخرون"
                 value={todayStats.late}
                 color="bg-amber-50 border-amber-100"
+                onClick={() => handleSummaryCardClick('late')}
               />
               <StatCard
                 icon={<XCircle className="w-5 h-5 text-red-500" />}
                 label="غائبون"
                 value={todayStats.absent}
                 color="bg-red-50 border-red-100"
+                onClick={() => handleSummaryCardClick('absent')}
               />
               <StatCard
                 icon={<Coffee className="w-5 h-5 text-blue-500" />}
                 label="في إجازة"
                 value={todayStats.onLeave}
                 color="bg-blue-50 border-blue-100"
+                onClick={() => handleSummaryCardClick('on_leave')}
               />
             </div>
           </div>

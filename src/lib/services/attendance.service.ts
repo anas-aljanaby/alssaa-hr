@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import type { Database, Tables, InsertTables } from '../database.types';
 import { now } from '../time';
 import type { OvertimeRequest } from './overtime-requests.service';
+import { resolveDisplayStatus, type DayStatus } from '@/shared/attendance';
 
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
@@ -75,6 +76,7 @@ export interface TeamAttendanceDayRow {
   lastCheckOut: string | null;
   totalWorkMinutes: number;
   totalOvertimeMinutes: number;
+  hasOvertime: boolean;
   sessionCount: number;
   isCheckedInNow: boolean;
   hasAutoPunchOut: boolean;
@@ -111,6 +113,33 @@ type RedactedAvailabilityRpcRow =
 type RedactedAttendanceDayRpcRow =
   Database['public']['Functions']['get_redacted_team_attendance_day']['Returns'][number];
 
+type CalendarResolutionInput = DayStatus | 'overtime_only' | 'overtime_offday';
+
+function resolveCalendarInput(
+  dateStr: string,
+  isOffDay: boolean,
+  summary: AttendanceDailySummary | undefined,
+  todayStr_: string,
+  joinDate?: string | null
+): CalendarResolutionInput {
+  const isFuture = dateStr > todayStr_;
+  const isToday = dateStr === todayStr_;
+  const isBeforeJoinDate = !!joinDate && dateStr < joinDate;
+
+  if (isFuture) return 'future';
+  if (isBeforeJoinDate) return 'not_joined';
+  if (summary?.effective_status === 'present') return 'present';
+  if (summary?.effective_status === 'late') return 'late';
+  if (summary?.effective_status === 'absent') return 'absent';
+  if (summary?.effective_status === 'on_leave') return 'on_leave';
+  if (summary?.effective_status === 'overtime_only') return 'overtime_only';
+  if (isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_offday';
+  if (!isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_only';
+  if (isOffDay) return 'weekend';
+  if (isToday) return 'not_joined';
+  return 'absent';
+}
+
 function resolveCalendarStatus(
   dateStr: string,
   isOffDay: boolean,
@@ -118,29 +147,29 @@ function resolveCalendarStatus(
   todayStr_: string,
   joinDate?: string | null
 ): CalendarStatus {
-  const isFuture = dateStr > todayStr_;
-  const isToday = dateStr === todayStr_;
-  const isBeforeJoinDate = !!joinDate && dateStr < joinDate;
+  const resolved = resolveCalendarInput(dateStr, isOffDay, summary, todayStr_, joinDate);
 
-  if (isFuture) return 'future';
-  if (isBeforeJoinDate) return null;
-  if (summary?.effective_status === 'present') return 'present';
-  if (summary?.effective_status === 'late') return 'late';
-  if (summary?.effective_status === 'absent') return 'absent';
-  if (summary?.effective_status === 'on_leave') return 'on_leave';
-  if (summary?.effective_status === 'overtime_only') return 'overtime_only';
+  if (resolved === 'future') return 'future';
+  if (resolved === 'not_joined') return null;
+  if (resolved === 'overtime_only' || resolved === 'overtime_offday') return resolved;
 
-  // Off-day with attendance is rendered as overtime day (no effective_status by policy).
-  if (isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_offday';
+  const displayStatus = resolveDisplayStatus(resolved, null, {
+    isWithinShiftWindow: false,
+  });
 
-  // Working day with sessions but unresolved summary should still appear as overtime-only.
-  if (!isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_only';
-
-  if (isOffDay) return 'weekend';
-
-  // Policy defines absent for past working day only; today's empty state remains neutral.
-  if (isToday) return null;
-  return 'absent';
+  switch (displayStatus) {
+    case 'present':
+      return 'present';
+    case 'late':
+      return 'late';
+    case 'on_leave_day':
+      return 'on_leave';
+    case 'weekend':
+      return 'weekend';
+    case 'absent_day':
+    default:
+      return 'absent';
+  }
 }
 
 function toMinutes(t: string): number {
@@ -598,6 +627,12 @@ export interface CheckOutResult {
   overtimeRequest: OvertimeRequest | null;
 }
 
+export interface AutoPunchOutRunResult {
+  processed: number;
+  total?: number;
+  message?: string;
+}
+
 type EdgeInvokeResult = {
   data?: unknown;
   error?: { message?: string } | null;
@@ -633,7 +668,7 @@ function orgWallToPunchUtcIso(dateStr: string, wallTime: string): string {
   return new Date(Date.UTC(y, mo - 1, d, h, mi, s, 0) - 3 * 60 * 60 * 1000).toISOString();
 }
 
-function normalizePunchInvokeError(invokeResult: EdgeInvokeResult): Error | null {
+function normalizeEdgeInvokeError(invokeResult: EdgeInvokeResult): Error | null {
   const edgeError = invokeResult.error;
   const edgeData = invokeResult.data as { error?: string; code?: string } | null | undefined;
   if (!edgeError && !edgeData?.error) return null;
@@ -682,7 +717,7 @@ export async function checkIn(userId: string, devSimulatedNowIso?: string): Prom
       : { action: 'check_in' }
   );
   if (invoked) {
-    const normalizedError = normalizePunchInvokeError(invoked);
+    const normalizedError = normalizeEdgeInvokeError(invoked);
     if (normalizedError) throw normalizedError;
     const data = invoked.data;
 
@@ -786,7 +821,7 @@ export async function checkOut(
     : { action: 'check_out' as const };
   const invoked = await invokePunchAuthenticated(payload);
   if (invoked) {
-    const normalizedError = normalizePunchInvokeError(invoked);
+    const normalizedError = normalizeEdgeInvokeError(invoked);
     if (normalizedError) throw normalizedError;
 
     const checkoutPayload = parsePunchCheckoutPayload(invoked.data);
@@ -818,6 +853,32 @@ export async function checkOut(
   return { log, overtimeRequest: null };
 }
 
+export async function runAutoPunchOut(): Promise<AutoPunchOutRunResult> {
+  const sessionResult = await supabase.auth.getSession();
+  const session = sessionResult?.data?.session;
+  const sessionError = sessionResult?.error;
+  if (sessionError || !session?.access_token) {
+    throw new Error('انتهت الجلسة أو أنك غير مسجل الدخول. يرجى تسجيل الدخول مرة أخرى.');
+  }
+
+  const invoked = await supabase.functions.invoke('auto-punch-out', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  }) as EdgeInvokeResult;
+
+  const normalizedError = normalizeEdgeInvokeError(invoked);
+  if (normalizedError) throw normalizedError;
+
+  const data = invoked.data as AutoPunchOutRunResult | null | undefined;
+  return {
+    processed: Number(data?.processed ?? 0),
+    total: data?.total,
+    message: data?.message,
+  };
+}
+
 async function checkOutLegacy(userId: string, checkoutTime?: string): Promise<AttendanceLog> {
   const today = todayStr();
   const time = checkoutTime ?? nowTimeStr();
@@ -842,7 +903,7 @@ async function checkOutLegacy(userId: string, checkoutTime?: string): Promise<At
   return data;
 }
 
-export async function getLogsInRange(
+async function getLogsInRange(
   userId: string,
   fromDate: string,
   toDate: string
@@ -854,22 +915,6 @@ export async function getLogsInRange(
       .eq('user_id', userId)
       .gte('date', fromDate)
       .lte('date', toDate)
-      .order('date', { ascending: false }),
-    getUserJoinDate(userId),
-  ]);
-
-  if (error) throw error;
-  const logs = data ?? [];
-  if (!joinDate) return logs;
-  return logs.filter((log) => log.date >= joinDate);
-}
-
-export async function getAllUserLogs(userId: string): Promise<AttendanceLog[]> {
-  const [{ data, error }, joinDate] = await Promise.all([
-    supabase
-      .from('attendance_logs')
-      .select('*')
-      .eq('user_id', userId)
       .order('date', { ascending: false }),
     getUserJoinDate(userId),
   ]);
@@ -1039,17 +1084,6 @@ export async function getDepartmentLogsForDate(
   return data ?? [];
 }
 
-export async function getAllLogsForDate(date: string): Promise<AttendanceLog[]> {
-  const { data, error } = await supabase
-    .from('attendance_logs')
-    .select('*')
-    .eq('date', date)
-    .order('check_in_time');
-
-  if (error) throw error;
-  return data ?? [];
-}
-
 function mapTeamAttendanceDayRow(row: TeamAttendanceDayRpcRow): TeamAttendanceDayRow {
   return {
     userId: row.user_id,
@@ -1066,6 +1100,10 @@ function mapTeamAttendanceDayRow(row: TeamAttendanceDayRpcRow): TeamAttendanceDa
     lastCheckOut: row.last_check_out,
     totalWorkMinutes: row.total_work_minutes,
     totalOvertimeMinutes: row.total_overtime_minutes,
+    hasOvertime:
+      row.display_status === 'overtime_only' ||
+      row.display_status === 'overtime_offday' ||
+      Number(row.total_overtime_minutes ?? 0) > 0,
     sessionCount: row.session_count,
     isCheckedInNow: row.is_checked_in_now,
     hasAutoPunchOut: row.has_auto_punch_out,

@@ -96,6 +96,7 @@ const detailedRows = [
     lastCheckOut: null,
     totalWorkMinutes: 120,
     totalOvertimeMinutes: 0,
+    hasOvertime: false,
     sessionCount: 1,
     isCheckedInNow: true,
     hasAutoPunchOut: false,
@@ -111,13 +112,14 @@ const detailedRows = [
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
     date: '2026-04-06',
-    effectiveStatus: 'absent' as const,
-    displayStatus: 'absent' as const,
-    firstCheckIn: null,
-    lastCheckOut: null,
-    totalWorkMinutes: 0,
-    totalOvertimeMinutes: 0,
-    sessionCount: 0,
+    effectiveStatus: 'overtime_only' as const,
+    displayStatus: 'overtime_only' as const,
+    firstCheckIn: '18:00',
+    lastCheckOut: '20:00',
+    totalWorkMinutes: 120,
+    totalOvertimeMinutes: 120,
+    hasOvertime: true,
+    sessionCount: 1,
     isCheckedInNow: false,
     hasAutoPunchOut: false,
     needsReview: false,
@@ -138,6 +140,7 @@ const detailedRows = [
     lastCheckOut: '17:12',
     totalWorkMinutes: 510,
     totalOvertimeMinutes: 0,
+    hasOvertime: false,
     sessionCount: 1,
     isCheckedInNow: false,
     hasAutoPunchOut: false,
@@ -159,6 +162,7 @@ const detailedRows = [
     lastCheckOut: null,
     totalWorkMinutes: 0,
     totalOvertimeMinutes: 0,
+    hasOvertime: false,
     sessionCount: 0,
     isCheckedInNow: false,
     hasAutoPunchOut: false,
@@ -278,10 +282,10 @@ describe('TeamAttendancePage', () => {
     const stickyFilters = screen.getByTestId('team-attendance-sticky-filters');
     expect(within(stickyFilters).getByRole('button', { name: /الكل/i })).toBeInTheDocument();
     expect(within(stickyFilters).getByRole('button', { name: /^موجودون الآن/ })).toBeInTheDocument();
-    expect(within(stickyFilters).getByRole('button', { name: /^متأخر/ })).toBeInTheDocument();
-    expect(within(stickyFilters).getByRole('button', { name: /^غائب/ })).toBeInTheDocument();
-    expect(within(stickyFilters).getByRole('button', { name: /^إجازة/ })).toBeInTheDocument();
-    expect(within(stickyFilters).getByRole('button', { name: /^أنهى الدوام/ })).toBeInTheDocument();
+    expect(within(stickyFilters).queryByRole('button', { name: /^متأخر/ })).not.toBeInTheDocument();
+    expect(within(stickyFilters).queryByRole('button', { name: /^غائب/ })).not.toBeInTheDocument();
+    expect(within(stickyFilters).queryByRole('button', { name: /^إجازة/ })).not.toBeInTheDocument();
+    expect(within(stickyFilters).queryByRole('button', { name: /^أنهى الدوام/ })).not.toBeInTheDocument();
     expect(within(stickyFilters).queryByRole('button', { name: /^غير موجودين الآن/ })).not.toBeInTheDocument();
 
     expect(attendanceService.getRedactedDepartmentAvailability).toHaveBeenCalledWith({
@@ -290,7 +294,7 @@ describe('TeamAttendancePage', () => {
     expect(screen.getAllByText('الأخبار').length).toBeGreaterThan(0);
     expect(screen.getAllByText('التحرير').length).toBeGreaterThan(0);
     expect(screen.getAllByText('موجود الآن').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('غير موجود الآن').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('غائب').length).toBeGreaterThan(0);
     expect(screen.queryByDisplayValue('2026-04-06')).not.toBeInTheDocument();
     expect(screen.queryByText('08:10')).not.toBeInTheDocument();
 
@@ -376,6 +380,11 @@ describe('TeamAttendancePage', () => {
       expect(screen.getByText('علي')).toBeInTheDocument();
     });
 
+    const overtimeAbsentRow = screen.getByRole('button', { name: /ريم/i });
+    expect(overtimeAbsentRow).toHaveTextContent('غائب');
+    expect(overtimeAbsentRow).toHaveTextContent('عمل إضافي');
+    expect(overtimeAbsentRow).not.toHaveTextContent('أنهى الدوام');
+
     expect(attendanceService.getTeamAttendanceDay).toHaveBeenCalledWith({
       date: '2026-04-06',
       departmentId: null,
@@ -407,5 +416,31 @@ describe('TeamAttendancePage', () => {
         'designer-1:2026-04-06:هدى:أنهى الدوام'
       );
     });
+  });
+
+  it('applies the mode, date, and filter from the URL query when opening the page', async () => {
+    mockUser = {
+      uid: 'admin-1',
+      role: 'admin',
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/team-attendance?mode=date&date=2026-04-05&filter=on_leave']}>
+        <TeamAttendancePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(attendanceService.getTeamAttendanceDay).toHaveBeenCalledWith({
+        date: '2026-04-05',
+        departmentId: null,
+      });
+    });
+
+    expect(screen.getByDisplayValue('2026-04-05')).toBeInTheDocument();
+    expect(screen.getByText('مها')).toBeInTheDocument();
+    expect(screen.queryByText('علي')).not.toBeInTheDocument();
+    expect(screen.queryByText('ريم')).not.toBeInTheDocument();
+    expect(screen.queryByText('هدى')).not.toBeInTheDocument();
   });
 });

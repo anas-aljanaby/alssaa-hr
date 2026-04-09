@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminDashboard } from './AdminDashboard';
 
@@ -13,6 +13,10 @@ vi.mock('@/lib/hooks/useRealtimeSubscription', () => ({
   useRealtimeSubscription: vi.fn(),
 }));
 
+vi.mock('@/lib/time', () => ({
+  now: () => new Date('2026-04-04T09:00:00.000Z'),
+}));
+
 vi.mock('@/lib/services/profiles.service', () => ({
   listUsers: vi.fn(),
 }));
@@ -22,8 +26,7 @@ vi.mock('@/lib/services/departments.service', () => ({
 }));
 
 vi.mock('@/lib/services/attendance.service', () => ({
-  getAllLogsForDate: vi.fn(),
-  getMonthlyLogs: vi.fn(),
+  getTeamAttendanceDay: vi.fn(),
   subscribeToAttendanceLogs: vi.fn(() => () => {}),
 }));
 
@@ -36,6 +39,11 @@ const profilesService = await import('@/lib/services/profiles.service');
 const departmentsService = await import('@/lib/services/departments.service');
 const attendanceService = await import('@/lib/services/attendance.service');
 const requestsService = await import('@/lib/services/requests.service');
+
+function LocationDisplay() {
+  const location = useLocation();
+  return <div data-testid="location-display">{`${location.pathname}${location.search}`}</div>;
+}
 
 describe('AdminDashboard', () => {
   beforeEach(() => {
@@ -100,51 +108,94 @@ describe('AdminDashboard', () => {
       },
     ] as any);
 
-    vi.mocked(attendanceService.getAllLogsForDate).mockResolvedValue([
+    vi.mocked(attendanceService.getTeamAttendanceDay).mockResolvedValue([
       {
-        id: 'log-1',
-        org_id: 'org-1',
-        user_id: 'emp-1',
+        userId: 'emp-1',
+        nameAr: 'علي',
+        employeeId: 'EMP-001',
+        role: 'employee',
+        avatarUrl: null,
+        departmentId: 'dept-1',
+        departmentNameAr: 'الأخبار',
         date: '2026-04-04',
-        check_in_time: '08:05',
-        check_out_time: null,
-        status: 'present',
-        auto_punch_out: false,
+        effectiveStatus: 'present',
+        displayStatus: 'present',
+        firstCheckIn: '08:05',
+        lastCheckOut: null,
+        totalWorkMinutes: 60,
+        totalOvertimeMinutes: 0,
+        hasOvertime: false,
+        sessionCount: 1,
+        isCheckedInNow: true,
+        hasAutoPunchOut: false,
+        needsReview: false,
+        isShortDay: false,
       },
       {
-        id: 'log-2',
-        org_id: 'org-1',
-        user_id: 'emp-2',
+        userId: 'emp-2',
+        nameAr: 'منى',
+        employeeId: 'EMP-002',
+        role: 'employee',
+        avatarUrl: null,
+        departmentId: 'dept-1',
+        departmentNameAr: 'الأخبار',
         date: '2026-04-04',
-        check_in_time: '08:40',
-        check_out_time: null,
-        status: 'late',
-        auto_punch_out: false,
+        effectiveStatus: 'late',
+        displayStatus: 'late',
+        firstCheckIn: '08:40',
+        lastCheckOut: null,
+        totalWorkMinutes: 60,
+        totalOvertimeMinutes: 0,
+        hasOvertime: false,
+        sessionCount: 1,
+        isCheckedInNow: true,
+        hasAutoPunchOut: false,
+        needsReview: false,
+        isShortDay: false,
+      },
+      {
+        userId: 'emp-3',
+        nameAr: 'عمر',
+        employeeId: 'EMP-003',
+        role: 'employee',
+        avatarUrl: null,
+        departmentId: 'dept-1',
+        departmentNameAr: 'الأخبار',
+        date: '2026-04-04',
+        effectiveStatus: 'overtime_only',
+        displayStatus: 'overtime_only',
+        firstCheckIn: '18:00',
+        lastCheckOut: '20:00',
+        totalWorkMinutes: 120,
+        totalOvertimeMinutes: 120,
+        hasOvertime: true,
+        sessionCount: 1,
+        isCheckedInNow: false,
+        hasAutoPunchOut: false,
+        needsReview: false,
+        isShortDay: false,
       },
     ] as any);
-
-    vi.mocked(attendanceService.getMonthlyLogs).mockResolvedValue([]);
     vi.mocked(requestsService.getAllPendingRequests).mockResolvedValue([]);
   });
 
-  // TODO: Re-enable after summary cards/drilldown UX rework stabilizes.
-  it.skip('shows a filtered today drilldown when a summary card is clicked', async () => {
+  it('navigates to team attendance with the matching live filter when a summary card is clicked', async () => {
     render(
       <MemoryRouter>
         <AdminDashboard />
+        <LocationDisplay />
       </MemoryRouter>
     );
 
     await screen.findByText('ملخص اليوم');
+    expect(screen.getByRole('button', { name: /غائبون/i })).toHaveTextContent('1');
 
     fireEvent.click(screen.getByRole('button', { name: /غائبون/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('تفاصيل غائب اليوم')).toBeInTheDocument();
-      expect(screen.getByText('عمر')).toBeInTheDocument();
+      expect(screen.getByTestId('location-display')).toHaveTextContent(
+        '/team-attendance?mode=live&date=2026-04-04&filter=absent'
+      );
     });
-
-    expect(screen.queryByText('علي')).not.toBeInTheDocument();
-    expect(screen.queryByText('منى')).not.toBeInTheDocument();
   });
 });

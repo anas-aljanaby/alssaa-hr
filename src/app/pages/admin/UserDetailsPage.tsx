@@ -24,7 +24,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
-import type { AttendanceLog, MonthlyStats, MonthDaySummary } from '@/lib/services/attendance.service';
+import type { AttendanceLog, MonthlyStats, MonthDaySummary, TodayRecord } from '@/lib/services/attendance.service';
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
@@ -51,6 +51,14 @@ import {
 import { getStatusTheme } from '../../components/attendance/attendanceStatusTheme';
 import { StatCard } from '../../components/shared/StatCard';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
+import {
+  getStatusConfig,
+  resolveAttendanceDayState,
+  resolveAttendanceDisplayStatus,
+  type DisplayStatus,
+  type LivePresence,
+} from '@/shared/attendance';
+import { StatusBadge } from '@/shared/components';
 
 
 function formatDayAndMonth(date: string) {
@@ -98,6 +106,58 @@ function getDisplayEmail(email: string | null): string {
   return value && value.length > 0 ? value : '—';
 }
 
+function getLivePresenceForTodayRecord(todayRecord: TodayRecord): LivePresence {
+  if (todayRecord.sessions?.some((session) => !session.check_out_time)) return 'checked_in';
+  if ((todayRecord.sessions?.length ?? 0) > 0) return 'checked_out';
+  return 'no_session';
+}
+
+function getDayStateForTodayRecord(todayRecord: TodayRecord, at: Date) {
+  const dayOfWeek = at.getDay();
+  const isOffDay = todayRecord.shift
+    ? (todayRecord.shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek)
+    : false;
+  const hasOvertime =
+    todayRecord.summary?.effective_status === 'overtime_only' ||
+    (todayRecord.summary?.total_overtime_minutes ?? 0) > 0 ||
+    todayRecord.sessions?.some((session) => session.is_overtime) === true;
+
+  if (isOffDay) {
+    return {
+      dayStatus: 'weekend' as const,
+      hasOvertime,
+    };
+  }
+
+  return {
+    ...resolveAttendanceDayState(todayRecord.summary?.effective_status),
+    hasOvertime,
+  };
+}
+
+function isWithinShiftWindow(todayRecord: TodayRecord, at: Date): boolean {
+  if (!todayRecord.shift) return false;
+  const dayOfWeek = at.getDay();
+  if ((todayRecord.shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek)) return false;
+
+  const currentMinutes = at.getHours() * 60 + at.getMinutes();
+  const [endHour, endMinute] = todayRecord.shift.workEndTime.split(':').map(Number);
+  const shiftEndMinutes =
+    (endHour ?? 0) * 60 +
+    (endMinute ?? 0) +
+    todayRecord.shift.bufferMinutesAfterShift;
+
+  return currentMinutes <= shiftEndMinutes;
+}
+
+function resolveTodayDisplayStatus(todayRecord: TodayRecord, at: Date): DisplayStatus {
+  return resolveAttendanceDisplayStatus(
+    getDayStateForTodayRecord(todayRecord, at),
+    getLivePresenceForTodayRecord(todayRecord),
+    { isWithinShiftWindow: isWithinShiftWindow(todayRecord, at) }
+  );
+}
+
 export function UserDetailsPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -106,7 +166,7 @@ export function UserDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [department, setDepartment] = useState<Department | null>(null);
-  const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
+  const [todayRecord, setTodayRecord] = useState<TodayRecord | null>(null);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
   const [allTimeSummaries, setAllTimeSummaries] = useState<MonthDaySummary[]>([]);
@@ -305,9 +365,9 @@ export function UserDetailsPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const [prof, log, balance, reqs, audit, atStats, atSummaries, atRangeSummaries] = await Promise.all([
+      const [prof, today, balance, reqs, audit, atStats, atSummaries, atRangeSummaries] = await Promise.all([
         profilesService.getUserById(userId),
-        attendanceService.getTodayLog(userId),
+        attendanceService.getAttendanceToday(userId),
         leaveBalanceService.getUserBalance(userId),
         requestsService.getUserRequests(userId),
         auditService.getAuditLogsForTarget(userId),
@@ -316,7 +376,7 @@ export function UserDetailsPage() {
         attendanceService.getSummariesInRange(userId, dateFrom, dateTo),
       ]);
       setProfile(prof);
-      setTodayLog(log);
+      setTodayRecord(today);
       setLeaveBalance(balance);
       setUserRequests(reqs);
       setUserAuditLogs(audit.slice(0, 10));
@@ -375,6 +435,11 @@ export function UserDetailsPage() {
       ? userRequests
       : userRequests.filter((r) => r.status === requestFilter);
   const displayedSummaries = attendanceViewMode === 'all_time' ? allTimeSummaries : rangeSummaries;
+  const todayDisplayStatus = useMemo(
+    () => (todayRecord ? resolveTodayDisplayStatus(todayRecord, now()) : null),
+    [todayRecord]
+  );
+  const todayStatusConfig = todayDisplayStatus ? getStatusConfig(todayDisplayStatus) : null;
   const workingDaySummaries = displayedSummaries.filter(
     (d) => d.status != null && d.status !== 'future' && d.status !== 'weekend'
   );
@@ -674,35 +739,15 @@ export function UserDetailsPage() {
         <div className="space-y-3">
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
             <h3 className="text-sm text-gray-600 mb-3">حالة اليوم</h3>
-            {todayLog ? (
+            {todayDisplayStatus && todayStatusConfig ? (
               <div
-                className={`p-3 rounded-xl ${
-                  todayLog.status === 'present'
-                    ? 'bg-emerald-50 border border-emerald-100'
-                    : todayLog.status === 'late'
-                      ? 'bg-amber-50 border border-amber-100'
-                      : todayLog.status === 'on_leave'
-                        ? 'bg-blue-50 border border-blue-100'
-                        : 'bg-red-50 border border-red-100'
-                }`}
+                className={`p-3 rounded-xl border ${todayStatusConfig.bgColor} ${todayStatusConfig.borderColor}`}
               >
                 <div className="flex items-center justify-between">
-                  <span
-                    className={`text-sm ${
-                      todayLog.status === 'present'
-                        ? 'text-emerald-700'
-                        : todayLog.status === 'late'
-                          ? 'text-amber-700'
-                          : todayLog.status === 'on_leave'
-                            ? 'text-blue-700'
-                            : 'text-red-700'
-                    }`}
-                  >
-                    {getAttendanceStatusAr(todayLog.status)}
-                  </span>
-                  {todayLog.check_in_time && (
+                  <StatusBadge status={todayDisplayStatus} />
+                  {todayRecord?.log?.check_in_time && (
                     <span className="text-xs text-gray-600" dir="ltr">
-                      دخول: {todayLog.check_in_time}
+                      دخول: {todayRecord.log.check_in_time}
                     </span>
                   )}
                 </div>

@@ -192,9 +192,13 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         profile.work_start_time &&
         profile.work_end_time;
 
-      const workEndTime = hasCustomSchedule ? profile!.work_end_time! : policy?.work_end_time ?? '16:00';
+      const workEndTime = hasCustomSchedule ? profile!.work_end_time! : policy?.work_end_time ?? null;
       const bufferMinutes = policy?.auto_punch_out_buffer_minutes ?? 30;
       const weeklyOff = policy?.weekly_off_days ?? [5, 6];
+
+      // No user schedule + no org policy means no configured shift, so this
+      // safety-net job should not invent a fallback shift end and auto-close it.
+      if (!workEndTime) continue;
 
       const isWorkingDay = hasCustomSchedule
         ? (profile!.work_days ?? []).includes(dayOfWeek)

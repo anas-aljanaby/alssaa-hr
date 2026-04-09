@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useAppTopBar } from '@/app/contexts/AppTopBarContext';
@@ -20,10 +21,29 @@ import type {
 } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
 import {
+  TEAM_ATTENDANCE_DATE_CHIPS,
+  TEAM_ATTENDANCE_LIVE_CHIPS,
+  countByChip,
+  getChipsForRole,
+  getStatusConfig,
+  resolveAttendanceDayState,
+  resolveAttendanceDisplayStatus,
+  resolveDisplayStatus,
+  type DisplayStatus,
+  type LivePresence,
+  type UserRole,
+} from '@/shared/attendance';
+import { Badge } from '@/app/components/ui/badge';
+import {
+  StatusBadge,
+  StatusCountChips,
+} from '@/shared/components';
+import {
   Building2,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
+  Clock3,
   RefreshCcw,
   ShieldAlert,
 } from 'lucide-react';
@@ -34,30 +54,9 @@ const LIVE_REFRESH_INTERVAL_MS = 45_000;
 const MOBILE_TOP_BAR_OFFSET = 'var(--mobile-top-bar-offset, 3.5rem)';
 
 type TeamAttendanceMode = 'live' | 'date';
-type BoardTone = 'green' | 'amber' | 'red' | 'blue' | 'gray';
 type BoardScope = 'full' | 'generic';
 type BoardGroup = 'present' | 'not_present';
-type AttendanceStatusFilter =
-  | 'all'
-  | 'present_now'
-  | 'not_present_now'
-  | 'late'
-  | 'absent'
-  | 'on_leave'
-  | 'finished'
-  | 'present_day'
-  | 'not_present_day';
-
-type BoardRowStatus =
-  | 'present_now'
-  | 'not_present_now'
-  | 'late'
-  | 'absent'
-  | 'on_leave'
-  | 'finished'
-  | 'not_yet_punched'
-  | 'present_day'
-  | 'not_present_day';
+type AttendanceStatusFilter = string;
 
 interface AttendanceBoardRow {
   userId: string;
@@ -67,10 +66,8 @@ interface AttendanceBoardRow {
   departmentNameAr: string;
   scope: BoardScope;
   group: BoardGroup;
-  statusKey: BoardRowStatus;
-  statusLabel: string;
-  statusTone: BoardTone;
-  filterKeys: AttendanceStatusFilter[];
+  displayStatus: DisplayStatus;
+  hasOvertime: boolean;
   metaText: string | null;
   factText: string | null;
   canViewDetailedStatus: boolean;
@@ -88,13 +85,6 @@ interface BoardSection {
   notPresentRows: AttendanceBoardRow[];
   defaultExpanded: boolean;
   color: string | null;
-}
-
-interface StatusChipOption {
-  key: AttendanceStatusFilter;
-  label: string;
-  tone: BoardTone;
-  count: number;
 }
 
 interface BoardDataState {
@@ -134,6 +124,28 @@ function formatSelectedDateLabel(date: string): string {
   });
 }
 
+function parseTeamAttendanceMode(raw: string | null): TeamAttendanceMode {
+  return raw === 'date' ? 'date' : 'live';
+}
+
+function isValidDateParam(raw: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw);
+}
+
+function normalizeTeamAttendanceDate(raw: string | null, todayDate: string): string {
+  if (!raw || !isValidDateParam(raw) || raw > todayDate) {
+    return todayDate;
+  }
+
+  return raw;
+}
+
+function parseStatusFilterParam(raw: string | null): AttendanceStatusFilter {
+  if (!raw) return 'all';
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : 'all';
+}
+
 function roleMeta(role: AttendanceBoardRow['role']): string | null {
   if (role === 'manager') return 'مدير';
   return null;
@@ -144,135 +156,111 @@ function rowMetaText(role: AttendanceBoardRow['role']): string | null {
   return meta;
 }
 
-function toneClasses(tone: BoardTone): string {
-  const classMap: Record<BoardTone, string> = {
-    green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    amber: 'bg-amber-50 text-amber-700 border-amber-200',
-    red: 'bg-rose-50 text-rose-700 border-rose-200',
-    blue: 'bg-blue-50 text-blue-700 border-blue-200',
-    gray: 'bg-slate-100 text-slate-700 border-slate-200',
-  };
-  return classMap[tone];
+function mapDetailedLivePresence(row: TeamAttendanceDayRow): LivePresence {
+  if (row.isCheckedInNow) return 'checked_in';
+  if (row.sessionCount > 0 || !!row.firstCheckIn || !!row.lastCheckOut) return 'checked_out';
+  return 'no_session';
 }
 
-function resolveDetailedLiveStatus(row: TeamAttendanceDayRow): Exclude<
-  BoardRowStatus,
-  'not_present_now' | 'present_day' | 'not_present_day'
-> {
-  if (row.isCheckedInNow && row.displayStatus === 'late') return 'late';
-  if (row.isCheckedInNow) return 'present_now';
-  if (row.displayStatus === 'on_leave') return 'on_leave';
-  if (row.displayStatus === 'absent') return 'absent';
-  if (row.firstCheckIn || row.lastCheckOut || row.sessionCount > 0) return 'finished';
-  return 'not_yet_punched';
+function isPresentGroup(displayStatus: DisplayStatus, mode: TeamAttendanceMode): boolean {
+  if (mode === 'live') {
+    return displayStatus === 'present_now' || displayStatus === 'late_now';
+  }
+
+  return displayStatus === 'present' || displayStatus === 'late';
 }
 
-function liveStatusLabel(status: BoardRowStatus): string {
-  switch (status) {
-    case 'present_now':
-      return 'موجود الآن';
+function sortRankForStatus(displayStatus: DisplayStatus, mode: TeamAttendanceMode): number {
+  if (mode === 'live') {
+    switch (displayStatus) {
+      case 'late_now':
+        return 0;
+      case 'present_now':
+        return 1;
+      case 'absent':
+      case 'not_registered':
+        return 2;
+      case 'on_leave':
+        return 3;
+      case 'finished':
+        return 4;
+      case 'weekend':
+      case 'holiday':
+      default:
+        return 5;
+    }
+  }
+
+  switch (displayStatus) {
     case 'late':
-      return 'متأخر';
-    case 'absent':
-      return 'غائب';
-    case 'on_leave':
-      return 'إجازة';
-    case 'finished':
-      return 'أنهى الدوام';
-    case 'not_yet_punched':
-      return 'لم يسجل بعد';
-    case 'not_present_now':
-      return 'غير موجود الآن';
+      return 0;
+    case 'present':
+      return 1;
+    case 'absent_day':
+      return 2;
+    case 'on_leave_day':
+      return 3;
+    case 'weekend':
+    case 'holiday':
     default:
-      return 'موجود الآن';
+      return 4;
   }
 }
 
-function liveStatusTone(status: BoardRowStatus): BoardTone {
-  switch (status) {
-    case 'present_now':
-      return 'green';
-    case 'late':
-      return 'amber';
-    case 'absent':
-      return 'red';
-    case 'on_leave':
-      return 'blue';
-    case 'finished':
-    case 'not_yet_punched':
-    case 'not_present_now':
-      return 'gray';
-    default:
-      return 'gray';
-  }
+function resolveDetailedLiveDisplayStatus(row: TeamAttendanceDayRow): DisplayStatus {
+  return resolveAttendanceDisplayStatus(
+    {
+      ...resolveAttendanceDayState(row.displayStatus),
+      hasOvertime: row.hasOvertime,
+    },
+    mapDetailedLivePresence(row),
+    { isWithinShiftWindow: row.displayStatus == null }
+  );
 }
 
-function dayStatusLabel(status: BoardRowStatus, isToday: boolean): string {
-  if (status === 'present_day') return isToday ? 'حضر اليوم' : 'حضر';
-  if (status === 'late') return isToday ? 'تأخر اليوم' : 'تأخر';
-  if (status === 'absent') return isToday ? 'غائب اليوم' : 'غائب';
-  if (status === 'on_leave') return isToday ? 'إجازة اليوم' : 'إجازة';
-  return isToday ? 'غير حاضر اليوم' : 'غير حاضر';
-}
-
-function dayStatusTone(status: BoardRowStatus): BoardTone {
-  switch (status) {
-    case 'present_day':
-      return 'green';
-    case 'late':
-      return 'amber';
-    case 'absent':
-      return 'red';
-    case 'on_leave':
-      return 'blue';
-    case 'not_present_day':
-      return 'gray';
-    default:
-      return 'gray';
-  }
+function resolveDetailedDateDisplayStatus(row: TeamAttendanceDayRow): DisplayStatus {
+  return resolveAttendanceDisplayStatus(
+    {
+      ...resolveAttendanceDayState(row.displayStatus),
+      hasOvertime: row.hasOvertime,
+    },
+    null,
+    { isWithinShiftWindow: false }
+  );
 }
 
 function buildDetailSummary(
   row: TeamAttendanceDayRow,
-  statusLabel: string,
-  statusTone: BoardTone
+  displayStatus: DisplayStatus
 ): DayDetailsSheetSummary {
+  const config = getStatusConfig(displayStatus);
   return {
     employeeName: row.nameAr,
     departmentName: row.departmentNameAr ?? 'بدون قسم',
-    statusLabel,
-    statusTone,
+    statusLabel: config.label,
+    statusTone:
+      displayStatus === 'present_now' || displayStatus === 'present'
+        ? 'green'
+        : displayStatus === 'late_now' || displayStatus === 'late'
+          ? 'amber'
+          : displayStatus === 'absent' || displayStatus === 'absent_day'
+            ? 'red'
+            : displayStatus === 'on_leave' || displayStatus === 'on_leave_day'
+              ? 'blue'
+              : 'gray',
   };
 }
 
 function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
-  const statusKey = resolveDetailedLiveStatus(row);
-  const group: BoardGroup =
-    statusKey === 'present_now' || statusKey === 'late' ? 'present' : 'not_present';
-  const statusLabel = liveStatusLabel(statusKey);
-  const statusTone = liveStatusTone(statusKey);
-  const filterKeys: AttendanceStatusFilter[] = [
-    group === 'present' ? 'present_now' : 'not_present_now',
-  ];
-
-  if (statusKey === 'late') filterKeys.push('late');
-  if (statusKey === 'absent') filterKeys.push('absent');
-  if (statusKey === 'on_leave') filterKeys.push('on_leave');
-  if (statusKey === 'finished') filterKeys.push('finished');
+  const displayStatus = resolveDetailedLiveDisplayStatus(row);
+  const group: BoardGroup = isPresentGroup(displayStatus, 'live') ? 'present' : 'not_present';
 
   let factText: string | null = null;
-  if ((statusKey === 'present_now' || statusKey === 'late') && row.firstCheckIn) {
+  if ((displayStatus === 'present_now' || displayStatus === 'late_now') && row.firstCheckIn) {
     factText = `دخل ${formatWallTime(row.firstCheckIn)}`;
-  } else if (statusKey === 'finished' && row.lastCheckOut) {
+  } else if (displayStatus === 'finished' && row.lastCheckOut) {
     factText = `غادر ${formatWallTime(row.lastCheckOut)}`;
   }
-
-  let sortRank = 5;
-  if (statusKey === 'late') sortRank = 0;
-  else if (statusKey === 'present_now') sortRank = 1;
-  else if (statusKey === 'absent' || statusKey === 'not_yet_punched') sortRank = 2;
-  else if (statusKey === 'on_leave') sortRank = 3;
-  else if (statusKey === 'finished') sortRank = 4;
 
   return {
     userId: row.userId,
@@ -282,47 +270,21 @@ function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
     scope: 'full',
     group,
-    statusKey,
-    statusLabel,
-    statusTone,
-    filterKeys,
+    displayStatus,
+    hasOvertime: row.hasOvertime,
     metaText: rowMetaText(row.role),
     factText,
     canViewDetailedStatus: true,
     canViewTimes: true,
     canOpenDetailsSheet: true,
-    detailSummary: buildDetailSummary(row, statusLabel, statusTone),
-    sortRank,
+    detailSummary: buildDetailSummary(row, displayStatus),
+    sortRank: sortRankForStatus(displayStatus, 'live'),
   };
 }
 
-function buildDetailedDayRow(row: TeamAttendanceDayRow, isToday: boolean): AttendanceBoardRow {
-  const isPresent =
-    row.displayStatus === 'present' ||
-    row.displayStatus === 'late' ||
-    row.displayStatus === 'overtime_only' ||
-    row.displayStatus === 'overtime_offday' ||
-    row.sessionCount > 0;
-
-  let statusKey: BoardRowStatus = isPresent ? 'present_day' : 'not_present_day';
-  if (row.displayStatus === 'late') statusKey = 'late';
-  else if (row.displayStatus === 'absent') statusKey = 'absent';
-  else if (row.displayStatus === 'on_leave') statusKey = 'on_leave';
-
-  const group: BoardGroup =
-    statusKey === 'present_day' || statusKey === 'late' ? 'present' : 'not_present';
-  const filterKeys: AttendanceStatusFilter[] = [
-    group === 'present' ? 'present_day' : 'not_present_day',
-  ];
-
-  if (statusKey === 'late') filterKeys.push('late');
-  if (statusKey === 'absent') filterKeys.push('absent');
-  if (statusKey === 'on_leave') filterKeys.push('on_leave');
-
-  let sortRank = 3;
-  if (statusKey === 'late') sortRank = 0;
-  else if (statusKey === 'present_day') sortRank = 1;
-  else if (statusKey === 'absent') sortRank = 2;
+function buildDetailedDayRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
+  const displayStatus = resolveDetailedDateDisplayStatus(row);
+  const group: BoardGroup = isPresentGroup(displayStatus, 'date') ? 'present' : 'not_present';
 
   let factText: string | null = null;
   if (row.firstCheckIn) {
@@ -339,26 +301,24 @@ function buildDetailedDayRow(row: TeamAttendanceDayRow, isToday: boolean): Atten
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
     scope: 'full',
     group,
-    statusKey,
-    statusLabel: dayStatusLabel(statusKey, isToday),
-    statusTone: dayStatusTone(statusKey),
-    filterKeys,
+    displayStatus,
+    hasOvertime: row.hasOvertime,
     metaText: rowMetaText(row.role),
     factText,
     canViewDetailedStatus: true,
     canViewTimes: true,
     canOpenDetailsSheet: true,
-    detailSummary: buildDetailSummary(
-      row,
-      dayStatusLabel(statusKey, isToday),
-      dayStatusTone(statusKey)
-    ),
-    sortRank,
+    detailSummary: buildDetailSummary(row, displayStatus),
+    sortRank: sortRankForStatus(displayStatus, 'date'),
   };
 }
 
 function buildGenericLiveRow(row: SafeAvailabilityRow): AttendanceBoardRow {
-  const isPresent = row.availabilityState === 'available_now';
+  const displayStatus = resolveDisplayStatus(
+    row.availabilityState === 'available_now' ? 'present' : 'absent',
+    row.availabilityState === 'available_now' ? 'checked_in' : 'no_session',
+    { isWithinShiftWindow: false }
+  );
 
   return {
     userId: row.userId,
@@ -367,24 +327,25 @@ function buildGenericLiveRow(row: SafeAvailabilityRow): AttendanceBoardRow {
     departmentId: row.departmentId,
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
     scope: 'generic',
-    group: isPresent ? 'present' : 'not_present',
-    statusKey: isPresent ? 'present_now' : 'not_present_now',
-    statusLabel: isPresent ? 'موجود الآن' : 'غير موجود الآن',
-    statusTone: isPresent ? 'green' : 'gray',
-    filterKeys: [isPresent ? 'present_now' : 'not_present_now'],
+    group: isPresentGroup(displayStatus, 'live') ? 'present' : 'not_present',
+    displayStatus,
+    hasOvertime: false,
     metaText: rowMetaText(row.role),
     factText: null,
     canViewDetailedStatus: false,
     canViewTimes: false,
     canOpenDetailsSheet: false,
     detailSummary: null,
-    sortRank: isPresent ? 0 : 1,
+    sortRank: sortRankForStatus(displayStatus, 'live'),
   };
 }
 
-function buildGenericDayRow(row: SafeAttendanceDayRow, isToday: boolean): AttendanceBoardRow {
-  const isPresent = row.attendanceState === 'present_on_date';
-  const statusKey: BoardRowStatus = isPresent ? 'present_day' : 'not_present_day';
+function buildGenericDayRow(row: SafeAttendanceDayRow): AttendanceBoardRow {
+  const displayStatus = resolveDisplayStatus(
+    row.attendanceState === 'present_on_date' ? 'present' : 'absent',
+    null,
+    { isWithinShiftWindow: false }
+  );
 
   return {
     userId: row.userId,
@@ -393,24 +354,21 @@ function buildGenericDayRow(row: SafeAttendanceDayRow, isToday: boolean): Attend
     departmentId: row.departmentId,
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
     scope: 'generic',
-    group: isPresent ? 'present' : 'not_present',
-    statusKey,
-    statusLabel: dayStatusLabel(statusKey, isToday),
-    statusTone: dayStatusTone(statusKey),
-    filterKeys: [isPresent ? 'present_day' : 'not_present_day'],
+    group: isPresentGroup(displayStatus, 'date') ? 'present' : 'not_present',
+    displayStatus,
+    hasOvertime: false,
     metaText: rowMetaText(row.role),
     factText: null,
     canViewDetailedStatus: false,
     canViewTimes: false,
     canOpenDetailsSheet: false,
     detailSummary: null,
-    sortRank: isPresent ? 0 : 1,
+    sortRank: sortRankForStatus(displayStatus, 'date'),
   };
 }
 
 function buildBoardRows(params: {
   mode: TeamAttendanceMode;
-  isTodayInDateMode: boolean;
   detailedRows: TeamAttendanceDayRow[];
   liveAvailabilityRows: SafeAvailabilityRow[];
   dayAvailabilityRows: SafeAttendanceDayRow[];
@@ -427,47 +385,15 @@ function buildBoardRows(params: {
     });
   } else {
     params.dayAvailabilityRows.forEach((row) => {
-      rowsByUser.set(row.userId, buildGenericDayRow(row, params.isTodayInDateMode));
+      rowsByUser.set(row.userId, buildGenericDayRow(row));
     });
 
     params.detailedRows.forEach((row) => {
-      rowsByUser.set(row.userId, buildDetailedDayRow(row, params.isTodayInDateMode));
+      rowsByUser.set(row.userId, buildDetailedDayRow(row));
     });
   }
 
   return Array.from(rowsByUser.values());
-}
-
-function filterCount(rows: AttendanceBoardRow[], key: AttendanceStatusFilter): number {
-  if (key === 'all') return rows.length;
-  return rows.filter((row) => row.filterKeys.includes(key)).length;
-}
-
-function buildChipOptions(params: {
-  rows: AttendanceBoardRow[];
-  mode: TeamAttendanceMode;
-}): StatusChipOption[] {
-  const blueprint: Array<Omit<StatusChipOption, 'count'>> = params.mode === 'live'
-    ? [
-        { key: 'all', label: 'الكل', tone: 'gray' },
-        { key: 'present_now', label: 'موجودون الآن', tone: 'green' },
-        { key: 'late', label: 'متأخر', tone: 'amber' },
-        { key: 'absent', label: 'غائب', tone: 'red' },
-        { key: 'on_leave', label: 'إجازة', tone: 'blue' },
-        { key: 'finished', label: 'أنهى الدوام', tone: 'gray' },
-      ]
-    : [
-        { key: 'all', label: 'الكل', tone: 'gray' },
-        { key: 'present_day', label: 'حضر', tone: 'green' },
-        { key: 'late', label: 'تأخر', tone: 'amber' },
-        { key: 'absent', label: 'غائب', tone: 'red' },
-        { key: 'on_leave', label: 'إجازة', tone: 'blue' },
-      ];
-
-  return blueprint.map((option) => ({
-    ...option,
-    count: filterCount(params.rows, option.key),
-  }));
 }
 
 function compareRows(a: AttendanceBoardRow, b: AttendanceBoardRow): number {
@@ -480,12 +406,10 @@ function buildSectionSummary(
   mode: TeamAttendanceMode
 ): string {
   const isDetailed = rows.every((row) => row.scope === 'full');
-  const presentCount =
-    mode === 'live' ? filterCount(rows, 'present_now') : filterCount(rows, 'present_day');
-  const notPresentCount =
-    mode === 'live'
-      ? rows.filter((row) => row.group === 'not_present').length
-      : filterCount(rows, 'not_present_day');
+  const liveChips = countByChip(TEAM_ATTENDANCE_LIVE_CHIPS, rows);
+  const dateChips = countByChip(TEAM_ATTENDANCE_DATE_CHIPS, rows);
+  const presentCount = mode === 'live' ? (liveChips.present_now ?? 0) : (dateChips.present ?? 0);
+  const notPresentCount = rows.filter((row) => row.group === 'not_present').length;
 
   if (!isDetailed) {
     return mode === 'live'
@@ -493,10 +417,10 @@ function buildSectionSummary(
       : `${presentCount} حضروا • ${notPresentCount} غير حاضرين`;
   }
 
-  const lateCount = filterCount(rows, 'late');
-  const absentCount = filterCount(rows, 'absent');
-  const leaveCount = filterCount(rows, 'on_leave');
-  const finishedCount = filterCount(rows, 'finished');
+  const lateCount = mode === 'live' ? (liveChips.late ?? 0) : (dateChips.late ?? 0);
+  const absentCount = mode === 'live' ? (liveChips.absent ?? 0) : (dateChips.absent ?? 0);
+  const leaveCount = mode === 'live' ? (liveChips.on_leave ?? 0) : (dateChips.on_leave ?? 0);
+  const finishedCount = liveChips.finished ?? 0;
 
   const segments: string[] = [];
   if (mode === 'live') {
@@ -638,49 +562,6 @@ function EmptyState({
   );
 }
 
-function StatusCountChips({
-  options,
-  activeFilter,
-  onChange,
-}: {
-  options: StatusChipOption[];
-  activeFilter: AttendanceStatusFilter;
-  onChange: (value: AttendanceStatusFilter) => void;
-}) {
-  return (
-    <div className="overflow-x-auto pb-1">
-      <div className="flex min-w-max gap-2">
-        {options.map((option) => {
-          const active = option.key === activeFilter;
-          return (
-            <button
-              key={option.key}
-              type="button"
-              onClick={() => onChange(option.key)}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap transition-colors',
-                active
-                  ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                  : cn('bg-white text-gray-700', toneClasses(option.tone))
-              )}
-            >
-              <span>{option.label}</span>
-              <span
-                className={cn(
-                  'inline-flex min-w-5 items-center justify-center rounded-full px-1 text-[10px]',
-                  active ? 'bg-white/20 text-white' : 'bg-white/80 text-gray-700'
-                )}
-              >
-                {option.count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function EmployeeAttendanceRow({
   row,
   onOpenDetails,
@@ -688,6 +569,12 @@ function EmployeeAttendanceRow({
   row: AttendanceBoardRow;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
+  const showOvertimeIndicator =
+    row.hasOvertime &&
+    (row.displayStatus === 'absent' ||
+      row.displayStatus === 'absent_day' ||
+      row.displayStatus === 'weekend');
+
   const content = (
     <div className="flex items-start justify-between gap-3 py-3">
       <div className="min-w-0 flex-1">
@@ -702,9 +589,13 @@ function EmployeeAttendanceRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <span className={cn('rounded-full border px-2.5 py-1 text-[11px]', toneClasses(row.statusTone))}>
-          {row.statusLabel}
-        </span>
+        {showOvertimeIndicator ? (
+          <Badge className="border-violet-200 bg-violet-50 text-violet-700">
+            <Clock3 className="h-3 w-3" />
+            عمل إضافي
+          </Badge>
+        ) : null}
+        <StatusBadge status={row.displayStatus} size="sm" />
         {row.canOpenDetailsSheet ? (
           <ChevronLeft className="h-4 w-4 text-gray-400" />
         ) : null}
@@ -809,17 +700,21 @@ function DepartmentAttendanceSection({
 
 export function TeamAttendancePage() {
   const { currentUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const today = useMemo(() => now(), []);
   const todayDate = toDateInputValue(today);
   const yesterdayDate = shiftDays(today, -1);
+  const initialMode = parseTeamAttendanceMode(searchParams.get('mode'));
+  const initialSelectedDate = normalizeTeamAttendanceDate(searchParams.get('date'), todayDate);
+  const initialStatusFilter = parseStatusFilterParam(searchParams.get('filter'));
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [managerDepartmentId, setManagerDepartmentId] = useState<string | null>(null);
   const [metaReady, setMetaReady] = useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState(ALL_DEPARTMENTS);
-  const [mode, setMode] = useState<TeamAttendanceMode>('live');
-  const [selectedDate, setSelectedDate] = useState(todayDate);
-  const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>('all');
+  const [mode, setMode] = useState<TeamAttendanceMode>(initialMode);
+  const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
+  const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>(initialStatusFilter);
   const [boardData, setBoardData] = useState<BoardDataState>({
     detailedRows: [],
     liveAvailabilityRows: [],
@@ -831,6 +726,20 @@ export function TeamAttendancePage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [selectedDetailRow, setSelectedDetailRow] = useState<AttendanceBoardRow | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const nextMode = parseTeamAttendanceMode(searchParams.get('mode'));
+    const nextSelectedDate = normalizeTeamAttendanceDate(searchParams.get('date'), todayDate);
+    const nextStatusFilter = parseStatusFilterParam(searchParams.get('filter'));
+
+    setMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+    setSelectedDate((currentDate) =>
+      currentDate === nextSelectedDate ? currentDate : nextSelectedDate
+    );
+    setStatusFilter((currentFilter) =>
+      currentFilter === nextStatusFilter ? currentFilter : nextStatusFilter
+    );
+  }, [searchParams, todayDate]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -876,6 +785,7 @@ export function TeamAttendancePage() {
   const selectedDepartmentDbId =
     selectedDepartmentId === ALL_DEPARTMENTS ? null : selectedDepartmentId;
   const isTodayInDateMode = selectedDate === todayDate;
+  const activeRole = (currentUser?.role ?? 'employee') as UserRole;
 
   const loadBoard = useCallback(
     async (silent = false) => {
@@ -1001,33 +911,58 @@ export function TeamAttendancePage() {
     () =>
       buildBoardRows({
         mode,
-        isTodayInDateMode,
         detailedRows: boardData.detailedRows,
         liveAvailabilityRows: boardData.liveAvailabilityRows,
         dayAvailabilityRows: boardData.dayAvailabilityRows,
       }),
-    [boardData.dayAvailabilityRows, boardData.detailedRows, boardData.liveAvailabilityRows, isTodayInDateMode, mode]
+    [boardData.dayAvailabilityRows, boardData.detailedRows, boardData.liveAvailabilityRows, mode]
   );
 
-  const chipOptions = useMemo(
+  const activeChips = useMemo(
     () =>
-      buildChipOptions({
-        rows: boardRows,
-        mode,
-      }),
-    [boardRows, mode]
+      getChipsForRole(
+        mode === 'live' ? TEAM_ATTENDANCE_LIVE_CHIPS : TEAM_ATTENDANCE_DATE_CHIPS,
+        activeRole
+      ),
+    [activeRole, mode]
+  );
+
+  const chipCounts = useMemo(
+    () => countByChip(activeChips, boardRows),
+    [activeChips, boardRows]
   );
 
   useEffect(() => {
-    if (!chipOptions.some((option) => option.key === statusFilter)) {
+    if (!activeChips.some((chip) => chip.key === statusFilter)) {
       setStatusFilter('all');
     }
-  }, [chipOptions, statusFilter]);
+  }, [activeChips, statusFilter]);
+
+  useEffect(() => {
+    const currentMode = searchParams.get('mode');
+    const currentDate = searchParams.get('date');
+    const currentFilter = searchParams.get('filter');
+
+    if (
+      currentMode === mode &&
+      currentDate === selectedDate &&
+      currentFilter === statusFilter
+    ) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('mode', mode);
+    nextParams.set('date', selectedDate);
+    nextParams.set('filter', statusFilter);
+    setSearchParams(nextParams, { replace: true });
+  }, [mode, searchParams, selectedDate, setSearchParams, statusFilter]);
 
   const filteredRows = useMemo(() => {
-    if (statusFilter === 'all') return boardRows;
-    return boardRows.filter((row) => row.filterKeys.includes(statusFilter));
-  }, [boardRows, statusFilter]);
+    const activeChip = activeChips.find((chip) => chip.key === statusFilter);
+    if (!activeChip || activeChip.matchStatuses.length === 0) return boardRows;
+    return boardRows.filter((row) => activeChip.matchStatuses.includes(row.displayStatus));
+  }, [activeChips, boardRows, statusFilter]);
 
   const sections = useMemo(
     () =>
@@ -1088,9 +1023,10 @@ export function TeamAttendancePage() {
       >
         <div className="rounded-3xl border border-gray-200 bg-white p-2 shadow-sm">
           <StatusCountChips
-            options={chipOptions}
-            activeFilter={statusFilter}
-            onChange={setStatusFilter}
+            chips={activeChips}
+            counts={chipCounts}
+            activeKey={statusFilter}
+            onSelect={setStatusFilter}
           />
         </div>
       </div>

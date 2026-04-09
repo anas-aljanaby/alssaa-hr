@@ -295,7 +295,49 @@ describe('attendance.service', () => {
         nameAr: 'منى',
         effectiveStatus: 'late',
         displayStatus: 'late',
+        hasOvertime: false,
         isCheckedInNow: true,
+      }),
+    ]);
+  });
+
+  it('getTeamAttendanceDay flags overtime rows', async () => {
+    vi.mocked(sb.rpc).mockResolvedValue({
+      data: [
+        {
+          user_id: 'u2',
+          name_ar: 'سالم',
+          employee_id: 'EMP-9',
+          role: 'employee',
+          avatar_url: null,
+          department_id: 'd1',
+          department_name_ar: 'الأخبار',
+          date: '2025-06-11',
+          effective_status: 'overtime_only',
+          display_status: 'overtime_only',
+          first_check_in: '18:00',
+          last_check_out: '20:00',
+          total_work_minutes: 120,
+          total_overtime_minutes: 120,
+          session_count: 1,
+          is_checked_in_now: false,
+          has_auto_punch_out: false,
+          needs_review: false,
+          is_short_day: false,
+        },
+      ],
+      error: null,
+    } as never);
+
+    const { getTeamAttendanceDay } = await import('./attendance.service');
+    const rows = await getTeamAttendanceDay({ date: '2025-06-11' });
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        userId: 'u2',
+        displayStatus: 'overtime_only',
+        totalOvertimeMinutes: 120,
+        hasOvertime: true,
       }),
     ]);
   });
@@ -330,15 +372,15 @@ describe('attendance.service', () => {
     expect(day.log?.date).toBe('2025-06-11');
   });
 
-  it('getLogsInRange returns rows', async () => {
+  it('getMonthlyLogs returns rows', async () => {
     sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
     sb.queueResult({ data: [logRow], error: null });
-    const { getLogsInRange } = await import('./attendance.service');
-    const logs = await getLogsInRange('u1', '2025-06-01', '2025-06-30');
+    const { getMonthlyLogs } = await import('./attendance.service');
+    const logs = await getMonthlyLogs('u1', 2025, 5);
     expect(logs).toHaveLength(1);
   });
 
-  it('getLogsInRange excludes logs before join date', async () => {
+  it('getMonthlyLogs excludes logs before join date', async () => {
     sb.queueResult({ data: { join_date: '2025-06-10' }, error: null });
     sb.queueResult({
       data: [
@@ -347,23 +389,8 @@ describe('attendance.service', () => {
       ],
       error: null,
     });
-    const { getLogsInRange } = await import('./attendance.service');
-    const logs = await getLogsInRange('u1', '2025-06-01', '2025-06-30');
-    expect(logs).toHaveLength(1);
-    expect(logs[0]?.id).toBe('new');
-  });
-
-  it('getAllUserLogs excludes logs before join date', async () => {
-    sb.queueResult({ data: { join_date: '2025-06-10' }, error: null });
-    sb.queueResult({
-      data: [
-        { ...logRow, id: 'old', date: '2025-06-08', status: 'absent' as const },
-        { ...logRow, id: 'new', date: '2025-06-11', status: 'present' as const },
-      ],
-      error: null,
-    });
-    const { getAllUserLogs } = await import('./attendance.service');
-    const logs = await getAllUserLogs('u1');
+    const { getMonthlyLogs } = await import('./attendance.service');
+    const logs = await getMonthlyLogs('u1', 2025, 5);
     expect(logs).toHaveLength(1);
     expect(logs[0]?.id).toBe('new');
   });
@@ -676,6 +703,49 @@ describe('attendance.service', () => {
       expect(r.overtimeRequest).not.toBeNull();
       expect(r.overtimeRequest?.session_id).toBe('sess-ot-split');
       expect(r.log.check_out_time).toBeDefined();
+    });
+  });
+
+  describe('runAutoPunchOut', () => {
+    beforeEach(() => {
+      vi.mocked(sb.auth.getSession).mockResolvedValue({
+        data: { session: { access_token: 'admin-access-token' } },
+        error: null,
+      } as never);
+    });
+
+    afterEach(() => {
+      vi.mocked(sb.auth.getSession).mockReset();
+      vi.mocked(sb.functions.invoke).mockReset();
+    });
+
+    it('invokes the auto-punch-out edge function with the current auth token', async () => {
+      vi.mocked(sb.functions.invoke).mockResolvedValue({
+        data: { processed: 3, total: 5 },
+        error: null,
+      } as never);
+
+      const { runAutoPunchOut } = await import('./attendance.service');
+      const result = await runAutoPunchOut();
+
+      expect(sb.functions.invoke).toHaveBeenCalledWith(
+        'auto-punch-out',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { Authorization: 'Bearer admin-access-token' },
+        })
+      );
+      expect(result).toEqual({ processed: 3, total: 5, message: undefined });
+    });
+
+    it('throws when the edge function returns an error payload', async () => {
+      vi.mocked(sb.functions.invoke).mockResolvedValue({
+        data: { error: 'Forbidden', code: 'FORBIDDEN' },
+        error: null,
+      } as never);
+
+      const { runAutoPunchOut } = await import('./attendance.service');
+      await expect(runAutoPunchOut()).rejects.toThrow(/Forbidden/);
     });
   });
 

@@ -335,3 +335,26 @@ Deno.test('part 6.6 regression guard uses execution time beyond shift end', asyn
   // should process. This test guards the intended execution-time path in 6.1.
   assertEquals(b.processed, 1);
 });
+
+Deno.test('no configured shift does not auto punch out when org policy is missing', async () => {
+  const log = {
+    id: 'l-no-shift',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '09:00',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: null, error: null },
+  ];
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-04T17:00:00.000Z' }),
+    makeDeps(q)
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 0);
+  assertEquals(b.total, 1);
+});
