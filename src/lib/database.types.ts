@@ -870,6 +870,7 @@ export interface Database {
           sick_leave_per_year: number;
           auto_punch_out_buffer_minutes: number;
           early_login_minutes: number;
+          minimum_overtime_minutes: number;
           minimum_required_minutes: number | null;
         };
         Insert: {
@@ -885,6 +886,7 @@ export interface Database {
           sick_leave_per_year?: number;
           auto_punch_out_buffer_minutes?: number;
           early_login_minutes?: number;
+          minimum_overtime_minutes?: number;
           minimum_required_minutes?: number | null;
         };
         Update: {
@@ -900,6 +902,7 @@ export interface Database {
           sick_leave_per_year?: number;
           auto_punch_out_buffer_minutes?: number;
           early_login_minutes?: number;
+          minimum_overtime_minutes?: number;
           minimum_required_minutes?: number | null;
         };
         Relationships: [

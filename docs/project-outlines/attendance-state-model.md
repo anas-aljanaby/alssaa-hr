@@ -84,6 +84,7 @@ How it is evaluated at check-in:
 Important note:
 - Overtime is not a separate `attendance_sessions.status`.
 - Overtime is a flag that overlaps with `status = present`.
+- Stored overtime sessions must also satisfy `attendance_policy.minimum_overtime_minutes`; shorter finished overtime sessions are discarded.
 
 ## Layer 2: Stored Daily Summary States
 

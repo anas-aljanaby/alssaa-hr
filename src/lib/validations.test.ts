@@ -158,26 +158,19 @@ describe('leaveRequestSchema', () => {
       const r = leaveRequestSchema.safeParse({
         ...base,
         fromTime: '09:00',
-        toDate: '2025-06-01',
         toTime: '11:00',
       });
       expect(r.success).toBe(true);
     });
 
     it('rejects missing fromTime', () => {
-      const r = leaveRequestSchema.safeParse({ ...base, toDate: '2025-06-01', toTime: '11:00' });
+      const r = leaveRequestSchema.safeParse({ ...base, toTime: '11:00' });
       expect(r.success).toBe(false);
       if (!r.success) expect(errorPaths(r)).toContain('fromTime');
     });
 
-    it('rejects missing toDate', () => {
-      const r = leaveRequestSchema.safeParse({ ...base, fromTime: '09:00', toTime: '11:00' });
-      expect(r.success).toBe(false);
-      if (!r.success) expect(errorPaths(r)).toContain('toDate');
-    });
-
     it('rejects missing toTime', () => {
-      const r = leaveRequestSchema.safeParse({ ...base, fromTime: '09:00', toDate: '2025-06-01' });
+      const r = leaveRequestSchema.safeParse({ ...base, fromTime: '09:00' });
       expect(r.success).toBe(false);
       if (!r.success) expect(errorPaths(r)).toContain('toTime');
     });
@@ -186,18 +179,16 @@ describe('leaveRequestSchema', () => {
       const r = leaveRequestSchema.safeParse({
         ...base,
         fromTime: '10:00',
-        toDate: '2025-06-01',
         toTime: '10:00',
       });
       expect(r.success).toBe(false);
-      if (!r.success) expect(errorAt(r, 'toDate')).toContain('بعد البداية');
+      if (!r.success) expect(errorAt(r, 'toTime')).toContain('بعد وقت البداية');
     });
 
     it('rejects to before from', () => {
       const r = leaveRequestSchema.safeParse({
         ...base,
         fromTime: '14:00',
-        toDate: '2025-06-01',
         toTime: '09:00',
       });
       expect(r.success).toBe(false);

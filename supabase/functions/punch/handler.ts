@@ -5,6 +5,9 @@
 
 import { corsHeaders } from '../_shared/cors.ts';
 
+/** Keep in sync with `src/shared/attendance/constants.ts`. */
+const DEFAULT_MINIMUM_OVERTIME_MINUTES = 30;
+
 export interface PunchBody {
   action: 'check_in' | 'check_out';
   devOverrideTime?: string;
@@ -118,6 +121,7 @@ type PolicyRow = {
   grace_period_minutes?: number | null;
   weekly_off_days?: number[] | null;
   early_login_minutes?: number | null;
+  minimum_overtime_minutes?: number | null;
   minimum_required_minutes?: number | null;
 };
 
@@ -170,17 +174,76 @@ function diffMinutes(checkInTime: string, checkOutTime: string): number {
 }
 
 /** Late-stay: regular session extends past shift end → split into regular [check_in, shiftEnd] + OT [shiftEnd, checkout]. */
-function shouldSplitLateStayCheckout(
-  schedule: ResolvedSchedule,
-  openSession: SessionRow,
-  checkoutTime: string
+function normalizeMinimumOvertimeMinutes(minimumOvertimeMinutes?: number | null): number {
+  if (typeof minimumOvertimeMinutes !== 'number' || Number.isNaN(minimumOvertimeMinutes)) {
+    return DEFAULT_MINIMUM_OVERTIME_MINUTES;
+  }
+  return Math.max(0, Math.trunc(minimumOvertimeMinutes));
+}
+
+export function shouldKeepOvertimeSession(
+  durationMinutes: number,
+  minimumOvertimeMinutes?: number | null
 ): boolean {
-  if (!schedule.hasShift || !schedule.isWorkingDay) return false;
-  if (!schedule.workEndTime) return false;
-  if (openSession.is_overtime) return false;
-  const endMin = toMinutes(schedule.workEndTime);
-  if (toMinutes(checkoutTime) <= endMin) return false;
-  return toMinutes(openSession.check_in_time) < endMin;
+  return durationMinutes >= normalizeMinimumOvertimeMinutes(minimumOvertimeMinutes);
+}
+
+export function resolveCheckoutOvertimeHandling(input: {
+  hasShift: boolean;
+  isWorkingDay: boolean;
+  workEndTime: string | null;
+  openSessionIsOvertime: boolean;
+  openSessionCheckInTime: string;
+  checkoutTime: string;
+  minimumOvertimeMinutes?: number | null;
+}): {
+  shouldSplitOvertime: boolean;
+  regularCheckOutTime: string;
+  regularDurationMinutes: number;
+  overtimeDurationMinutes: number;
+  shiftEndTime: string | null;
+} {
+  const actualDurationMinutes = diffMinutes(input.openSessionCheckInTime, input.checkoutTime);
+
+  if (!input.hasShift || !input.isWorkingDay || !input.workEndTime || input.openSessionIsOvertime) {
+    return {
+      shouldSplitOvertime: false,
+      regularCheckOutTime: input.checkoutTime,
+      regularDurationMinutes: actualDurationMinutes,
+      overtimeDurationMinutes: 0,
+      shiftEndTime: input.workEndTime,
+    };
+  }
+
+  const shiftEndMinutes = toMinutes(input.workEndTime);
+  if (toMinutes(input.checkoutTime) <= shiftEndMinutes || toMinutes(input.openSessionCheckInTime) >= shiftEndMinutes) {
+    return {
+      shouldSplitOvertime: false,
+      regularCheckOutTime: input.checkoutTime,
+      regularDurationMinutes: actualDurationMinutes,
+      overtimeDurationMinutes: 0,
+      shiftEndTime: input.workEndTime,
+    };
+  }
+
+  const overtimeDurationMinutes = diffMinutes(input.workEndTime, input.checkoutTime);
+  if (!shouldKeepOvertimeSession(overtimeDurationMinutes, input.minimumOvertimeMinutes)) {
+    return {
+      shouldSplitOvertime: false,
+      regularCheckOutTime: input.checkoutTime,
+      regularDurationMinutes: actualDurationMinutes,
+      overtimeDurationMinutes: 0,
+      shiftEndTime: input.workEndTime,
+    };
+  }
+
+  return {
+    shouldSplitOvertime: true,
+    regularCheckOutTime: input.workEndTime,
+    regularDurationMinutes: diffMinutes(input.openSessionCheckInTime, input.workEndTime),
+    overtimeDurationMinutes,
+    shiftEndTime: input.workEndTime,
+  };
 }
 
 function resolveSchedule(profile: ProfileRow, policy: PolicyRow | null, date: Date): ResolvedSchedule {
@@ -437,7 +500,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const { data: policyRaw } = await admin
       .from('attendance_policy')
-      .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days, early_login_minutes, minimum_required_minutes')
+      .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days, early_login_minutes, minimum_overtime_minutes, minimum_required_minutes')
       .eq('org_id', orgId)
       .limit(1)
       .maybeSingle();
@@ -515,16 +578,63 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
     }
 
     const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
-    const shiftEnd = schedule.workEndTime ?? null;
+    const checkoutHandling = resolveCheckoutOvertimeHandling({
+      hasShift: schedule.hasShift,
+      isWorkingDay: schedule.isWorkingDay,
+      workEndTime: schedule.workEndTime,
+      openSessionIsOvertime: openSession.is_overtime,
+      openSessionCheckInTime: openSession.check_in_time,
+      checkoutTime: time,
+      minimumOvertimeMinutes: policy?.minimum_overtime_minutes,
+    });
 
-    if (shouldSplitLateStayCheckout(schedule, openSession, time) && shiftEnd) {
-      const regularDuration = diffMinutes(openSession.check_in_time, shiftEnd);
-      const otDuration = diffMinutes(shiftEnd, time);
+    if (openSession.is_overtime) {
+      const overtimeDurationMinutes = diffMinutes(openSession.check_in_time, time);
+      if (!shouldKeepOvertimeSession(overtimeDurationMinutes, policy?.minimum_overtime_minutes)) {
+        await admin
+          .from('overtime_requests')
+          .delete()
+          .eq('session_id', openSession.id);
+
+        const { error: deleteError } = await admin
+          .from('attendance_sessions')
+          .delete()
+          .eq('id', openSession.id)
+          .select()
+          .single();
+
+        if (deleteError) {
+          return new Response(
+            JSON.stringify({ error: errMsg(deleteError), code: 'DELETE_FAILED' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await recalculateDailySummary(admin, {
+          orgId,
+          userId: caller.id,
+          dateStr: today,
+          schedule,
+        });
+
+        return new Response(
+          JSON.stringify({
+            session: null,
+            discarded_overtime_session_id: openSession.id,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    if (checkoutHandling.shouldSplitOvertime && checkoutHandling.shiftEndTime) {
+      const regularDuration = checkoutHandling.regularDurationMinutes;
+      const otDuration = checkoutHandling.overtimeDurationMinutes;
 
       const { data: updatedRegular, error: errRegular } = await admin
         .from('attendance_sessions')
         .update({
-          check_out_time: shiftEnd,
+          check_out_time: checkoutHandling.shiftEndTime,
           duration_minutes: regularDuration,
           is_early_departure: false,
           is_auto_punch_out: false,
@@ -549,7 +659,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           org_id: orgId,
           user_id: caller.id,
           date: today,
-          check_in_time: shiftEnd,
+          check_in_time: checkoutHandling.shiftEndTime,
           check_out_time: time,
           status: 'present',
           is_overtime: true,

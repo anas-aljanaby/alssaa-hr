@@ -5,6 +5,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 /** Keep in sync with `src/shared/attendance/constants.ts`. */
 const DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES = 5;
 import type { PunchServiceClient } from '../punch/handler.ts';
+import { resolveCheckoutOvertimeHandling } from '../punch/handler.ts';
 
 /** Shifts a UTC Date to org local time (UTC+3) so date/time components are correct. */
 export function toOrgLocalDate(d: Date, offsetHours = 3): Date {
@@ -178,7 +179,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
 
       const { data: policyRaw } = await admin
         .from('attendance_policy')
-        .select('work_end_time, auto_punch_out_buffer_minutes, weekly_off_days')
+        .select('work_end_time, auto_punch_out_buffer_minutes, weekly_off_days, minimum_overtime_minutes')
         .eq('org_id', session.org_id)
         .limit(1)
         .maybeSingle();
@@ -187,6 +188,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         work_end_time?: string | null;
         auto_punch_out_buffer_minutes?: number | null;
         weekly_off_days?: number[] | null;
+        minimum_overtime_minutes?: number | null;
       } | null;
 
       const hasCustomSchedule =
@@ -214,13 +216,21 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       if (nowMinutes <= cutoffMinutes) continue;
 
       const actualCheckoutTime = nowToTimeHHMM(effectiveNow);
-      const durationMinutes = diffMinutes(session.check_in_time, actualCheckoutTime);
+      const checkoutHandling = resolveCheckoutOvertimeHandling({
+        hasShift: true,
+        isWorkingDay: true,
+        workEndTime,
+        openSessionIsOvertime: false,
+        openSessionCheckInTime: session.check_in_time,
+        checkoutTime: actualCheckoutTime,
+        minimumOvertimeMinutes: policy?.minimum_overtime_minutes,
+      });
 
       const { error: updateError } = await admin
         .from('attendance_sessions')
         .update({
-          check_out_time: actualCheckoutTime,
-          duration_minutes: durationMinutes,
+          check_out_time: checkoutHandling.regularCheckOutTime,
+          duration_minutes: checkoutHandling.regularDurationMinutes,
           is_auto_punch_out: true,
           needs_review: true,
           is_early_departure: false,
@@ -230,6 +240,40 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         .eq('id', session.id);
 
       if (updateError) continue;
+
+      if (checkoutHandling.shouldSplitOvertime && checkoutHandling.shiftEndTime) {
+        const { data: insertedOt, error: otInsertError } = await admin
+          .from('attendance_sessions')
+          .insert({
+            org_id: session.org_id,
+            user_id: session.user_id,
+            date: session.date,
+            check_in_time: checkoutHandling.shiftEndTime,
+            check_out_time: actualCheckoutTime,
+            status: 'present',
+            is_overtime: true,
+            duration_minutes: checkoutHandling.overtimeDurationMinutes,
+            is_auto_punch_out: true,
+            needs_review: true,
+            is_early_departure: false,
+            last_action_at: effectiveNow.toISOString(),
+            updated_at: effectiveNow.toISOString(),
+          })
+          .select('id')
+          .single();
+
+        const overtimeSessionId = (insertedOt as { id: string } | null)?.id ?? null;
+        if (!otInsertError && overtimeSessionId) {
+          await admin
+            .from('overtime_requests')
+            .upsert({
+              org_id: session.org_id,
+              user_id: session.user_id,
+              session_id: overtimeSessionId,
+              status: 'pending',
+            }, { onConflict: 'session_id' });
+        }
+      }
 
       await admin.from('notifications').insert({
         org_id: session.org_id,

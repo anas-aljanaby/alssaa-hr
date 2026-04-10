@@ -114,20 +114,30 @@ Scenario: Punches in at 09:30 (late), out at 13:00, returns at 14:00, out at 18:
 | 3.2.1 | [x] | Session classification rule | Independent per session | Each session classified by its own check-in |
 | 3.2.2 | [x] | `effective_status` | `late` | Non-overtime sessions are all `late`; no non-overtime on-time session → `late` |
 
-### 3.3 Regular Session + Post-Shift Overtime Session
+### 3.3 Regular Session + Qualifying Post-Shift Overtime Session
 
-Scenario: Works 09:00 - 18:10, punches out, then punches back in at 18:12.
+Scenario: Works 09:00 - 18:35, punches out, then punches back in at 18:40. Default overtime minimum is 30 minutes, so the late-stay segment qualifies.
 
 | # | Implemented | Session | Check-In | Check-Out | Expected `status` | Expected `is_overtime` | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 3.3.S1 | [x] | 1 | 09:00 | 18:10 | `present` | `false` | Regular session |
-| 3.3.S2 | [x] | 2 | 18:12 | - | `present` | `true` | Check-in at 18:12 is post-shift overtime |
+| 3.3.S1 | [x] | 1 | 09:00 | 18:35 | `present` | `false` | Regular session before split |
+| 3.3.S2 | [x] | 2 | 18:40 | - | `present` | `true` | Check-in at 18:40 is post-shift overtime |
 
 | # | Implemented | Assertion | Expected value | Notes |
 | --- | --- | --- | --- | --- |
-| 3.3.1 | [x] | Overtime threshold | `18:12 > 18:00` => overtime | Session 2 is overtime session |
-| 3.3.2 | [x] | Overtime request creation | Auto-created for session 2 | Separate overtime workflow trigger |
-| 3.3.3 | [x] | `effective_status` | `present` | Session 1 is regular and on time |
+| 3.3.1 | [x] | Late-stay threshold | `35` post-shift minutes >= `30` minimum | Checkout splits the late-stay segment into overtime |
+| 3.3.2 | [x] | Overtime request creation | Auto-created for qualifying split segment and later overtime session | Separate overtime workflow trigger |
+| 3.3.3 | [x] | `effective_status` | `present` | Regular non-overtime attendance still controls the day |
+
+### 3.3.B Short Late-Stay Below Overtime Minimum
+
+Scenario: Works 09:00 - 18:10 with shift end 18:00 and default overtime minimum 30 minutes.
+
+| # | Implemented | Assertion | Expected value | Notes |
+| --- | --- | --- | --- | --- |
+| 3.3.B1 | [x] | Session retention | Single regular session ends at `18:10` | No overtime split below threshold |
+| 3.3.B2 | [x] | Overtime totals | `total_overtime_minutes = 0` | Short post-shift time is folded into regular work |
+| 3.3.B3 | [x] | Overtime request creation | None | No overtime session is kept |
 
 ### 3.4 Off-Day With Multiple Overtime Sessions
 
@@ -164,6 +174,16 @@ Expected daily summary:
 | 3.5.1 | [x] | `effective_status` | `overtime_only` | No non-overtime session — regular shift not fulfilled |
 | 3.5.2 | [x] | Attendance flag | Not `absent` | `overtime_only` ≠ `absent` (sessions exist) |
 | 3.5.3 | [x] | Calendar display | Purple / `overtime_only` indicator + overtime context | Not green “present”; aligns with `attendance-policy-new.md` |
+
+### 3.5.B Short Standalone Overtime Discard
+
+Scenario: Working day. Employee punches in after shift end, but the overtime session ends before the minimum overtime threshold.
+
+| # | Implemented | Assertion | Expected value | Notes |
+| --- | --- | --- | --- | --- |
+| 3.5.B1 | [x] | Overtime session retention | Session is discarded on checkout | Applies to pure overtime sessions too |
+| 3.5.B2 | [x] | Overtime request retention | Any pending request for that session is removed | No orphan overtime request |
+| 3.5.B3 | [x] | Daily summary | Reverts to no overtime minutes and no kept session | Working day becomes `absent` if nothing else exists |
 
 ### 3.6 Many Sessions - Sum Correctness
 
@@ -275,17 +295,18 @@ For every trigger above, validate these fields are up to date:
 
 > Corresponding test file: `supabase/functions/punch/handler.test.ts`
 
-Baseline: shift ends `18:00`, buffer `5` min -> auto-punch-out job fires at or after `18:05`.
+Baseline: shift ends `18:00`, buffer `5` min, overtime minimum `30` min.
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |
-| 6.1 | [x] | Standard auto punch-out at 18:35 for 09:00 check-in | `check_out_time=18:35`, `is_auto_punch_out=true`, `needs_review=true`, duration recalculated | Uses actual trigger time, not shift end |
-| 6.2 | [x] | Job runs before buffer (18:20) | Session remains open, no auto punch-out applied | Buffer must be enforced |
+| 6.1 | [x] | Standard auto punch-out at 18:20 for 09:00 check-in | `check_out_time=18:20`, `is_auto_punch_out=true`, `needs_review=true`, duration recalculated | Uses actual trigger time while still below overtime minimum |
+| 6.2 | [x] | Job runs before buffer (18:04) | Session remains open, no auto punch-out applied | Buffer must be enforced |
 | 6.3 | [x] | Open overtime session exists | Overtime session is not auto-closed | Applies to `is_overtime=true` sessions |
 | 6.4 | [x] | Off-day auto punch-out run | Off-day sessions are skipped | Must not auto-close off-day sessions |
 | 6.5 | [x] | Multiple open non-overtime sessions (abnormal state) | Expected handling defined and applied consistently | Also verify `needs_review` and recalculation behavior |
-| 6.6 | [x] | Trigger time vs shift-end regression | `check_out_time` equals job execution time | Regression guard for old behavior |
+| 6.6 | [x] | Trigger time vs shift-end regression | `check_out_time` equals job execution time when below overtime minimum | Regression guard for old behavior |
 | 6.7 | [x] | Daily summary after auto punch-out | Summary fields updated (`total_work_minutes`, `last_check_out`, `effective_status`) | Recalculation should run automatically |
+| 6.8 | [x] | Delayed auto punch-out past overtime minimum | Regular session is split at `shiftEnd`, overtime segment is created, and overtime request is inserted | Keeps scheduler behavior consistent when delay exceeds threshold |
 
 ## 7. Early Departure
 
@@ -460,4 +481,3 @@ Baseline: shift ends `18:00`, buffer `5` min -> auto-punch-out job fires at or a
 | 20.1 | [x] | Working day (`09:00`-`18:00`): check-in `13:15`, check-out `13:16`, then check-in `13:17` | Third punch creates a new session with `is_overtime=false` | Covered by `part 3.7` |
 | 20.2 | [x] | Same scenario as 20.1 | Third punch keeps session-level status based on grace logic (for this case: `late`) | Covered by `part 3.7` |
 | 20.3 | [x] | Same scenario as 20.1 | Second session remains open (`check_out_time=null`) until explicit check-out | Covered by `part 3.7` |
-

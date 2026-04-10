@@ -883,7 +883,7 @@ export interface CheckInResult {
 }
 
 export interface CheckOutResult {
-  log: AttendanceLog;
+  log: AttendanceLog | null;
   overtimeRequest: OvertimeRequest | null;
 }
 
@@ -899,22 +899,26 @@ type EdgeInvokeResult = {
 };
 
 function parsePunchCheckoutPayload(data: unknown): {
-  session: AttendanceSession;
+  session: AttendanceSession | null;
   lateStayOvertimeSessionId: string | null;
+  discardedOvertimeSessionId: string | null;
 } {
   if (data && typeof data === 'object' && data !== null && 'session' in data) {
     const o = data as {
-      session: AttendanceSession;
+      session: AttendanceSession | null;
       late_stay_overtime_session_id?: string | null;
+      discarded_overtime_session_id?: string | null;
     };
     return {
       session: o.session,
       lateStayOvertimeSessionId: o.late_stay_overtime_session_id ?? null,
+      discardedOvertimeSessionId: o.discarded_overtime_session_id ?? null,
     };
   }
   return {
     session: data as AttendanceSession,
     lateStayOvertimeSessionId: null,
+    discardedOvertimeSessionId: null,
   };
 }
 
@@ -1103,7 +1107,7 @@ export async function checkOut(
     }
 
     const today = await getAttendanceToday(userId);
-    if (!today.log) {
+    if (!today.log && !checkoutPayload.discardedOvertimeSessionId) {
       throw new Error('Unable to load updated attendance log');
     }
     return { log: today.log, overtimeRequest };

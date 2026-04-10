@@ -15,6 +15,7 @@ The following values always come from the org policy, even for users with custom
 - Grace period (default: `15` minutes if no policy exists)
 - Auto-punch-out buffer (default: `5` minutes if no policy exists)
 - Early login window (default: `60` minutes if no policy exists)
+- Minimum overtime minutes to keep (default: `30` minutes if no policy exists)
 - Minimum required hours (default: none / not enforced if not set)
 
 If a user has **no** custom schedule and no org policy exists, the shift is `null` (treated as "no shift configured" — see edge cases).
@@ -146,6 +147,10 @@ A punch-in is classified as overtime when **any** of these are true:
 
 When a session is classified as overtime, the `is_overtime` flag is set to `true` on the session row. This is the **authoritative record** of overtime — it lives on the attendance data itself, not in a separate request table.
 
+However, overtime is only **kept** if the finished overtime session meets the org policy's `minimum_overtime_minutes` threshold:
+- If overtime duration is **below** the threshold, that overtime session is discarded automatically.
+- If overtime duration is **at or above** the threshold, it is stored normally and contributes to `total_overtime_minutes`.
+
 Additionally, an overtime approval request is created in the `overtime_requests` table (separate from leave requests). This request is for **manager approval purposes only** — the attendance record exists regardless of approval status. The overtime request contains:
 - Reference to the session
 - `status`: `pending` → `approved` / `rejected`
@@ -170,14 +175,16 @@ For pure overtime sessions (off-day, before early login window, or after shift e
 When an employee stays after `shiftEnd` on a working day, the system handles overtime in two equivalent ways:
 
 **Automatic split on checkout (primary flow)**  
-If the employee checked in during regular hours (`is_overtime = false` for that session) and punches out at a time **strictly after** `shiftEnd`, the punch handler **splits** the session at checkout:
+If the employee checked in during regular hours (`is_overtime = false` for that session) and punches out at a time **strictly after** `shiftEnd`, the punch handler checks the overtime segment length first:
+- If the post-shift portion is **below** `minimum_overtime_minutes`, the session stays as a single regular session ending at the actual checkout time.
+- If the post-shift portion is **at or above** `minimum_overtime_minutes`, the punch handler **splits** the session at checkout:
 - **Regular segment:** from original check-in time through `shiftEnd` (closed at `shiftEnd`)
 - **Overtime segment:** from `shiftEnd` through the actual checkout time (`is_overtime = true`)
 
 An `overtime_requests` row is auto-created (pending) for the overtime segment. The employee does **not** need to punch out and back in for this to occur.
 
 **Separate overtime punch-in (still supported)**  
-Alternatively, the employee may close the regular session at or before `shiftEnd`, then punch in again after `shiftEnd`. That new punch-in is classified as an overtime session and also receives an auto-created overtime request.
+Alternatively, the employee may close the regular session at or before `shiftEnd`, then punch in again after `shiftEnd`. That new punch-in is classified as an overtime session. If the finished overtime session reaches `minimum_overtime_minutes`, it is kept and receives an auto-created overtime request; otherwise it is discarded on checkout.
 
 Example (split): employee checks in at 9:00 AM and checks out at 7:00 PM with shift end 6:00 PM → one regular session 9:00–18:00 and one overtime session 18:00–19:00, plus a pending overtime request for the latter.
 
@@ -267,7 +274,9 @@ A server-side job (`auto-punch-out` edge function) runs periodically and automat
 Behavior:
 - Processes **open regular sessions only** (where `check_out_time IS NULL` and `is_overtime = false`) for **today's date**
 - Only triggers after `shiftEnd + bufferMinutes` has passed
-- Sets `check_out_time` to **the auto-punch-out trigger time** for regular sessions (actual close time, not `shiftEnd`)
+- Uses the **auto-punch-out trigger time** as the effective checkout time
+- If the post-shift portion is below `minimum_overtime_minutes`, the regular session closes at the trigger time
+- If the post-shift portion reaches `minimum_overtime_minutes`, the regular session is split at `shiftEnd` and a closed overtime segment is created automatically
 - Does **not** auto-close overtime sessions (`is_overtime = true`)
 - Sets `is_auto_punch_out = true` on the session
 - Sets `needs_review = true` on the session — flagging it for the manager to verify/correct
@@ -335,9 +344,10 @@ The audit log is append-only. Rows are never updated or deleted. It provides a c
 | Non-working day punch-in | All sessions are overtime. Confirmation shown. Calendar shows overtime day. No `effective_status` set (it is not a working day). |
 | Works 8 AM – 12 PM, returns 2 PM – 6 PM | Two non-overtime sessions. `effective_status` based on first session's arrival classification (`present` or `late`). |
 | Works regular shift, leaves, returns at 8 PM | Regular session + overtime session. `effective_status` is determined by the regular session alone (`present` or `late`). The overtime session contributes only to `total_overtime_minutes`. |
+| Works until 6:10 PM with shift end 6:00 PM and overtime minimum 30 min | Checkout stays a single regular session ending at 18:10. No overtime session is kept. |
 | Works until 7:00 PM with shift end 6:00 PM (single continuous session) | Checkout splits into regular [check-in, 18:00] + overtime [18:00, 19:00]; overtime request created for the overtime segment. |
-| Works until 6:10 PM, punches out, punches in again at 6:12 PM | 6:12 PM punch-in is overtime (`> shiftEnd`). A new overtime session is created and an overtime request is auto-created. |
-| Forgets to check out, auto-punch-out fires | Only regular sessions are auto-closed, at the job trigger time. Overtime sessions are excluded. Flagged `needs_review`. |
+| Works until 6:10 PM, punches out, punches in again at 6:12 PM | 6:12 PM punch-in is overtime (`> shiftEnd`). If that overtime session stays below the minimum, it is discarded on checkout; otherwise it is kept and gets an overtime request. |
+| Forgets to check out, auto-punch-out fires | Regular sessions are auto-closed at the job trigger time. If the delayed post-shift portion crosses the overtime minimum, the job splits out an overtime segment; overtime-only open sessions are still excluded. Flagged `needs_review`. |
 | Manager corrects auto-punch-out time | Session updated, audit log records old and new values. Daily summary recalculated. |
 | Punches in twice in quick succession while session is open | Second request succeeds with **200** and returns the **same** open session (idempotent). |
 | Tries to punch in while already checked in | Same as above: API is idempotent; UX should show checked-in and check-out. |

@@ -47,17 +47,30 @@ function json(res: Response): Promise<unknown> {
   return res.json();
 }
 
-/** Late-stay split returns `{ session, late_stay_overtime_session_id }`; otherwise the body is the session row. */
-async function jsonCheckout(res: Response): Promise<{ session: Session; late_stay_overtime_session_id: string | null }> {
+/** Checkout may return a session row or a richer payload for split/discard flows. */
+async function jsonCheckout(res: Response): Promise<{
+  session: Session | null;
+  late_stay_overtime_session_id: string | null;
+  discarded_overtime_session_id: string | null;
+}> {
   const body = await json(res);
   if (body && typeof body === 'object' && body !== null && 'session' in body) {
-    const o = body as { session: Session; late_stay_overtime_session_id?: string | null };
+    const o = body as {
+      session: Session | null;
+      late_stay_overtime_session_id?: string | null;
+      discarded_overtime_session_id?: string | null;
+    };
     return {
       session: o.session,
       late_stay_overtime_session_id: o.late_stay_overtime_session_id ?? null,
+      discarded_overtime_session_id: o.discarded_overtime_session_id ?? null,
     };
   }
-  return { session: body as Session, late_stay_overtime_session_id: null };
+  return {
+    session: body as Session,
+    late_stay_overtime_session_id: null,
+    discarded_overtime_session_id: null,
+  };
 }
 
 /** UTC ISO instant for a calendar date + org wall clock time (handler uses fixed UTC+3 via toOrgLocalDate). */
@@ -87,6 +100,7 @@ function makeDeps(opts?: {
     grace_period_minutes: number;
     weekly_off_days: number[];
     early_login_minutes: number;
+    minimum_overtime_minutes: number;
     minimum_required_minutes: number | null;
   } | null;
   leaveRows?: LeaveRow[];
@@ -105,6 +119,7 @@ function makeDeps(opts?: {
     grace_period_minutes: 15,
     weekly_off_days: [5, 6],
     early_login_minutes: 60,
+    minimum_overtime_minutes: 30,
     minimum_required_minutes: 480,
   };
   const policy = opts?.policy === undefined ? policyDefault : opts.policy;
@@ -256,6 +271,9 @@ function makeDeps(opts?: {
             const idx = sessions.findIndex((s) => s.id === id);
             if (idx >= 0) {
               const [deleted] = sessions.splice(idx, 1);
+              for (let i = overtimeRequests.length - 1; i >= 0; i--) {
+                if (overtimeRequests[i].session_id === id) overtimeRequests.splice(i, 1);
+              }
               data = deleted;
             } else {
               data = null;
@@ -317,6 +335,12 @@ function makeDeps(opts?: {
               user_id: String(payload?.user_id ?? ''),
             });
             data = { id: `or-${idCounter++}`, ...payload };
+          } else if (table === 'overtime_requests' && op === 'delete') {
+            const sessionId = String(eqFilters.session_id ?? '');
+            for (let i = overtimeRequests.length - 1; i >= 0; i--) {
+              if (overtimeRequests[i].session_id === sessionId) overtimeRequests.splice(i, 1);
+            }
+            data = null;
           }
 
           return Promise.resolve({ data, error }).then(onF ?? undefined, onR ?? undefined);
@@ -658,18 +682,18 @@ Deno.test('part 3.2 late first session with late return resolves late', async ()
   assertEquals(summary?.effective_status, 'late');
 });
 
-Deno.test('part 3.3 regular session then post-shift overtime session', async () => {
+Deno.test('part 3.3 regular session then qualifying post-shift overtime session', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
-  const lateStayOut = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:10:00'));
+  const lateStayOut = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:35:00'));
   assertEquals(lateStayOut.status, 200);
   const lateStayBody = await jsonCheckout(lateStayOut);
   assertEquals(lateStayBody.late_stay_overtime_session_id !== null, true);
 
-  const overtimeIn = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '18:12:00'));
+  const overtimeIn = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '18:40:00'));
   assertEquals(overtimeIn.status, 200);
 
-  // Checkout past shift end splits: regular [09:00,18:00] + OT [18:00,18:10]; then new OT session at 18:12.
+  // Qualifying checkout past shift end splits: regular [09:00,18:00] + OT [18:00,18:35]; then new OT session at 18:40.
   assertEquals(mem.sessions.length, 3);
   const sorted = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
   const s1 = sorted[0]!;
@@ -680,15 +704,15 @@ Deno.test('part 3.3 regular session then post-shift overtime session', async () 
   assertEquals(s1.status, 'present');
   assertEquals(s1.is_overtime, false);
   assertEquals(s2.check_in_time, '18:00');
-  assertEquals(s2.check_out_time, '18:10');
+  assertEquals(s2.check_out_time, '18:35');
   assertEquals(s2.status, 'present');
   assertEquals(s2.is_overtime, true);
-  assertEquals(s3.check_in_time, '18:12');
+  assertEquals(s3.check_in_time, '18:40');
   assertEquals(s3.check_out_time, null);
   assertEquals(s3.status, 'present');
   assertEquals(s3.is_overtime, true);
 
-  // 3.3.1: strict overtime threshold after shift end.
+  // 3.3.1: strict overtime classification after shift end.
   const overtimeBody = (await json(overtimeIn)) as { status?: 'present' | 'late'; is_overtime?: boolean };
   assertEquals(overtimeBody.status, 'present');
   assertEquals(overtimeBody.is_overtime, true);
@@ -701,6 +725,46 @@ Deno.test('part 3.3 regular session then post-shift overtime session', async () 
   // 3.3.3: effective status remains present due to regular non-overtime present session.
   const summary = mem.summaries.find((s) => s.date === '2025-06-10');
   assertEquals(summary?.effective_status, 'present');
+});
+
+Deno.test('part 3.3b short late-stay remains regular work without overtime split', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:10:00'));
+  assertEquals(res.status, 200);
+  const body = await jsonCheckout(res);
+
+  assertEquals(body.late_stay_overtime_session_id, null);
+  assertEquals(body.discarded_overtime_session_id, null);
+  assertEquals(mem.sessions.length, 1);
+  assertEquals(mem.sessions[0].check_out_time, '18:10');
+  assertEquals(mem.sessions[0].is_overtime, false);
+  assertEquals(mem.overtimeRequests.length, 0);
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.total_work_minutes, 550);
+  assertEquals(summary?.total_overtime_minutes, 0);
+  assertEquals(summary?.effective_status, 'present');
+});
+
+Deno.test('part 3.5b short standalone overtime is discarded on checkout', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '18:12:00'));
+  assertEquals(mem.overtimeRequests.length, 1);
+
+  const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '18:25:00'));
+  assertEquals(res.status, 200);
+  const body = await jsonCheckout(res);
+
+  assertEquals(body.session, null);
+  assertEquals(body.discarded_overtime_session_id !== null, true);
+  assertEquals(mem.sessions.length, 0);
+  assertEquals(mem.overtimeRequests.length, 0);
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.session_count, 0);
+  assertEquals(summary?.total_overtime_minutes, 0);
+  assertEquals(summary?.effective_status, 'absent');
 });
 
 Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
@@ -1354,8 +1418,9 @@ Deno.test('part 8.8 late-stay checkout past shift end splits session and creates
   const res = await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '19:00:00'));
   assertEquals(res.status, 200);
   const { session, late_stay_overtime_session_id } = await jsonCheckout(res);
-  assertEquals(session.check_out_time, '18:00');
-  assertEquals(session.is_overtime, false);
+  assertEquals(session === null, false);
+  assertEquals(session?.check_out_time, '18:00');
+  assertEquals(session?.is_overtime, false);
   assertEquals(late_stay_overtime_session_id !== null, true);
   assertEquals(mem.sessions.length, 2);
   const ot = mem.sessions.find((s) => s.id === late_stay_overtime_session_id);

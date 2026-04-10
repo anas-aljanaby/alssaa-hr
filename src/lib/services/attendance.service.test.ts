@@ -50,6 +50,7 @@ const policyRow = {
   annual_leave_per_year: 21,
   sick_leave_per_year: 10,
   auto_punch_out_buffer_minutes: 5,
+  minimum_overtime_minutes: 30,
   minimum_required_minutes: null as number | null,
 };
 
@@ -720,6 +721,26 @@ describe('attendance.service', () => {
       expect(r.overtimeRequest).not.toBeNull();
       expect(r.overtimeRequest?.session_id).toBe('sess-ot-split');
       expect(r.log.check_out_time).toBeDefined();
+    });
+
+    it('allows discarded short overtime checkout to return a null log without error', async () => {
+      vi.mocked(sb.functions.invoke).mockResolvedValue({
+        data: {
+          session: null,
+          discarded_overtime_session_id: 'sess-ot-short',
+        },
+        error: null,
+      } as never);
+      sb.queueResult({ data: [], error: null });
+      sb.queueResult({ data: profileShift, error: null });
+      sb.queueResult({ data: policyRow, error: null });
+      sb.queueResult({ data: null, error: null });
+
+      const { checkOut } = await import('./attendance.service');
+      const r = await checkOut('u1');
+
+      expect(r.overtimeRequest).toBeNull();
+      expect(r.log).toBeNull();
     });
   });
 

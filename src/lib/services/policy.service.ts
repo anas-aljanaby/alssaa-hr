@@ -1,4 +1,7 @@
-import { DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES } from '@/shared/attendance/constants';
+import {
+  DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
+  DEFAULT_MINIMUM_OVERTIME_MINUTES,
+} from '@/shared/attendance/constants';
 import { supabase } from '../supabase';
 import type { Tables, UpdateTables } from '../database.types';
 
@@ -35,6 +38,8 @@ export async function updatePolicy(
         absent_cutoff_time: updates.absent_cutoff_time ?? '12:00',
         annual_leave_per_year: updates.annual_leave_per_year ?? 21,
         sick_leave_per_year: updates.sick_leave_per_year ?? 10,
+        minimum_overtime_minutes:
+          updates.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
       })
       .select()
       .single();

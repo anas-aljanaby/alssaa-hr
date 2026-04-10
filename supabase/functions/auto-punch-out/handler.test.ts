@@ -114,7 +114,7 @@ Deno.test('when now past cutoff, updates and inserts notification', async () => 
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T17:00:00.000Z' }),
+    post({ devOverrideTime: '2025-06-04T13:10:00.000Z' }),
     makeDeps(q)
   );
   assertEquals(res.status, 200);
@@ -175,7 +175,7 @@ Deno.test('part 6.1 standard auto punch-out after cutoff is processed', async ()
     { data: null, error: null }, // insert notifications
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T15:35:00.000Z' }),
+    post({ devOverrideTime: '2025-06-04T15:20:00.000Z' }),
     makeDeps(q)
   );
   assertEquals(res.status, 200);
@@ -294,7 +294,7 @@ Deno.test('part 6.5 multiple open non-overtime sessions are handled consistently
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T17:00:00.000Z' }),
+    post({ devOverrideTime: '2025-06-04T15:20:00.000Z' }),
     makeDeps(q)
   );
   assertEquals(res.status, 200);
@@ -326,7 +326,7 @@ Deno.test('part 6.6 regression guard uses execution time beyond shift end', asyn
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T15:35:00.000Z' }),
+    post({ devOverrideTime: '2025-06-04T15:20:00.000Z' }),
     makeDeps(q)
   );
   assertEquals(res.status, 200);
@@ -334,6 +334,41 @@ Deno.test('part 6.6 regression guard uses execution time beyond shift end', asyn
   // If shift-end time were incorrectly used as checkout source, this flow still
   // should process. This test guards the intended execution-time path in 6.1.
   assertEquals(b.processed, 1);
+});
+
+Deno.test('part 6.1b delayed auto punch-out splits when overtime reaches the minimum threshold', async () => {
+  const log = {
+    id: 'l-61b',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '09:00',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    {
+      data: {
+        work_end_time: '18:00',
+        auto_punch_out_buffer_minutes: 5,
+        weekly_off_days: [5, 6],
+        minimum_overtime_minutes: 30,
+      },
+      error: null,
+    },
+    { data: null, error: null }, // update regular session
+    { data: { id: 'ot-61b' }, error: null }, // insert overtime session
+    { data: null, error: null }, // upsert overtime request
+    { data: null, error: null }, // insert notification
+  ];
+  const res = await handleAutoPunchOut(
+    post({ devOverrideTime: '2025-06-04T15:35:00.000Z' }),
+    makeDeps(q)
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 1);
+  assertEquals(b.total, 1);
 });
 
 Deno.test('no configured shift does not auto punch out when org policy is missing', async () => {

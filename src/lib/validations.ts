@@ -88,20 +88,17 @@ export const leaveRequestSchema = z
       if (!data.fromTime?.trim()) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'وقت البداية مطلوب', path: ['fromTime'] });
       }
-      if (!data.toDate?.trim()) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'تاريخ النهاية مطلوب', path: ['toDate'] });
-      }
       if (!data.toTime?.trim()) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'وقت النهاية مطلوب', path: ['toTime'] });
       }
-      if (data.fromDate && data.fromTime && data.toDate && data.toTime) {
+      if (data.fromDate && data.fromTime && data.toTime) {
         const from = new Date(`${data.fromDate}T${data.fromTime}`);
-        const to = new Date(`${data.toDate}T${data.toTime}`);
+        const to = new Date(`${data.fromDate}T${data.toTime}`);
         if (to <= from) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'تاريخ ونهاية الوقت يجب أن يكونا بعد البداية',
-            path: ['toDate'],
+            message: 'وقت النهاية يجب أن يكون بعد وقت البداية',
+            path: ['toTime'],
           });
         }
       }
