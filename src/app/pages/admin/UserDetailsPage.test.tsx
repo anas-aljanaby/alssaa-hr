@@ -11,10 +11,9 @@ const mockGetUserById = vi.hoisted(() => vi.fn());
 const mockGetDepartmentById = vi.hoisted(() => vi.fn());
 const mockListDepartments = vi.hoisted(() => vi.fn());
 const mockGetAttendanceToday = vi.hoisted(() => vi.fn());
-const mockGetMonthlyStats = vi.hoisted(() => vi.fn());
-const mockGetAllTimeStats = vi.hoisted(() => vi.fn());
-const mockGetAllTimeSummaries = vi.hoisted(() => vi.fn());
-const mockGetSummariesInRange = vi.hoisted(() => vi.fn());
+const mockGetAttendanceHistoryAllTime = vi.hoisted(() => vi.fn());
+const mockGetAttendanceHistoryRange = vi.hoisted(() => vi.fn());
+const mockCalculateAttendanceHistoryStats = vi.hoisted(() => vi.fn());
 const mockGetUserBalance = vi.hoisted(() => vi.fn());
 const mockGetUserRequests = vi.hoisted(() => vi.fn());
 const mockGetAuditLogsForTarget = vi.hoisted(() => vi.fn());
@@ -65,10 +64,9 @@ vi.mock('@/lib/services/attendance.service', async (importOriginal) => {
   return {
     ...actual,
     getAttendanceToday: (...args: unknown[]) => mockGetAttendanceToday(...args),
-    getMonthlyStats: (...args: unknown[]) => mockGetMonthlyStats(...args),
-    getAllTimeStats: (...args: unknown[]) => mockGetAllTimeStats(...args),
-    getAllTimeSummaries: (...args: unknown[]) => mockGetAllTimeSummaries(...args),
-    getSummariesInRange: (...args: unknown[]) => mockGetSummariesInRange(...args),
+    getAttendanceHistoryAllTime: (...args: unknown[]) => mockGetAttendanceHistoryAllTime(...args),
+    getAttendanceHistoryRange: (...args: unknown[]) => mockGetAttendanceHistoryRange(...args),
+    calculateAttendanceHistoryStats: (...args: unknown[]) => mockCalculateAttendanceHistoryStats(...args),
   };
 });
 
@@ -189,13 +187,6 @@ function setupSuccessfulDataLoad() {
       updated_at: '2026-03-20T16:05:00.000Z',
     },
   });
-  mockGetMonthlyStats.mockResolvedValue({
-    presentDays: 10,
-    lateDays: 2,
-    absentDays: 1,
-    leaveDays: 3,
-    totalWorkingDays: 16,
-  });
   mockGetUserBalance.mockResolvedValue({
     id: 'bal-1',
     user_id: 'user-2',
@@ -222,20 +213,61 @@ function setupSuccessfulDataLoad() {
     },
   ]);
   mockGetAuditLogsForTarget.mockResolvedValue([]);
-  mockGetAllTimeStats.mockResolvedValue({
-    presentDays: 1,
+  mockGetAttendanceHistoryAllTime.mockResolvedValue([
+    {
+      date: '2026-03-20',
+      primaryState: 'fulfilled_shift',
+      firstCheckIn: '08:45',
+      lastCheckOut: '16:05',
+      totalRegularMinutes: 435,
+      totalOvertimeMinutes: 0,
+      totalWorkedMinutes: 435,
+      sessionCount: 1,
+      hasOvertime: false,
+      hasAutoPunchOut: false,
+      needsReview: false,
+      sessions: [],
+    },
+    {
+      date: '2026-03-19',
+      primaryState: 'absent',
+      firstCheckIn: null,
+      lastCheckOut: null,
+      totalRegularMinutes: 0,
+      totalOvertimeMinutes: 0,
+      totalWorkedMinutes: 0,
+      sessionCount: 0,
+      hasOvertime: false,
+      hasAutoPunchOut: false,
+      needsReview: false,
+      sessions: [],
+    },
+  ]);
+  mockGetAttendanceHistoryRange.mockResolvedValue([
+    {
+      date: '2026-03-20',
+      primaryState: 'fulfilled_shift',
+      firstCheckIn: '08:45',
+      lastCheckOut: '16:05',
+      totalRegularMinutes: 435,
+      totalOvertimeMinutes: 0,
+      totalWorkedMinutes: 435,
+      sessionCount: 1,
+      hasOvertime: false,
+      hasAutoPunchOut: false,
+      needsReview: false,
+      sessions: [],
+    },
+  ]);
+  mockCalculateAttendanceHistoryStats.mockReturnValue({
+    fulfilledShiftDays: 1,
+    incompleteShiftDays: 0,
     lateDays: 0,
     absentDays: 1,
     leaveDays: 0,
+    overtimeDays: 0,
     totalWorkingDays: 2,
   });
-  mockGetAllTimeSummaries.mockResolvedValue([
-    { date: '2026-03-20', status: 'present', totalMinutesWorked: 435 },
-    { date: '2026-03-19', status: 'absent', totalMinutesWorked: 0 },
-  ]);
-  mockGetSummariesInRange.mockResolvedValue([
-    { date: '2026-03-20', status: 'present', totalMinutesWorked: 435 },
-  ]);
   mockGetPolicy.mockResolvedValue(null);
 }
 
@@ -275,12 +307,12 @@ describe('UserDetailsPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('سارة أحمد')).toBeInTheDocument();
+    expect(screen.getByText('سارة أحمد')).toBeInTheDocument();
     });
 
     expect(screen.getByText('الموارد البشرية')).toBeInTheDocument();
     expect(screen.getByText('حالة اليوم')).toBeInTheDocument();
-    expect(screen.getByText('أيام الحضور')).toBeInTheDocument();
+    expect(screen.getByText('دوام مكتمل')).toBeInTheDocument();
   });
 
   it('opens requests tab from request URL param', async () => {
@@ -301,12 +333,12 @@ describe('UserDetailsPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('أيام الحضور')).toBeInTheDocument();
+      expect(screen.getByText('دوام مكتمل')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('أيام الحضور'));
+    fireEvent.click(screen.getByText('دوام مكتمل'));
 
     expect(await screen.findByText('جدول العمل')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'حاضر' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'أكمل الدوام' })).toBeInTheDocument();
   });
 });

@@ -225,6 +225,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
           needs_review: true,
           is_early_departure: false,
           last_action_at: effectiveNow.toISOString(),
+          updated_at: effectiveNow.toISOString(),
         })
         .eq('id', session.id);
 

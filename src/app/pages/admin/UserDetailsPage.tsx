@@ -15,7 +15,7 @@ import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as auditService from '@/lib/services/audit.service';
 import * as XLSX from 'xlsx';
-import { getRequestTypeAr, getStatusAr, getAttendanceStatusAr } from '../../data/mockData';
+import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +24,11 @@ import {
 } from '../../components/ui/dropdown-menu';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
-import type { AttendanceLog, MonthlyStats, MonthDaySummary, TodayRecord } from '@/lib/services/attendance.service';
+import type {
+  AttendanceHistoryDay,
+  AttendanceHistoryStats,
+  TodayRecord,
+} from '@/lib/services/attendance.service';
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
@@ -47,8 +51,10 @@ import {
   Trash2,
   X,
   Download,
+  TimerReset,
+  ClipboardList,
 } from 'lucide-react';
-import { getStatusTheme } from '../../components/attendance/attendanceStatusTheme';
+import { AttendanceHistoryList } from '../../components/attendance/AttendanceHistoryList';
 import { StatCard } from '../../components/shared/StatCard';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import {
@@ -60,46 +66,24 @@ import {
 } from '@/shared/attendance';
 import { StatusBadge } from '@/shared/components';
 
+type AttendanceFilter =
+  | 'all'
+  | 'fulfilled_shift'
+  | 'incomplete_shift'
+  | 'late'
+  | 'absent'
+  | 'on_leave'
+  | 'overtime';
 
-function formatDayAndMonth(date: string) {
-  const d = new Date(`${date}T00:00:00`);
-  const day = new Intl.DateTimeFormat('en-US', { day: '2-digit', numberingSystem: 'latn' }).format(d);
-  const AR_GREGORIAN_MONTHS = [
-    'يناير',
-    'فبراير',
-    'مارس',
-    'ابريل',
-    'مايو',
-    'يونيو',
-    'يوليو',
-    'اغسطس',
-    'سبتمبر',
-    'اكتوبر',
-    'نوفمبر',
-    'ديسمبر',
-  ];
-  const month = AR_GREGORIAN_MONTHS[d.getMonth()] ?? '';
-  return { day, month };
-}
-
-function formatWeekday(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('ar-IQ', {
-    weekday: 'long',
-  });
-}
-
-function getAttendanceLogTheme(status: AttendanceLog['status']) {
-  switch (status) {
-    case 'present':
-      return getStatusTheme('present');
-    case 'late':
-      return getStatusTheme('late');
-    case 'on_leave':
-      return getStatusTheme('on_leave');
-    default:
-      return getStatusTheme('absent');
-  }
-}
+const ATTENDANCE_FILTER_OPTIONS: Array<{ key: AttendanceFilter; label: string }> = [
+  { key: 'all', label: 'الكل' },
+  { key: 'fulfilled_shift', label: getStatusConfig('fulfilled_shift').label },
+  { key: 'incomplete_shift', label: getStatusConfig('incomplete_shift').label },
+  { key: 'late', label: getStatusConfig('late').label },
+  { key: 'absent', label: getStatusConfig('absent').label },
+  { key: 'on_leave', label: getStatusConfig('on_leave').label },
+  { key: 'overtime', label: 'عمل إضافي' },
+];
 
 function getDisplayEmail(email: string | null): string {
   const value = email?.trim();
@@ -169,16 +153,16 @@ export function UserDetailsPage() {
   const [todayRecord, setTodayRecord] = useState<TodayRecord | null>(null);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
-  const [allTimeSummaries, setAllTimeSummaries] = useState<MonthDaySummary[]>([]);
-  const [rangeSummaries, setRangeSummaries] = useState<MonthDaySummary[]>([]);
-  const [allTimeStats, setAllTimeStats] = useState<MonthlyStats | null>(null);
+  const [allTimeHistory, setAllTimeHistory] = useState<AttendanceHistoryDay[]>([]);
+  const [rangeHistory, setRangeHistory] = useState<AttendanceHistoryDay[]>([]);
+  const [allTimeStats, setAllTimeStats] = useState<AttendanceHistoryStats | null>(null);
   const [userAuditLogs, setUserAuditLogs] = useState<AuditLog[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'leaves' | 'requests'>(
     'overview'
   );
   const [requestFilter, setRequestFilter] = useState<'all' | LeaveRequest['status']>('all');
   const [showAuditLog, setShowAuditLog] = useState(false);
-  const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'present' | 'late' | 'absent' | 'on_leave'>('all');
+  const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>('all');
   const [attendanceViewMode, setAttendanceViewMode] = useState<'all_time' | 'range'>('all_time');
   const [dateFrom, setDateFrom] = useState(() => {
     const n = now();
@@ -246,8 +230,8 @@ export function UserDetailsPage() {
   useEffect(() => {
     if (!userId || attendanceViewMode !== 'range') return;
     attendanceService
-      .getSummariesInRange(userId, dateFrom, dateTo)
-      .then(setRangeSummaries)
+      .getAttendanceHistoryRange(userId, dateFrom, dateTo)
+      .then(setRangeHistory)
       .catch(() => toast.error('فشل تحميل سجلات الحضور'));
   }, [userId, dateFrom, dateTo, attendanceViewMode]);
 
@@ -365,24 +349,23 @@ export function UserDetailsPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const [prof, today, balance, reqs, audit, atStats, atSummaries, atRangeSummaries] = await Promise.all([
+      const [prof, today, balance, reqs, audit, allHistory, rangeDays] = await Promise.all([
         profilesService.getUserById(userId),
         attendanceService.getAttendanceToday(userId),
         leaveBalanceService.getUserBalance(userId),
         requestsService.getUserRequests(userId),
         auditService.getAuditLogsForTarget(userId),
-        attendanceService.getAllTimeStats(userId),
-        attendanceService.getAllTimeSummaries(userId),
-        attendanceService.getSummariesInRange(userId, dateFrom, dateTo),
+        attendanceService.getAttendanceHistoryAllTime(userId),
+        attendanceService.getAttendanceHistoryRange(userId, dateFrom, dateTo),
       ]);
       setProfile(prof);
       setTodayRecord(today);
       setLeaveBalance(balance);
       setUserRequests(reqs);
       setUserAuditLogs(audit.slice(0, 10));
-      setAllTimeStats(atStats);
-      setAllTimeSummaries(atSummaries);
-      setRangeSummaries(atRangeSummaries);
+      setAllTimeHistory(allHistory);
+      setRangeHistory(rangeDays);
+      setAllTimeStats(attendanceService.calculateAttendanceHistoryStats(allHistory));
 
       if (prof?.department_id) {
         const dept = await departmentsService.getDepartmentById(prof.department_id);
@@ -434,19 +417,20 @@ export function UserDetailsPage() {
     requestFilter === 'all'
       ? userRequests
       : userRequests.filter((r) => r.status === requestFilter);
-  const displayedSummaries = attendanceViewMode === 'all_time' ? allTimeSummaries : rangeSummaries;
+  const displayedHistory = attendanceViewMode === 'all_time' ? allTimeHistory : rangeHistory;
   const todayDisplayStatus = useMemo(
     () => (todayRecord ? resolveTodayDisplayStatus(todayRecord, now()) : null),
     [todayRecord]
   );
   const todayStatusConfig = todayDisplayStatus ? getStatusConfig(todayDisplayStatus) : null;
-  const workingDaySummaries = displayedSummaries.filter(
-    (d) => d.status != null && d.status !== 'future' && d.status !== 'weekend'
-  );
-  const filteredSummaries =
+  const filteredHistory =
     attendanceFilter === 'all'
-      ? workingDaySummaries
-      : workingDaySummaries.filter((d) => d.status === attendanceFilter);
+      ? displayedHistory
+      : displayedHistory.filter((day) =>
+          attendanceFilter === 'overtime'
+            ? day.hasOvertime
+            : day.primaryState === attendanceFilter
+        );
   const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
     if (!profile) return;
     const oldEmail = (profile.email ?? '').trim().toLowerCase();
@@ -509,11 +493,16 @@ export function UserDetailsPage() {
   };
 
   const handleExportAttendance = () => {
-    if (filteredSummaries.length === 0 || !profile) return;
-    const rows = filteredSummaries.map((d) => ({
-      'التاريخ': d.date,
-      'الحالة': getAttendanceStatusAr(d.status as 'present' | 'late' | 'absent' | 'on_leave'),
-      'إجمالي الدقائق': d.totalMinutesWorked,
+    if (filteredHistory.length === 0 || !profile) return;
+    const rows = filteredHistory.map((day) => ({
+      'التاريخ': day.date,
+      'الحالة': getStatusConfig(day.primaryState).label,
+      'أول دخول': day.firstCheckIn ?? '—',
+      'آخر خروج': day.lastCheckOut ?? '—',
+      'دقائق عادية': day.totalRegularMinutes,
+      'دقائق إضافية': day.totalOvertimeMinutes,
+      'إجمالي الدقائق': day.totalWorkedMinutes,
+      'عدد الجلسات': day.sessionCount,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -763,13 +752,24 @@ export function UserDetailsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <StatCard
                   icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-                  label="أيام الحضور"
-                  value={allTimeStats.presentDays}
+                  label="دوام مكتمل"
+                  value={allTimeStats.fulfilledShiftDays}
                   color="bg-emerald-50 border-emerald-100"
                   onClick={() => {
                     setActiveTab('attendance');
                     setAttendanceViewMode('all_time');
-                    setAttendanceFilter('present');
+                    setAttendanceFilter('fulfilled_shift');
+                  }}
+                />
+                <StatCard
+                  icon={<TimerReset className="w-5 h-5 text-sky-500" />}
+                  label="دوام غير مكتمل"
+                  value={allTimeStats.incompleteShiftDays}
+                  color="bg-sky-50 border-sky-100"
+                  onClick={() => {
+                    setActiveTab('attendance');
+                    setAttendanceViewMode('all_time');
+                    setAttendanceFilter('incomplete_shift');
                   }}
                 />
                 <StatCard
@@ -803,6 +803,17 @@ export function UserDetailsPage() {
                     setActiveTab('attendance');
                     setAttendanceViewMode('all_time');
                     setAttendanceFilter('on_leave');
+                  }}
+                />
+                <StatCard
+                  icon={<ClipboardList className="w-5 h-5 text-slate-500" />}
+                  label="أيام إضافي"
+                  value={allTimeStats.overtimeDays}
+                  color="bg-slate-50 border-slate-200"
+                  onClick={() => {
+                    setActiveTab('attendance');
+                    setAttendanceViewMode('all_time');
+                    setAttendanceFilter('overtime');
                   }}
                 />
               </div>
@@ -895,7 +906,7 @@ export function UserDetailsPage() {
                 <button
                   type="button"
                   onClick={handleExportAttendance}
-                  disabled={filteredSummaries.length === 0}
+                  disabled={filteredHistory.length === 0}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-emerald-200"
                   aria-label="تصدير الحضور"
                 >
@@ -955,92 +966,33 @@ export function UserDetailsPage() {
 
           <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">
             <div className="flex gap-1 overflow-x-auto">
-              {(['all', 'present', 'late', 'absent', 'on_leave'] as const).map((f) => (
+              {ATTENDANCE_FILTER_OPTIONS.map((option) => (
                 <button
-                  key={f}
-                  onClick={() => setAttendanceFilter(f)}
+                  key={option.key}
+                  onClick={() => setAttendanceFilter(option.key)}
                   className={`px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-colors ${
-                    attendanceFilter === f
+                    attendanceFilter === option.key
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {f === 'all' ? 'الكل' : getAttendanceStatusAr(f)}
+                  {option.label}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="space-y-2">
-            {filteredSummaries.length > 0 ? (
-              filteredSummaries
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .map((day) => {
-                  const mappedStatus: AttendanceLog['status'] =
-                    day.status === 'present' ? 'present'
-                    : day.status === 'late' ? 'late'
-                    : day.status === 'on_leave' ? 'on_leave'
-                    : 'absent';
-                  const statusTheme = getAttendanceLogTheme(mappedStatus);
-                  const dateParts = formatDayAndMonth(day.date);
-                  const hours = Math.floor(day.totalMinutesWorked / 60);
-                  const mins = day.totalMinutesWorked % 60;
-                  return (
-                    <div
-                      key={day.date}
-                      className="relative bg-white rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.08)] p-4 pt-8 border-r-4"
-                      style={statusTheme.accentStyle}
-                    >
-                      <span
-                        className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium font-['IBM_Plex_Sans_Arabic',_sans-serif]"
-                        style={statusTheme.badgeSolidStyle}
-                      >
-                        {statusTheme.label}
-                      </span>
-
-                      <div className="flex items-center gap-5">
-                        <div className="min-w-[78px] text-center">
-                          <p className="text-[12px] font-normal text-[#94A3B8] font-['IBM_Plex_Sans_Arabic',_sans-serif]">{formatWeekday(day.date)}</p>
-                          <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900 font-['IBM_Plex_Sans_Arabic',_sans-serif]">
-                            <span className="text-[20px] font-bold leading-none">{dateParts.day}</span>
-                            <span className="text-[13px] font-bold leading-none">{dateParts.month}</span>
-                          </div>
-                        </div>
-
-                        <div className="h-12 w-px bg-gray-200" />
-
-                        <div className="flex-1 min-w-0 space-y-2">
-                          {day.totalMinutesWorked > 0 ? (
-                            <div className="flex items-center gap-3 text-gray-800">
-                              <Clock className="w-4 h-4 text-teal-700" />
-                              <span className="text-[15px] font-medium text-[#334155] font-['IBM_Plex_Mono',_monospace] tabular-nums">
-                                {hours > 0 ? `${hours} س ` : ''}{mins > 0 ? `${mins} د` : hours > 0 ? '' : '0 د'}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-3 text-gray-400">
-                              <Clock className="w-4 h-4" />
-                              <span className="text-[15px] font-medium font-['IBM_Plex_Mono',_monospace] tabular-nums">
-                                —
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-            ) : (
-              <div className="bg-gray-50 rounded-xl p-8 text-center border border-gray-100">
-                <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">
-                  {attendanceFilter === 'all'
-                    ? 'لا توجد سجلات حضور ضمن هذا النطاق'
-                    : `لا توجد سجلات بحالة ${getAttendanceStatusAr(attendanceFilter)}`}
-                </p>
-              </div>
-            )}
-          </div>
+          <AttendanceHistoryList
+            days={filteredHistory}
+            title="سجل الحضور"
+            emptyMessage={
+              attendanceFilter === 'all'
+                ? 'لا توجد سجلات حضور ضمن هذا النطاق'
+                : `لا توجد سجلات بحالة ${
+                    ATTENDANCE_FILTER_OPTIONS.find((option) => option.key === attendanceFilter)?.label ?? ''
+                  }`
+            }
+          />
         </div>
       )}
 

@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy:functions": "bash scripts/deploy-functions.sh",
+    "setup:auto-punch-out-schedule": "bash scripts/setup-auto-punch-out-schedule.sh",
     "test": "vitest run",
     "test:edge": "TZ=UTC deno test --allow-env supabase/functions",
     "test:watch": "vitest",

@@ -3,28 +3,31 @@ import { useSearchParams } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDevTime } from '../../contexts/DevTimeContext';
 import { useAppTopBar } from '../../contexts/AppTopBarContext';
-import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
 import type {
+  AttendanceHistoryDay,
   MonthDaySummary,
-  AttendanceSession,
-  CalendarStatus,
 } from '@/lib/services/attendance.service';
 import { now } from '@/lib/time';
-import {
-  TodayPunchLog,
-  type AttendanceListItem,
-} from '../../components/attendance/TodayPunchLog';
+import { AttendanceHistoryList } from '../../components/attendance/AttendanceHistoryList';
 import { MonthCalendarHeatmap } from '../../components/attendance/MonthCalendarHeatmap';
-import { getStatusTheme } from '../../components/attendance/attendanceStatusTheme';
+import { getStatusConfig } from '@/shared/attendance';
 
-type StatusFilter = 'present' | 'late' | 'absent' | 'on_leave' | 'overtime' | null;
+type StatusFilter =
+  | 'fulfilled_shift'
+  | 'incomplete_shift'
+  | 'late'
+  | 'absent'
+  | 'on_leave'
+  | 'overtime'
+  | null;
 
 const FILTER_OPTIONS: Array<{ key: Exclude<StatusFilter, null>; label: string }> = [
-  { key: 'present', label: getStatusTheme('present').label },
-  { key: 'late', label: getStatusTheme('late').label },
-  { key: 'absent', label: getStatusTheme('absent').label },
-  { key: 'on_leave', label: getStatusTheme('on_leave').label },
+  { key: 'fulfilled_shift', label: getStatusConfig('fulfilled_shift').label },
+  { key: 'incomplete_shift', label: getStatusConfig('incomplete_shift').label },
+  { key: 'late', label: getStatusConfig('late').label },
+  { key: 'absent', label: getStatusConfig('absent').label },
+  { key: 'on_leave', label: getStatusConfig('on_leave').label },
   { key: 'overtime', label: 'عمل إضافي' },
 ];
 
@@ -44,13 +47,32 @@ function parseMonthParam(raw: string | null): { year: number; month: number } | 
 
 function mapUrlStatusToFilter(raw: string | null): StatusFilter {
   if (!raw) return null;
-  if (raw === 'overtime_only' || raw === 'overtime_offday') return 'overtime';
-  if (raw === 'present' || raw === 'late' || raw === 'absent' || raw === 'on_leave') return raw;
+  if (raw === 'present') return 'fulfilled_shift';
+  if (raw === 'overtime' || raw === 'overtime_only' || raw === 'overtime_offday') return 'overtime';
+  if (
+    raw === 'fulfilled_shift' ||
+    raw === 'incomplete_shift' ||
+    raw === 'late' ||
+    raw === 'absent' ||
+    raw === 'on_leave'
+  ) {
+    return raw;
+  }
   return null;
 }
 
-function isOvertimeStatus(status: CalendarStatus): boolean {
-  return status === 'overtime_only' || status === 'overtime_offday';
+function matchesFilter(day: AttendanceHistoryDay, filter: StatusFilter): boolean {
+  if (!filter) return true;
+  if (filter === 'overtime') return day.hasOvertime;
+  return day.primaryState === filter;
+}
+
+function formatSelectedDateLabel(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('ar-IQ', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 export function AttendancePage() {
@@ -65,64 +87,49 @@ export function AttendancePage() {
   const [selectedMonth, setSelectedMonth] = useState(initialMonth.month);
   const [selectedYear, setSelectedYear] = useState(initialMonth.year);
   const [monthlySummaries, setMonthlySummaries] = useState<MonthDaySummary[]>([]);
-  const [monthlyLoading, setMonthlyLoading] = useState(true);
-
-  const [selectedLogDate, setSelectedLogDate] = useState<string | null>(null);
+  const [historyDays, setHistoryDays] = useState<AttendanceHistoryDay[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus);
-  const [allSessions, setAllSessions] = useState<AttendanceSession[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
 
-  const loadMonthly = useCallback(async () => {
+  const loadMonthData = useCallback(async () => {
     if (!currentUser) return;
-    setMonthlyLoading(true);
+    setLoading(true);
     try {
-      const summaries = await attendanceService.getAttendanceMonthly(currentUser.uid, selectedYear, selectedMonth);
+      const [summaries, monthHistory] = await Promise.all([
+        attendanceService.getAttendanceMonthly(currentUser.uid, selectedYear, selectedMonth),
+        attendanceService.getAttendanceHistoryMonth(currentUser.uid, selectedYear, selectedMonth),
+      ]);
       setMonthlySummaries(summaries);
+      setHistoryDays(monthHistory);
     } catch {
-      // Non-critical, silently fail
+      setMonthlySummaries([]);
+      setHistoryDays([]);
     } finally {
-      setMonthlyLoading(false);
+      setLoading(false);
     }
-  }, [currentUser?.uid, selectedYear, selectedMonth]);
+  }, [currentUser, selectedMonth, selectedYear]);
 
-  const loadSessions = useCallback(async () => {
-    if (!currentUser) return;
-    setSessionsLoading(true);
-    try {
-      const data = await attendanceService.getAttendanceSessions(currentUser.uid);
-      setAllSessions(data);
-    } catch {
-      setAllSessions([]);
-      toast.error('فشل تحميل جلسات الحضور');
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, [currentUser?.uid]);
-
-  // Initial load — monthly summaries and sessions in parallel
   useEffect(() => {
     if (!currentUser) return;
-    Promise.all([loadMonthly(), loadSessions()]);
-  }, [loadMonthly, loadSessions, currentUser]);
+    void loadMonthData();
+  }, [currentUser, loadMonthData]);
 
-  // Visibility refresh
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && currentUser) {
-        loadMonthly();
-        loadSessions();
+        void loadMonthData();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [loadMonthly, loadSessions, currentUser]);
+  }, [currentUser, loadMonthData]);
 
-  // Refresh today when dev toolbar date changes
   useEffect(() => {
     if (devTime?.override?.date && currentUser) {
-      loadSessions();
+      void loadMonthData();
     }
-  }, [devTime?.override?.date, loadSessions, currentUser]);
+  }, [currentUser, devTime?.override?.date, loadMonthData]);
 
   useEffect(() => {
     const monthFromUrl = parseMonthParam(searchParams.get('month'));
@@ -132,19 +139,19 @@ export function AttendancePage() {
       setSelectedMonth(monthFromUrl.month);
     }
     setStatusFilter(statusFromUrl);
-    if (statusFromUrl) setSelectedLogDate(null);
+    if (statusFromUrl) setSelectedDate(null);
   }, [searchParams]);
 
-  const updateUrlParams = useCallback((nextYear: number, nextMonth: number, nextStatus: StatusFilter) => {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('month', formatMonthParam(nextYear, nextMonth));
-    if (nextStatus) {
-      nextParams.set('status', nextStatus);
-    } else {
-      nextParams.delete('status');
-    }
-    setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams]);
+  const updateUrlParams = useCallback(
+    (nextYear: number, nextMonth: number, nextStatus: StatusFilter) => {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('month', formatMonthParam(nextYear, nextMonth));
+      if (nextStatus) nextParams.set('status', nextStatus);
+      else nextParams.delete('status');
+      setSearchParams(nextParams, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
 
   const prevMonth = () => {
     let nextMonth = selectedMonth;
@@ -157,7 +164,7 @@ export function AttendancePage() {
     }
     setSelectedMonth(nextMonth);
     setSelectedYear(nextYear);
-    setSelectedLogDate(null);
+    setSelectedDate(null);
     updateUrlParams(nextYear, nextMonth, statusFilter);
   };
 
@@ -177,84 +184,24 @@ export function AttendancePage() {
     }
     setSelectedMonth(nextMonthValue);
     setSelectedYear(nextYearValue);
-    setSelectedLogDate(null);
+    setSelectedDate(null);
     updateUrlParams(nextYearValue, nextMonthValue, statusFilter);
   };
 
-  const summaryMap = useMemo(
-    () => new Map(monthlySummaries.map((s) => [s.date, s.status])),
-    [monthlySummaries]
+  const visibleDays = useMemo(
+    () =>
+      historyDays.filter((day) => (!selectedDate || day.date === selectedDate) && matchesFilter(day, statusFilter)),
+    [historyDays, selectedDate, statusFilter]
   );
+
   const monthParam = formatMonthParam(selectedYear, selectedMonth);
-  const monthPrefix = `${monthParam}-`;
-
-  const monthSessions = useMemo(
-    () => allSessions.filter((s) => s.date.startsWith(monthPrefix)),
-    [allSessions, monthPrefix]
-  );
-
-  const dateScopedSessions = useMemo(
-    () => (selectedLogDate ? monthSessions.filter((s) => s.date === selectedLogDate) : monthSessions),
-    [monthSessions, selectedLogDate]
-  );
-
-  const sessionMatchesFilter = useCallback((session: AttendanceSession) => {
-    if (!statusFilter) return true;
-    const dayStatus = summaryMap.get(session.date) ?? null;
-    if (statusFilter === 'overtime') {
-      return session.is_overtime || isOvertimeStatus(dayStatus);
-    }
-    return dayStatus === statusFilter;
-  }, [statusFilter, summaryMap]);
-
-  const visibleSessions = useMemo(
-    () => dateScopedSessions.filter(sessionMatchesFilter),
-    [dateScopedSessions, sessionMatchesFilter]
-  );
-
-  const absentItems = useMemo<AttendanceListItem[]>(() => {
-    const includeAbsent = !statusFilter || statusFilter === 'absent';
-    if (!includeAbsent) return [];
-    return monthlySummaries
-      .filter((summary) => summary.status === 'absent')
-      .filter((summary) => !selectedLogDate || summary.date === selectedLogDate)
-      .map((summary) => ({
-        kind: 'absent_day',
-        date: summary.date,
-      }));
-  }, [monthlySummaries, selectedLogDate, statusFilter]);
-
-  const listItems = useMemo<AttendanceListItem[]>(() => {
-    const sessionItems: AttendanceListItem[] = visibleSessions.map((session) => ({
-      kind: 'session',
-      session,
-    }));
-    return [...sessionItems, ...absentItems].sort((a, b) => {
-      const aDate = a.kind === 'session' ? a.session.date : a.date;
-      const bDate = b.kind === 'session' ? b.session.date : b.date;
-      if (aDate !== bDate) return bDate.localeCompare(aDate);
-      const aTime = a.kind === 'session' ? a.session.check_in_time : '00:00';
-      const bTime = b.kind === 'session' ? b.session.check_in_time : '00:00';
-      return bTime.localeCompare(aTime);
-    });
-  }, [visibleSessions, absentItems]);
-
-  const isShowingFilteredDate = !!selectedLogDate;
-  const selectedDateLabel = selectedLogDate
-    ? new Date(`${selectedLogDate}T00:00:00`).toLocaleDateString('en-US', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      numberingSystem: 'latn',
-    })
-    : null;
-  const filterTitle = FILTER_OPTIONS.find((f) => f.key === statusFilter)?.label;
-  const logTitle = isShowingFilteredDate
-    ? `جلسات ${selectedDateLabel}`
-    : statusFilter
+  const selectedDateLabel = selectedDate ? formatSelectedDateLabel(selectedDate) : null;
+  const filterTitle = FILTER_OPTIONS.find((option) => option.key === statusFilter)?.label;
+  const listTitle = selectedDateLabel
+    ? `سجل ${selectedDateLabel}`
+    : filterTitle
       ? `${filterTitle} - ${monthParam}`
       : `سجل الشهر - ${monthParam}`;
-  const logLoading = sessionsLoading;
 
   useAppTopBar({
     title: currentUser ? 'الحضور والانصراف' : undefined,
@@ -265,78 +212,87 @@ export function AttendancePage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
-      {/* Section 1: Monthly Calendar Heatmap */}
       <MonthCalendarHeatmap
         year={selectedYear}
         month={selectedMonth}
         summaries={monthlySummaries}
-        loading={monthlyLoading}
+        loading={loading}
         onPrevMonth={prevMonth}
         onNextMonth={nextMonth}
         onDayTap={(date) => {
           if (statusFilter) return;
-          const nextDate = selectedLogDate === date ? null : date;
-          setSelectedLogDate(nextDate);
+          setSelectedDate((current) => (current === date ? null : date));
         }}
       />
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
+      <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap gap-2">
-          {FILTER_OPTIONS.map((opt) => {
-            const active = statusFilter === opt.key;
+          {FILTER_OPTIONS.map((option) => {
+            const active = statusFilter === option.key;
             return (
               <button
-                key={opt.key}
+                key={option.key}
                 type="button"
                 onClick={() => {
-                  const nextStatus = active ? null : opt.key;
+                  const nextStatus = active ? null : option.key;
                   setStatusFilter(nextStatus);
-                  setSelectedLogDate(null);
+                  setSelectedDate(null);
                   updateUrlParams(selectedYear, selectedMonth, nextStatus);
                 }}
-                className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
                   active
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                {opt.label}
+                {option.label}
               </button>
             );
           })}
-          {(statusFilter || selectedLogDate) && (
+          {(statusFilter || selectedDate) ? (
             <button
               type="button"
               onClick={() => {
                 setStatusFilter(null);
-                setSelectedLogDate(null);
+                setSelectedDate(null);
                 updateUrlParams(selectedYear, selectedMonth, null);
               }}
-              className="px-3 py-1.5 rounded-full text-xs border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+              className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 transition-colors hover:bg-blue-100"
             >
               مسح الفلاتر
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* Section 2: Sessions list */}
-      {logLoading ? (
-        <div className="space-y-2">
-          <div className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
-          <div className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
-          <div className="bg-gray-100 rounded-2xl h-24 animate-pulse" />
+      {loading ? (
+        <div className="space-y-3">
+          <div className="h-40 animate-pulse rounded-3xl bg-gray-100" />
+          <div className="h-40 animate-pulse rounded-3xl bg-gray-100" />
         </div>
       ) : (
-        <TodayPunchLog
-          items={listItems}
-          selectedDate={selectedLogDate}
-          onClearFilter={() => {
-            setSelectedLogDate(null);
-            setStatusFilter(null);
-            updateUrlParams(selectedYear, selectedMonth, null);
-          }}
-          title={logTitle}
+        <AttendanceHistoryList
+          days={visibleDays}
+          title={listTitle}
+          focusedDate={selectedDate}
+          onClearFocus={
+            selectedDate
+              ? () => {
+                  setSelectedDate(null);
+                  if (statusFilter) {
+                    setStatusFilter(null);
+                    updateUrlParams(selectedYear, selectedMonth, null);
+                  }
+                }
+              : undefined
+          }
+          emptyMessage={
+            selectedDate
+              ? 'لا توجد سجلات لهذا اليوم'
+              : statusFilter
+                ? `لا توجد سجلات بحالة ${filterTitle}`
+                : 'لا توجد سجلات لهذا الشهر'
+          }
         />
       )}
     </div>

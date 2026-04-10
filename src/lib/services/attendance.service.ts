@@ -63,6 +63,46 @@ export interface MonthDaySummary {
   totalMinutesWorked: number;
 }
 
+export type AttendanceHistoryPrimaryState = TeamAttendanceDateState | 'weekend' | 'holiday';
+
+export type AttendanceHistorySessionClassification = 'regular' | 'late' | 'overtime';
+
+export interface AttendanceHistorySession {
+  id: string;
+  checkInTime: string;
+  checkOutTime: string | null;
+  durationMinutes: number;
+  classification: AttendanceHistorySessionClassification;
+  isEarlyDeparture: boolean;
+  isAutoPunchOut: boolean;
+  needsReview: boolean;
+}
+
+export interface AttendanceHistoryDay {
+  date: string;
+  primaryState: AttendanceHistoryPrimaryState;
+  firstCheckIn: string | null;
+  lastCheckOut: string | null;
+  totalRegularMinutes: number;
+  totalOvertimeMinutes: number;
+  totalWorkedMinutes: number;
+  sessionCount: number;
+  hasOvertime: boolean;
+  hasAutoPunchOut: boolean;
+  needsReview: boolean;
+  sessions: AttendanceHistorySession[];
+}
+
+export interface AttendanceHistoryStats {
+  fulfilledShiftDays: number;
+  incompleteShiftDays: number;
+  lateDays: number;
+  absentDays: number;
+  leaveDays: number;
+  overtimeDays: number;
+  totalWorkingDays: number;
+}
+
 export type TeamAttendanceDisplayStatus = AttendanceEffectiveStatus | 'overtime_offday' | null;
 
 export interface TeamAttendanceDayRow {
@@ -335,6 +375,159 @@ function computeTotalMinutesFromSessions(sessions: AttendanceSession[]): number 
   return sessions.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
 }
 
+function computeOvertimeMinutesFromSessions(sessions: AttendanceSession[]): number {
+  return sessions.reduce(
+    (sum, session) => sum + (session.is_overtime ? session.duration_minutes ?? 0 : 0),
+    0
+  );
+}
+
+function computeRegularMinutesFromSessions(sessions: AttendanceSession[]): number {
+  return sessions.reduce(
+    (sum, session) => sum + (!session.is_overtime ? session.duration_minutes ?? 0 : 0),
+    0
+  );
+}
+
+function buildSummaryFallback(
+  sessions: AttendanceSession[],
+  summary: AttendanceDailySummary | undefined
+): AttendanceDailySummary | undefined {
+  if (summary) return summary;
+  if (sessions.length === 0) return undefined;
+
+  const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const firstCheckIn = sorted[0]?.check_in_time ?? null;
+  const lastClosedSession = [...sorted].reverse().find((session) => !!session.check_out_time);
+  const regularSessions = sorted.filter((session) => !session.is_overtime);
+  const hasRegularPresent = regularSessions.some((session) => session.status === 'present');
+  const hasRegularLate = regularSessions.some((session) => session.status === 'late');
+  const allOvertime = sorted.every((session) => session.is_overtime);
+
+  let effectiveStatus: AttendanceEffectiveStatus | null = null;
+  if (hasRegularPresent) effectiveStatus = 'present';
+  else if (hasRegularLate) effectiveStatus = 'late';
+  else if (allOvertime) effectiveStatus = 'overtime_only';
+
+  return {
+    id: `fallback-${sorted[0]?.date ?? 'unknown'}`,
+    org_id: sorted[0]?.org_id ?? '',
+    user_id: sorted[0]?.user_id ?? '',
+    date: sorted[0]?.date ?? '',
+    first_check_in: firstCheckIn,
+    last_check_out: lastClosedSession?.check_out_time ?? null,
+    total_work_minutes: computeTotalMinutesFromSessions(sorted),
+    total_overtime_minutes: computeOvertimeMinutesFromSessions(sorted),
+    effective_status: effectiveStatus,
+    is_short_day: false,
+    session_count: sorted.length,
+    updated_at: new Date().toISOString(),
+  } as AttendanceDailySummary;
+}
+
+function mapSessionClassification(
+  session: AttendanceSession
+): AttendanceHistorySessionClassification {
+  if (session.is_overtime) return 'overtime';
+  if (session.status === 'late') return 'late';
+  return 'regular';
+}
+
+function mapHistoryPrimaryState(
+  status: CalendarStatus,
+  isShortDay: boolean
+): AttendanceHistoryPrimaryState | null {
+  switch (status) {
+    case 'present':
+      return isShortDay ? 'incomplete_shift' : 'fulfilled_shift';
+    case 'late':
+      return 'late';
+    case 'absent':
+    case 'overtime_only':
+      return 'absent';
+    case 'on_leave':
+      return 'on_leave';
+    case 'overtime_offday':
+    case 'weekend':
+      return 'weekend';
+    case 'holiday':
+      return 'holiday';
+    case 'future':
+    case null:
+    default:
+      return null;
+  }
+}
+
+function shouldIncludeHistoryDay(
+  primaryState: AttendanceHistoryPrimaryState | null,
+  sessions: AttendanceSession[]
+): primaryState is AttendanceHistoryPrimaryState {
+  if (!primaryState) return false;
+  if (primaryState === 'weekend' || primaryState === 'holiday') {
+    return sessions.length > 0;
+  }
+  return true;
+}
+
+function buildHistoryDay(params: {
+  date: string;
+  summary: AttendanceDailySummary | undefined;
+  sessions: AttendanceSession[];
+  shift: ShiftInfo | null;
+  todayStr_: string;
+  joinDate?: string | null;
+}): AttendanceHistoryDay | null {
+  const { date, sessions, shift, todayStr_, joinDate } = params;
+  const offDays = shift?.weeklyOffDays ?? [5, 6];
+  const isOffDay = offDays.includes(new Date(`${date}T00:00:00`).getDay());
+  const summary = buildSummaryFallback(sessions, params.summary);
+  const calendarStatus = resolveCalendarStatus(date, isOffDay, summary, todayStr_, joinDate);
+  const primaryState = mapHistoryPrimaryState(calendarStatus, summary?.is_short_day ?? false);
+
+  if (!shouldIncludeHistoryDay(primaryState, sessions)) {
+    return null;
+  }
+
+  const sortedSessions = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const totalWorkedMinutes = summary?.total_work_minutes ?? computeTotalMinutesFromSessions(sortedSessions);
+  const totalOvertimeMinutes =
+    summary?.total_overtime_minutes ?? computeOvertimeMinutesFromSessions(sortedSessions);
+  const totalRegularMinutes =
+    sortedSessions.length > 0
+      ? computeRegularMinutesFromSessions(sortedSessions)
+      : Math.max(0, totalWorkedMinutes - totalOvertimeMinutes);
+
+  return {
+    date,
+    primaryState,
+    firstCheckIn: summary?.first_check_in ?? sortedSessions[0]?.check_in_time ?? null,
+    lastCheckOut:
+      summary?.last_check_out ??
+      [...sortedSessions].reverse().find((session) => !!session.check_out_time)?.check_out_time ??
+      null,
+    totalRegularMinutes,
+    totalOvertimeMinutes,
+    totalWorkedMinutes,
+    sessionCount: summary?.session_count ?? sortedSessions.length,
+    hasOvertime:
+      (summary?.effective_status === 'overtime_only' || totalOvertimeMinutes > 0) &&
+      sortedSessions.length > 0,
+    hasAutoPunchOut: sortedSessions.some((session) => !!session.is_auto_punch_out),
+    needsReview: sortedSessions.some((session) => !!session.needs_review),
+    sessions: sortedSessions.map((session) => ({
+      id: session.id,
+      checkInTime: session.check_in_time,
+      checkOutTime: session.check_out_time,
+      durationMinutes: session.duration_minutes ?? 0,
+      classification: mapSessionClassification(session),
+      isEarlyDeparture: !!session.is_early_departure,
+      isAutoPunchOut: !!session.is_auto_punch_out,
+      needsReview: !!session.needs_review,
+    })),
+  };
+}
+
 function normalizeSessions(data: unknown, dateHint: string): AttendanceSession[] {
   if (Array.isArray(data)) return data as AttendanceSession[];
   if (!data || typeof data !== 'object') return [];
@@ -602,6 +795,63 @@ export async function getAttendanceMonthly(
   }
 
   return summaries;
+}
+
+export async function getAttendanceHistoryMonth(
+  userId: string,
+  year: number,
+  month: number
+): Promise<AttendanceHistoryDay[]> {
+  const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const [summariesRes, sessionsRes, shift, joinDate] = await Promise.all([
+    supabase
+      .from('attendance_daily_summary')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', from)
+      .lte('date', to),
+    supabase
+      .from('attendance_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', from)
+      .lte('date', to)
+      .order('date', { ascending: true })
+      .order('check_in_time', { ascending: true }),
+    getEffectiveShiftForUser(userId),
+    getUserJoinDate(userId),
+  ]);
+
+  if (summariesRes.error) throw summariesRes.error;
+  if (sessionsRes.error) throw sessionsRes.error;
+
+  const summaryMap = new Map((summariesRes.data ?? []).map((summary) => [summary.date, summary]));
+  const sessionsByDate = new Map<string, AttendanceSession[]>();
+  for (const session of sessionsRes.data ?? []) {
+    const existing = sessionsByDate.get(session.date) ?? [];
+    existing.push(session);
+    sessionsByDate.set(session.date, existing);
+  }
+
+  const todayStr_ = todayStr(now());
+  const items: AttendanceHistoryDay[] = [];
+  for (let day = 1; day <= lastDay; day++) {
+    const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const historyDay = buildHistoryDay({
+      date,
+      summary: summaryMap.get(date),
+      sessions: sessionsByDate.get(date) ?? [],
+      shift,
+      todayStr_,
+      joinDate,
+    });
+    if (historyDay) items.push(historyDay);
+  }
+
+  return items;
 }
 
 export function todayStr(d?: Date): string {
@@ -1046,6 +1296,39 @@ export async function getAllTimeSummaries(userId: string): Promise<MonthDaySumma
   return all;
 }
 
+export async function getAttendanceHistoryAllTime(userId: string): Promise<AttendanceHistoryDay[]> {
+  const joinDate = await getUserJoinDate(userId);
+  const today = now();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+
+  let startYear: number;
+  let startMonth: number;
+  if (joinDate) {
+    const [y, m] = joinDate.split('-').map(Number);
+    startYear = y;
+    startMonth = m - 1;
+  } else {
+    startYear = todayYear;
+    startMonth = todayMonth;
+  }
+
+  const all: AttendanceHistoryDay[] = [];
+  let y = startYear;
+  let m = startMonth;
+  while (y < todayYear || (y === todayYear && m <= todayMonth)) {
+    const monthDays = await getAttendanceHistoryMonth(userId, y, m);
+    all.push(...monthDays);
+    m++;
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+  }
+
+  return all;
+}
+
 export async function getSummariesInRange(
   userId: string,
   fromDate: string,
@@ -1067,6 +1350,69 @@ export async function getSummariesInRange(
   }
 
   return all.filter((d) => d.date >= fromDate && d.date <= toDate);
+}
+
+export async function getAttendanceHistoryRange(
+  userId: string,
+  fromDate: string,
+  toDate: string
+): Promise<AttendanceHistoryDay[]> {
+  const [fromY, fromM] = fromDate.split('-').map(Number);
+  const [toY, toM] = toDate.split('-').map(Number);
+
+  const all: AttendanceHistoryDay[] = [];
+  let y = fromY;
+  let m = fromM - 1;
+  const endY = toY;
+  const endM = toM - 1;
+  while (y < endY || (y === endY && m <= endM)) {
+    const monthDays = await getAttendanceHistoryMonth(userId, y, m);
+    all.push(...monthDays);
+    m++;
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+  }
+
+  return all.filter((day) => day.date >= fromDate && day.date <= toDate);
+}
+
+export function calculateAttendanceHistoryStats(
+  days: AttendanceHistoryDay[]
+): AttendanceHistoryStats {
+  return days.reduce<AttendanceHistoryStats>(
+    (totals, day) => {
+      if (day.primaryState === 'fulfilled_shift') totals.fulfilledShiftDays++;
+      else if (day.primaryState === 'incomplete_shift') totals.incompleteShiftDays++;
+      else if (day.primaryState === 'late') totals.lateDays++;
+      else if (day.primaryState === 'absent') totals.absentDays++;
+      else if (day.primaryState === 'on_leave') totals.leaveDays++;
+
+      if (day.hasOvertime) totals.overtimeDays++;
+
+      if (
+        day.primaryState === 'fulfilled_shift' ||
+        day.primaryState === 'incomplete_shift' ||
+        day.primaryState === 'late' ||
+        day.primaryState === 'absent' ||
+        day.primaryState === 'on_leave'
+      ) {
+        totals.totalWorkingDays++;
+      }
+
+      return totals;
+    },
+    {
+      fulfilledShiftDays: 0,
+      incompleteShiftDays: 0,
+      lateDays: 0,
+      absentDays: 0,
+      leaveDays: 0,
+      overtimeDays: 0,
+      totalWorkingDays: 0,
+    }
+  );
 }
 
 export async function getDepartmentLogsForDate(
