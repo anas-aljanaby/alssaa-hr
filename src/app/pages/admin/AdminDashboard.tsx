@@ -17,9 +17,9 @@ import {
 } from '../../components/dashboard';
 import {
   CheckCircle2,
+  Clock3,
   Timer,
   XCircle,
-  Coffee,
   Shield,
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
@@ -28,15 +28,19 @@ import { now } from '@/lib/time';
 import { UnavailableState } from '../../components/shared/UnavailableState';
 import { isOfflineError } from '@/lib/network';
 import {
-  DASHBOARD_SUMMARY_CHIPS,
+  DASHBOARD_DATE_SUMMARY_CHIPS,
+  DASHBOARD_LIVE_SUMMARY_CHIPS,
   countByChip,
-  getChipsForRole,
   resolveAttendanceDayState,
   resolveAttendanceDisplayStatus,
   getStatusConfig,
   type DisplayStatus,
   type LivePresence,
+  type TeamAttendanceChipKey,
+  type TeamAttendancePrimaryState,
+  type ViewMode,
 } from '@/shared/attendance';
+import { cn } from '@/app/components/ui/utils';
 
 function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -67,14 +71,11 @@ function resolveTeamRowDisplayStatus(row: TeamAttendanceDayRow, liveMode: boolea
 }
 
 type AdminTab = 'overview' | 'analytics';
-type DashboardSummaryKey = 'present' | 'late' | 'absent' | 'on_leave';
 
-const DASHBOARD_FILTER_BY_SUMMARY_KEY: Record<DashboardSummaryKey, string> = {
-  present: 'present_now',
-  late: 'late',
-  absent: 'absent',
-  on_leave: 'on_leave',
-};
+interface DashboardSummaryRow {
+  primaryState: TeamAttendancePrimaryState;
+  hasOvertime: boolean;
+}
 
 export function AdminDashboard() {
   const navigate = useNavigate();
@@ -85,6 +86,7 @@ export function AdminDashboard() {
   const [pendingRequests, setPendingRequests] = useState<LeaveRequest[]>([]);
   const [weekRows, setWeekRows] = useState<{ day: string; rows: TeamAttendanceDayRow[] }[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [summaryMode, setSummaryMode] = useState<ViewMode>('live');
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -173,40 +175,68 @@ export function AdminDashboard() {
   );
 
   const handleSummaryCardClick = useCallback(
-    (key: DashboardSummaryKey) => {
+    (key: TeamAttendanceChipKey) => {
       const params = new URLSearchParams({
-        mode: 'live',
+        mode: summaryMode,
         date: dateStr(now()),
-        filter: DASHBOARD_FILTER_BY_SUMMARY_KEY[key],
+        filter: key,
       });
 
       navigate(`/team-attendance?${params.toString()}`);
     },
-    [navigate]
+    [navigate, summaryMode]
   );
 
-  const overallStats = useMemo(() => {
+  const eligibleTodayRows = useMemo(() => {
     const today = dateStr(now());
     const activeEmployees = allNonAdmin.filter((e) => hasJoinedBy(today, e.join_date));
     const activeUserIds = new Set(activeEmployees.map((employee) => employee.id));
-    const summaryRows = todayRows
-      .filter((row) => row.role !== 'admin' && activeUserIds.has(row.userId))
-      .map((row) => ({
-        ...row,
-        displayStatus: resolveTeamRowDisplayStatus(row, true),
-      }));
-    const visibleSummaryChips = getChipsForRole(DASHBOARD_SUMMARY_CHIPS, 'admin');
-    const counts = countByChip(visibleSummaryChips, summaryRows);
 
     return {
       totalEmployees: activeEmployees.length,
       totalDepartments: departments.length,
-      present: counts.present ?? 0,
-      late: counts.late ?? 0,
-      absent: counts.absent ?? 0,
-      onLeave: counts.on_leave ?? 0,
+      rows: todayRows.filter((row) => row.role !== 'admin' && activeUserIds.has(row.userId)),
     };
   }, [todayRows, allNonAdmin, departments]);
+
+  const overallStats = useMemo(
+    () => ({
+      totalEmployees: eligibleTodayRows.totalEmployees,
+      totalDepartments: eligibleTodayRows.totalDepartments,
+    }),
+    [eligibleTodayRows]
+  );
+
+  const summaryRows = useMemo<DashboardSummaryRow[]>(
+    () =>
+      eligibleTodayRows.rows.map((row) => ({
+        primaryState: summaryMode === 'live' ? row.teamLiveState : row.teamDateState,
+        hasOvertime: row.hasOvertime,
+      })),
+    [eligibleTodayRows.rows, summaryMode]
+  );
+
+  const activeSummaryChips = useMemo(
+    () => (summaryMode === 'live' ? DASHBOARD_LIVE_SUMMARY_CHIPS : DASHBOARD_DATE_SUMMARY_CHIPS),
+    [summaryMode]
+  );
+
+  const summaryCounts = useMemo(
+    () => countByChip(activeSummaryChips, summaryRows),
+    [activeSummaryChips, summaryRows]
+  );
+
+  const liveSummaryCounts = useMemo(
+    () =>
+      countByChip(
+        DASHBOARD_LIVE_SUMMARY_CHIPS,
+        eligibleTodayRows.rows.map((row) => ({
+          primaryState: row.teamLiveState,
+          hasOvertime: row.hasOvertime,
+        }))
+      ),
+    [eligibleTodayRows.rows]
+  );
 
   const profilesMap = useMemo(
     () => new Map(profiles.map((p) => [p.id, p])),
@@ -236,12 +266,28 @@ export function AdminDashboard() {
   const pieData = useMemo(
     () =>
       [
-        { name: 'حاضر', value: overallStats.present, color: '#059669' },
-        { name: 'متأخر', value: overallStats.late, color: '#d97706' },
-        { name: 'غائب', value: overallStats.absent, color: '#dc2626' },
-        { name: 'إجازة', value: overallStats.onLeave, color: '#2563eb' },
+        {
+          name: 'حاضر',
+          value: liveSummaryCounts.available_now ?? 0,
+          color: '#059669',
+        },
+        {
+          name: 'متأخر',
+          value: liveSummaryCounts.late ?? 0,
+          color: '#d97706',
+        },
+        {
+          name: 'غائب',
+          value: liveSummaryCounts.absent ?? 0,
+          color: '#dc2626',
+        },
+        {
+          name: 'لم يسجل بعد',
+          value: liveSummaryCounts.not_entered_yet ?? 0,
+          color: '#64748b',
+        },
       ].filter((d) => d.value > 0),
-    [overallStats]
+    [liveSummaryCounts]
   );
 
   const weeklyTrend = useMemo(
@@ -262,18 +308,18 @@ export function AdminDashboard() {
 
   const summaryCards = useMemo(
     () =>
-      getChipsForRole(DASHBOARD_SUMMARY_CHIPS, 'admin').map((chip) => {
-        const primaryStatus = chip.matchStatuses[0];
+      activeSummaryChips.map((chip) => {
+        const primaryStatus = chip.themeStatus ?? chip.matchStatuses?.[0];
         const config = primaryStatus ? getStatusConfig(primaryStatus) : null;
         return {
           key: chip.key,
           label: chip.label,
-          value: overallStats[chip.key === 'on_leave' ? 'onLeave' : chip.key as 'present' | 'late' | 'absent'],
+          value: summaryCounts[chip.key] ?? 0,
           color: config ? `${config.bgColor} ${config.borderColor}` : 'bg-slate-50 border-slate-200',
-          onClick: () => handleSummaryCardClick(chip.key as DashboardSummaryKey),
+          onClick: () => handleSummaryCardClick(chip.key as TeamAttendanceChipKey),
         };
       }),
-    [handleSummaryCardClick, overallStats]
+    [activeSummaryChips, handleSummaryCardClick, summaryCounts]
   );
 
   if (loading) {
@@ -332,20 +378,50 @@ export function AdminDashboard() {
       {activeTab === 'overview' && (
         <>
           <div>
-            <h3 className="mb-2 text-gray-800">ملخص اليوم</h3>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-gray-800">ملخص اليوم</h3>
+              <div className="grid min-w-[11rem] grid-cols-2 rounded-2xl bg-slate-50 p-1 ring-1 ring-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setSummaryMode('live')}
+                  className={cn(
+                    'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
+                    summaryMode === 'live'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-blue-50'
+                  )}
+                >
+                  الآن
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSummaryMode('date')}
+                  className={cn(
+                    'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
+                    summaryMode === 'date'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-blue-50'
+                  )}
+                >
+                  اليوم/التاريخ
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               {summaryCards.map((card) => (
                 <StatCard
                   key={card.key}
                   icon={
-                    card.key === 'present' ? (
+                    card.key === 'available_now' || card.key === 'fulfilled_shift' ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                     ) : card.key === 'late' ? (
                       <Timer className="w-5 h-5 text-amber-500" />
+                    ) : card.key === 'not_entered_yet' || card.key === 'incomplete_shift' ? (
+                      <Clock3 className="w-5 h-5 text-sky-500" />
                     ) : card.key === 'absent' ? (
                       <XCircle className="w-5 h-5 text-red-500" />
                     ) : (
-                      <Coffee className="w-5 h-5 text-purple-500" />
+                      <Clock3 className="w-5 h-5 text-slate-500" />
                     )
                   }
                   label={card.label}

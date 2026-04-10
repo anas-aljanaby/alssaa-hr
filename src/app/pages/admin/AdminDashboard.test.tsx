@@ -95,6 +95,21 @@ describe('AdminDashboard', () => {
         work_start_time: null,
         work_end_time: null,
       },
+      {
+        id: 'emp-4',
+        org_id: 'org-1',
+        employee_id: 'EMP-004',
+        name: 'Sara',
+        name_ar: 'سارة',
+        email: 'sara@example.com',
+        role: 'employee',
+        department_id: 'dept-1',
+        avatar_url: null,
+        join_date: '2024-01-01',
+        work_days: null,
+        work_start_time: null,
+        work_end_time: null,
+      },
     ] as any);
 
     vi.mocked(departmentsService.listDepartments).mockResolvedValue([
@@ -120,6 +135,8 @@ describe('AdminDashboard', () => {
         date: '2026-04-04',
         effectiveStatus: 'present',
         displayStatus: 'present',
+        teamLiveState: 'available_now',
+        teamDateState: 'fulfilled_shift',
         firstCheckIn: '08:05',
         lastCheckOut: null,
         totalWorkMinutes: 60,
@@ -142,6 +159,8 @@ describe('AdminDashboard', () => {
         date: '2026-04-04',
         effectiveStatus: 'late',
         displayStatus: 'late',
+        teamLiveState: 'late',
+        teamDateState: 'late',
         firstCheckIn: '08:40',
         lastCheckOut: null,
         totalWorkMinutes: 60,
@@ -162,18 +181,44 @@ describe('AdminDashboard', () => {
         departmentId: 'dept-1',
         departmentNameAr: 'الأخبار',
         date: '2026-04-04',
-        effectiveStatus: 'overtime_only',
-        displayStatus: 'overtime_only',
-        firstCheckIn: '18:00',
-        lastCheckOut: '20:00',
-        totalWorkMinutes: 120,
-        totalOvertimeMinutes: 120,
-        hasOvertime: true,
-        sessionCount: 1,
+        effectiveStatus: 'absent',
+        displayStatus: 'absent',
+        teamLiveState: 'absent',
+        teamDateState: 'absent',
+        firstCheckIn: null,
+        lastCheckOut: null,
+        totalWorkMinutes: 0,
+        totalOvertimeMinutes: 0,
+        hasOvertime: false,
+        sessionCount: 0,
         isCheckedInNow: false,
         hasAutoPunchOut: false,
         needsReview: false,
         isShortDay: false,
+      },
+      {
+        userId: 'emp-4',
+        nameAr: 'سارة',
+        employeeId: 'EMP-004',
+        role: 'employee',
+        avatarUrl: null,
+        departmentId: 'dept-1',
+        departmentNameAr: 'الأخبار',
+        date: '2026-04-04',
+        effectiveStatus: null,
+        displayStatus: null,
+        teamLiveState: 'not_entered_yet',
+        teamDateState: 'incomplete_shift',
+        firstCheckIn: null,
+        lastCheckOut: null,
+        totalWorkMinutes: 180,
+        totalOvertimeMinutes: 0,
+        hasOvertime: false,
+        sessionCount: 1,
+        isCheckedInNow: false,
+        hasAutoPunchOut: false,
+        needsReview: false,
+        isShortDay: true,
       },
     ] as any);
     vi.mocked(requestsService.getAllPendingRequests).mockResolvedValue([]);
@@ -188,13 +233,37 @@ describe('AdminDashboard', () => {
     );
 
     await screen.findByText('ملخص اليوم');
-    expect(screen.getByRole('button', { name: /غائبون/i })).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: /موجودون الآن/i })).toHaveTextContent('2');
+    expect(screen.getByRole('button', { name: /لم يسجلوا بعد/i })).toHaveTextContent('1');
 
-    fireEvent.click(screen.getByRole('button', { name: /غائبون/i }));
+    fireEvent.click(screen.getByRole('button', { name: /غائب/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('location-display')).toHaveTextContent(
         '/team-attendance?mode=live&date=2026-04-04&filter=absent'
+      );
+    });
+  });
+
+  it('switches to date mode cards and navigates with the matching date filter', async () => {
+    render(
+      <MemoryRouter>
+        <AdminDashboard />
+        <LocationDisplay />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ملخص اليوم');
+    fireEvent.click(screen.getByRole('button', { name: 'اليوم/التاريخ' }));
+
+    expect(screen.getByRole('button', { name: /أكملوا الدوام/i })).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: /دوام غير مكتمل/i })).toHaveTextContent('1');
+
+    fireEvent.click(screen.getByRole('button', { name: /دوام غير مكتمل/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-display')).toHaveTextContent(
+        '/team-attendance?mode=date&date=2026-04-04&filter=incomplete_shift'
       );
     });
   });

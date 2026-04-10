@@ -125,36 +125,38 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
   },
 ];
 
-export const DASHBOARD_SUMMARY_CHIPS: ChipConfig[] = [
-  {
-    key: 'present',
-    label: 'حاضرون',
-    themeStatus: 'present_now',
-    matchStatuses: ['present_now', 'late_now', 'finished'],
-    visibleToRoles: MANAGEMENT_ROLES,
-  },
-  {
-    key: 'late',
-    label: 'متأخرون',
-    themeStatus: 'late_now',
-    matchStatuses: ['late_now'],
-    visibleToRoles: MANAGEMENT_ROLES,
-  },
-  {
-    key: 'absent',
-    label: 'غائبون',
-    themeStatus: 'absent',
-    matchStatuses: ['absent', 'not_registered'],
-    visibleToRoles: MANAGEMENT_ROLES,
-  },
-  {
-    key: 'on_leave',
-    label: 'في إجازة',
-    themeStatus: 'on_leave',
-    matchStatuses: ['on_leave'],
-    visibleToRoles: MANAGEMENT_ROLES,
-  },
-];
+const DASHBOARD_LIVE_CHIP_KEYS = [
+  'available_now',
+  'late',
+  'not_entered_yet',
+  'absent',
+] as const;
+
+const DASHBOARD_DATE_CHIP_KEYS = [
+  'fulfilled_shift',
+  'incomplete_shift',
+  'late',
+  'absent',
+] as const;
+
+function pickChipSubset<Row>(
+  chips: ChipConfig<Row>[],
+  keys: readonly string[]
+): ChipConfig<Row>[] {
+  return keys
+    .map((key) => chips.find((chip) => chip.key === key))
+    .filter((chip): chip is ChipConfig<Row> => !!chip);
+}
+
+export const DASHBOARD_LIVE_SUMMARY_CHIPS = pickChipSubset(
+  TEAM_ATTENDANCE_LIVE_CHIPS,
+  DASHBOARD_LIVE_CHIP_KEYS
+);
+
+export const DASHBOARD_DATE_SUMMARY_CHIPS = pickChipSubset(
+  TEAM_ATTENDANCE_DATE_CHIPS,
+  DASHBOARD_DATE_CHIP_KEYS
+);
 
 export function getChipsForRole<Row>(
   chips: ChipConfig<Row>[],
