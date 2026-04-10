@@ -99,6 +99,16 @@ These are the places in the admin panel that consume attendance state. Each has 
 1. **Day/Session architecture:** Yes. Two-level hierarchy — `attendance_sessions` (raw punches) → `attendance_daily_summary` (daily verdict). Sessions feed into days, never the reverse.
 2. **Overtime is a flag, not a status:** Session `status` is always `present` or `late`. `is_overtime` is an orthogonal boolean. This allows `late` + `is_overtime` combinations.
 3. **Day modifiers over day states:** `has_overtime` and `is_short_day` are independent flags on days, not competing states. Day states stay purely about punctuality/attendance. `overtime_only` → `absent` + `has_overtime`. `incomplete_shift` → `present`/`late` + `is_short_day`.
+4. **Materialize `absent`, derive `weekend`/`future`/`not_joined`:** `absent` is written by an idempotent end-of-day job so historical verdicts are stable across schedule/join-date edits and admin overrides are simple row updates. The other three are pure functions of `(date, employee, schedule, join_date, today)` and don't need rows. Stored rows are authoritative for past dates — reads must not recompute them. Holiday is out of scope for now; it will slot in later as another sourced state without schema change.
+
+   | State | Storage | How it gets set |
+   |---|---|---|
+   | `present`, `late` | sourced | Written from session aggregation |
+   | `on_leave` | sourced | Written when an approved leave record covers the date |
+   | `absent` | sourced | Written by the end-of-day job |
+   | `weekend` | derived | Resolver returns this when the schedule says non-working day |
+   | `future` | derived | Resolver returns this when `date > today` |
+   | `not_joined` | derived | Resolver returns this when `date < employee.join_date` |
 
 
 ## Open Concerns
@@ -106,3 +116,7 @@ These are the places in the admin panel that consume attendance state. Each has 
 - **Legacy `attendance_logs` table:** Predates the session/day split. Needs to be phased out.
 - **State naming inconsistency:** Too many overlapping enums (`DayStatus`, `EffectiveStatus`, `TeamAttendanceLiveState`, `TeamAttendanceDateState`, `DisplayStatus`). Assess which can be consolidated.
 - **`neutral` is vague:** Covers off-day, no shift, checked out early. Consider splitting or clarifying.
+- **`mark-absent` only runs for today:** No way to backfill an arbitrary date range, so a missed run leaves gaps. The underlying SQL function is idempotent and range-safe; the edge function should expose that.
+- **Weekend stores a row with `effective_status = NULL`:** Conflicts with decision #4 (weekend is derived). Decide whether to stop writing these rows or treat weekend as a sourced state.
+- **`overtime_only` still exists as a status value:** Conflicts with decision #3 (overtime is a modifier). Migrate to `absent` + `has_overtime`.
+- **Recalc reads current schedule, not historical:** Re-running recalc for a past date uses today's `work_days`/policy, so a schedule edit retroactively flips old verdicts. Breaks historical stability under idempotent re-runs.
