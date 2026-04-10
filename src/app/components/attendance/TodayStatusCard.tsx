@@ -11,6 +11,7 @@ import { now } from '@/lib/time';
 import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
 import { getStatusTheme } from './attendanceStatusTheme';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
+import { DEFAULT_MINIMUM_OVERTIME_MINUTES } from '@/shared/attendance/constants';
 
 interface Props {
   today: TodayRecord;
@@ -125,6 +126,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
 
   const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
   const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
+  const minimumOvertimeMinutes = shift?.minimumOvertimeMinutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES;
   const shiftDuration = shiftStartMinutes !== null && shiftEndMinutes !== null
     ? shiftEndMinutes - shiftStartMinutes
     : null;
@@ -132,17 +134,43 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
   const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
   const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
   const totalWorkedMin = totalWorkedMinutesToday(today);
+  const activeSession = today.sessions?.find((session) => !session.check_out_time) ?? null;
 
   // Progress bar: 0-100%, caps at shift end
   const progressPercent = shiftDuration != null && shiftDuration > 0
     ? Math.min(100, (workdayElapsedSeconds / (shiftDuration * 60)) * 100)
     : 0;
 
-  // Overtime elapsed: time past shift end (only meaningful when checked in past shift end on a working day)
+  const activeSessionIsOvertime =
+    activeSession?.is_overtime ??
+    (isCheckedIn && !!activeCheckInTime && shift
+      ? isOvertimeTime(wallTimeToMinutes(activeCheckInTime), shift, dayOfWeek)
+      : false);
+
+  // Time past shift end for an open regular session on a working day.
   const isPastShiftEnd = isCheckedIn && shiftEndMinutes !== null && currentMinutes > shiftEndMinutes;
-  const overtimeElapsedSeconds = isPastShiftEnd
+  const postShiftElapsedSeconds = isPastShiftEnd
     ? Math.max(0, (currentMinutes - shiftEndMinutes!) * 60 + currentNow.getSeconds())
     : 0;
+  const hasReachedLateStayOvertimeThreshold =
+    isCheckedIn &&
+    isPastShiftEnd &&
+    isWorkingDay &&
+    !activeSessionIsOvertime &&
+    postShiftElapsedSeconds >= minimumOvertimeMinutes * 60;
+  const overtimeElapsedSeconds = hasReachedLateStayOvertimeThreshold ? postShiftElapsedSeconds : 0;
+  const pendingOvertimeSeconds =
+    isCheckedIn &&
+    isPastShiftEnd &&
+    isWorkingDay &&
+    !activeSessionIsOvertime &&
+    !hasReachedLateStayOvertimeThreshold
+      ? postShiftElapsedSeconds
+      : 0;
+  const remainingPendingOvertimeMinutes = Math.max(
+    0,
+    Math.ceil((minimumOvertimeMinutes * 60 - pendingOvertimeSeconds) / 60)
+  );
 
   // Badge logic for first punch: check overtime first (matches service logic), then late
   const firstPunchIsOvertime =
@@ -173,9 +201,9 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
   const clockIsOvertime =
     isCheckedIn &&
     !!activeCheckInTime &&
-    (isPastShiftEnd ||
+    (hasReachedLateStayOvertimeThreshold ||
       !isWorkingDay ||
-      (shift ? isOvertimeTime(wallTimeToMinutes(activeCheckInTime), shift, dayOfWeek) : false));
+      activeSessionIsOvertime);
 
   return (
     <>
@@ -271,7 +299,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
         )}
 
         {/* Progress bar: workday completion only, caps at 100%. Hidden during pure overtime. */}
-        {isCheckedIn && isWorkingDay && !firstPunchIsOvertime && shiftDuration != null && shiftDuration > 0 && (
+        {isCheckedIn && isWorkingDay && !activeSessionIsOvertime && shiftDuration != null && shiftDuration > 0 && (
           <div className="mb-4">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
               <span>{Math.floor(workdayElapsedSeconds / 3600)}س {Math.floor((workdayElapsedSeconds % 3600) / 60)}د من الدوام</span>
@@ -286,8 +314,17 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
           </div>
         )}
 
-        {/* Overtime elapsed indicator when working past shift end */}
-        {isCheckedIn && isPastShiftEnd && isWorkingDay && !firstPunchIsOvertime && (
+        {/* Pending late-stay note before the overtime minimum is reached */}
+        {pendingOvertimeSeconds > 0 && (
+          <div className="text-center mb-4">
+            <span className="text-sm text-amber-700">
+              بعد نهاية الدوام: يتبقى <span className="font-semibold">{remainingPendingOvertimeMinutes} د</span> لبدء احتساب الإضافي
+            </span>
+          </div>
+        )}
+
+        {/* Overtime elapsed indicator when a regular open session has crossed the overtime minimum */}
+        {isCheckedIn && hasReachedLateStayOvertimeThreshold && (
           <div className="text-center mb-4">
             <span className="text-sm" style={{ color: overtimeColor }}>
               عمل إضافي: <span className="font-semibold" style={{ color: overtimeColor }}>{formatElapsed(overtimeElapsedSeconds)}</span>

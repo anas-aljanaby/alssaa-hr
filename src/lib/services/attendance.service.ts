@@ -4,6 +4,7 @@ import { now } from '../time';
 import type { OvertimeRequest } from './overtime-requests.service';
 import {
   DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
+  DEFAULT_MINIMUM_OVERTIME_MINUTES,
   resolveDisplayStatus,
   type DayStatus,
   type TeamAttendanceDateState,
@@ -34,6 +35,8 @@ export interface ShiftInfo {
   gracePeriodMinutes: number;
   /** Minutes after shift end during which manual punch-out is allowed; after this the auto punch-out job runs. */
   bufferMinutesAfterShift: number;
+  /** Minimum overtime segment length that must be reached before overtime is counted. */
+  minimumOvertimeMinutes: number;
   /** JavaScript getDay() values that are off (e.g. [5, 6] = Fri, Sat). Default [5, 6]. */
   weeklyOffDays: number[];
   /** Org policy: minimum minutes worked to count shift fulfilled; null = use full scheduled duration only in UI logic. */
@@ -613,7 +616,7 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
   if (hasCustomSchedule) {
     const { data: policy } = await supabase
       .from('attendance_policy')
-      .select('grace_period_minutes, auto_punch_out_buffer_minutes, minimum_required_minutes')
+      .select('grace_period_minutes, auto_punch_out_buffer_minutes, minimum_overtime_minutes, minimum_required_minutes')
       .eq('org_id', profile.org_id)
       .limit(1)
       .maybeSingle();
@@ -625,6 +628,8 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
       gracePeriodMinutes: policy?.grace_period_minutes ?? 15,
       bufferMinutesAfterShift:
         policy?.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
+      minimumOvertimeMinutes:
+        policy?.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
       weeklyOffDays,
       minimumRequiredMinutes: policy?.minimum_required_minutes ?? null,
     };
@@ -633,7 +638,7 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
   const { data: policy } = await supabase
     .from('attendance_policy')
     .select(
-      'work_start_time, work_end_time, grace_period_minutes, auto_punch_out_buffer_minutes, weekly_off_days, minimum_required_minutes'
+      'work_start_time, work_end_time, grace_period_minutes, auto_punch_out_buffer_minutes, minimum_overtime_minutes, weekly_off_days, minimum_required_minutes'
     )
     .eq('org_id', profile.org_id)
     .limit(1)
@@ -646,6 +651,8 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
     gracePeriodMinutes: policy.grace_period_minutes,
     bufferMinutesAfterShift:
       policy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
+    minimumOvertimeMinutes:
+      policy.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
     weeklyOffDays: policy.weekly_off_days ?? [5, 6],
     minimumRequiredMinutes: policy.minimum_required_minutes ?? null,
   };

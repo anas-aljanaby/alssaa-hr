@@ -10,6 +10,7 @@ const defaultShift = {
   workEndTime: '18:00',
   gracePeriodMinutes: 15,
   bufferMinutesAfterShift: 5,
+  minimumOvertimeMinutes: 30,
   weeklyOffDays: [5, 6] as number[],
   minimumRequiredMinutes: null as number | null,
 };
@@ -278,6 +279,124 @@ describe('TodayStatusCard overtime confirmation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /عمل إضافي/ }));
     expect(screen.getByText('تأكيد عمل إضافي')).toBeInTheDocument();
+  });
+
+  it('keeps an open regular session in regular UI before the overtime minimum is reached', () => {
+    const onCheckIn = vi.fn();
+    const onCheckOut = vi.fn();
+    setNowFn(() => new Date('2025-06-10T18:10:00'));
+
+    const today: TodayRecord = {
+      log: {
+        id: 'open-regular-pre-threshold',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2025-06-10',
+        check_in_time: '09:00',
+        check_out_time: null,
+        check_in_lat: null,
+        check_in_lng: null,
+        check_out_lat: null,
+        check_out_lng: null,
+        status: 'present',
+        is_dev: false,
+        auto_punch_out: false,
+      },
+      punches: [],
+      shift: { ...defaultShift },
+      sessions: [
+        {
+          id: 's-regular-open',
+          org_id: 'o1',
+          user_id: 'u1',
+          date: '2025-06-10',
+          check_in_time: '09:00',
+          check_out_time: null,
+          status: 'present',
+          is_overtime: false,
+          is_auto_punch_out: false,
+          is_early_departure: false,
+          needs_review: false,
+          duration_minutes: 0,
+          last_action_at: '2025-06-10T09:00:00Z',
+          is_dev: false,
+          created_at: '2025-06-10T09:00:00Z',
+          updated_at: '2025-06-10T09:00:00Z',
+        },
+      ],
+    };
+
+    render(
+      <TodayStatusCard
+        today={today}
+        actionLoading={false}
+        onCheckIn={onCheckIn}
+        onCheckOut={onCheckOut}
+      />
+    );
+
+    expect(screen.getByText('في العمل')).toBeInTheDocument();
+    expect(screen.getByText(/يتبقى/)).toBeInTheDocument();
+    expect(screen.queryByText(/عمل إضافي:/)).not.toBeInTheDocument();
+  });
+
+  it('switches an open regular session to overtime UI once the overtime minimum is reached', () => {
+    const onCheckIn = vi.fn();
+    const onCheckOut = vi.fn();
+    setNowFn(() => new Date('2025-06-10T18:30:00'));
+
+    const today: TodayRecord = {
+      log: {
+        id: 'open-regular-post-threshold',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2025-06-10',
+        check_in_time: '09:00',
+        check_out_time: null,
+        check_in_lat: null,
+        check_in_lng: null,
+        check_out_lat: null,
+        check_out_lng: null,
+        status: 'present',
+        is_dev: false,
+        auto_punch_out: false,
+      },
+      punches: [],
+      shift: { ...defaultShift },
+      sessions: [
+        {
+          id: 's-regular-open-ot',
+          org_id: 'o1',
+          user_id: 'u1',
+          date: '2025-06-10',
+          check_in_time: '09:00',
+          check_out_time: null,
+          status: 'present',
+          is_overtime: false,
+          is_auto_punch_out: false,
+          is_early_departure: false,
+          needs_review: false,
+          duration_minutes: 0,
+          last_action_at: '2025-06-10T09:00:00Z',
+          is_dev: false,
+          created_at: '2025-06-10T09:00:00Z',
+          updated_at: '2025-06-10T09:00:00Z',
+        },
+      ],
+    };
+
+    render(
+      <TodayStatusCard
+        today={today}
+        actionLoading={false}
+        onCheckIn={onCheckIn}
+        onCheckOut={onCheckOut}
+      />
+    );
+
+    expect(screen.getByText('عمل إضافي')).toBeInTheDocument();
+    expect(screen.getByText(/عمل إضافي:/)).toBeInTheDocument();
+    expect(screen.queryByText(/يتبقى/)).not.toBeInTheDocument();
   });
 
   it('renders checked-in state when latest session is open', () => {

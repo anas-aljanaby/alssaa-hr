@@ -9,10 +9,12 @@ cd "$ROOT_DIR"
 PROJECT_REF="${1:-$(cat supabase/.temp/project-ref)}"
 PROJECT_URL="https://${PROJECT_REF}.supabase.co"
 JOB_NAME="auto-punch-out-every-minute"
+CRON_TOKEN="${AUTO_PUNCH_OUT_CRON_TOKEN:-}"
 
-API_KEYS_JSON="$(supabase projects api-keys --output json --project-ref "$PROJECT_REF")"
-SERVICE_ROLE_KEY="$(
-  node -e "
+if [[ -z "$CRON_TOKEN" ]]; then
+  API_KEYS_JSON="$(supabase projects api-keys --output json --project-ref "$PROJECT_REF")"
+  CRON_TOKEN="$(
+    node -e "
 const keys = JSON.parse(process.argv[1]);
 const serviceRole = keys.find((key) => key.id === 'service_role');
 if (!serviceRole?.api_key) {
@@ -21,7 +23,8 @@ if (!serviceRole?.api_key) {
 }
 process.stdout.write(serviceRole.api_key);
 " "$API_KEYS_JSON"
-)"
+  )"
+fi
 
 read -r -d '' SQL <<SQL || true
 create extension if not exists pg_cron;
@@ -40,7 +43,7 @@ select cron.schedule(
       url := '${PROJECT_URL}/functions/v1/auto-punch-out',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ${SERVICE_ROLE_KEY}'
+        'Authorization', 'Bearer ${CRON_TOKEN}'
       ),
       body := jsonb_build_object('source', 'pg_cron', 'scheduled_at', now()),
       timeout_milliseconds := 10000

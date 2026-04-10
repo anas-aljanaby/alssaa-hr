@@ -41,10 +41,25 @@ function diffMinutes(checkIn: string, checkOut: string): number {
   return Math.max(0, outM - inM);
 }
 
+function parseJwtRole(token: string): string | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    const payload = JSON.parse(json) as { role?: unknown };
+    return typeof payload.role === 'string' ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
 export type AutoPunchEnv = {
   supabaseUrl: string;
   supabaseAnonKey: string;
   serviceRoleKey: string;
+  cronAuthToken?: string | null;
   isProduction: boolean;
 };
 
@@ -80,12 +95,14 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     }
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    const { isProduction, serviceRoleKey } = deps.getEnv();
+    const { isProduction, serviceRoleKey, cronAuthToken } = deps.getEnv();
     const admin = deps.createServiceClient();
+    const systemAuthToken = cronAuthToken?.trim() || serviceRoleKey;
+    const isServiceRoleJwt = parseJwtRole(token) === 'service_role';
 
     // Allow secure system calls using the service-role token (e.g., scheduler).
     // Otherwise require a valid logged-in admin user.
-    if (token !== serviceRoleKey) {
+    if (!isServiceRoleJwt && token !== systemAuthToken) {
       const clientWithAuth = deps.createUserClient(authHeader);
       const { data: { user: caller } } = await clientWithAuth.auth.getUser();
       if (!caller) {

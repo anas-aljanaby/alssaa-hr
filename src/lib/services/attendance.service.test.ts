@@ -73,6 +73,7 @@ describe('attendance.service', () => {
       workEndTime: '16:00',
       gracePeriodMinutes: 10,
       bufferMinutesAfterShift: 5,
+      minimumOvertimeMinutes: 30,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
@@ -92,6 +93,7 @@ describe('attendance.service', () => {
       workEndTime: '18:00',
       gracePeriodMinutes: 15,
       bufferMinutesAfterShift: 5,
+      minimumOvertimeMinutes: 30,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
@@ -113,6 +115,7 @@ describe('attendance.service', () => {
       workEndTime: '18:00',
       gracePeriodMinutes: 15,
       bufferMinutesAfterShift: 5,
+      minimumOvertimeMinutes: 30,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: 420,
     };
@@ -131,6 +134,7 @@ describe('attendance.service', () => {
       workEndTime: '18:00',
       gracePeriodMinutes: 15,
       bufferMinutesAfterShift: 5,
+      minimumOvertimeMinutes: 30,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };

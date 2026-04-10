@@ -25,6 +25,7 @@ function defaultDeps(): AutoPunchDeps {
       supabaseUrl: Deno.env.get('SUPABASE_URL')!,
       supabaseAnonKey: Deno.env.get('SUPABASE_ANON_KEY')!,
       serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      cronAuthToken: Deno.env.get('AUTO_PUNCH_OUT_CRON_TOKEN') ?? null,
       isProduction: Deno.env.get('ENVIRONMENT') === 'production',
     }),
     createUserClient: createUserClientForAutoPunch,

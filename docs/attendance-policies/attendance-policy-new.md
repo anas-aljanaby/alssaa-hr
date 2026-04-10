@@ -161,8 +161,9 @@ If overtime request creation fails, the punch-in still succeeds and the session'
 ### Overtime Timer Display
 
 When an employee is checked in during regular hours and stays past shift end on a working day:
-- The main clock turns amber and displays total time since punch-in
-- A separate overtime elapsed counter appears showing time past shift end
+- Before `minimum_overtime_minutes` is reached, the UI keeps the session in regular-work styling and shows that overtime counting has not started yet
+- Once `minimum_overtime_minutes` is reached, the main clock turns amber and displays total time since punch-in
+- Once `minimum_overtime_minutes` is reached, a separate overtime elapsed counter appears showing time past shift end
 - The progress bar stays at 100%
 
 For pure overtime sessions (off-day, before early login window, or after shift end):

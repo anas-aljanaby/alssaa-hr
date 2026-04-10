@@ -14,7 +14,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.auto-punch-out]
-verify_jwt = false
+verify_jwt = true
 
 [functions.mark-absent]
 verify_jwt = false

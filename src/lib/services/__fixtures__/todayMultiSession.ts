@@ -6,6 +6,7 @@ export const multiSessionDefaultShift = {
   workEndTime: '18:00',
   gracePeriodMinutes: 15,
   bufferMinutesAfterShift: 5,
+  minimumOvertimeMinutes: 30,
   weeklyOffDays: [5, 6] as number[],
   minimumRequiredMinutes: null as number | null,
 };

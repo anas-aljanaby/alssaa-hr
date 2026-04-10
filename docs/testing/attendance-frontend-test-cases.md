@@ -26,6 +26,8 @@ This document tracks attendance frontend/UI test coverage for the web app and cl
 | 21.1 | [x] | Working day, first session ended early (`13:15` -> `13:16`), now is `13:20` (before `workEndTime`) on `TodayStatusCard` | Main action must not imply overtime-only flow and must not open overtime confirmation dialog unless current time is actually overtime | Implemented as a regression guard; currently fails and exposes the bug |
 | 21.2 | [x] | Same as 21.1 on `TodayStatusCard` (single canonical card) | CTA copy should remain regular resume/punch-in behavior, not overtime-only wording | Implemented as a regression guard; currently fails and exposes the bug |
 | 21.3 | [x] | True overtime context (post-shift, e.g. `18:01`) on completed day | Overtime confirmation dialog is allowed and overtime CTA copy is acceptable | Boundary test implemented |
+| 21.4 | [x] | Open regular session at `18:10` with overtime minimum `30` min | Card stays in regular checked-in UI and shows remaining time before overtime starts | Prevents premature overtime styling |
+| 21.5 | [x] | Open regular session at `18:30` with overtime minimum `30` min | Card switches to overtime styling and shows overtime elapsed | Aligns live UI with backend threshold |
 
 ## 22. Open Second Session Rendering
 
