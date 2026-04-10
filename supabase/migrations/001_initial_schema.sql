@@ -191,12 +191,12 @@ create table public.attendance_policy (
   absent_cutoff_time           time not null default '12:00',
   annual_leave_per_year        int  not null default 21,
   sick_leave_per_year          int  not null default 10,
-  auto_punch_out_buffer_minutes int  not null default 30,
+  auto_punch_out_buffer_minutes int  not null default 5,
   constraint attendance_policy_org_unique unique (org_id)
 );
 
 comment on column public.attendance_policy.auto_punch_out_buffer_minutes is
-  'Minutes after work_end_time after which the auto punch-out safety net runs (e.g. 30).';
+  'Minutes after work_end_time after which the auto punch-out safety net runs (e.g. 5).';
 
 -- Default policy for the real org
 insert into public.attendance_policy (org_id)

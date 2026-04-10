@@ -12,7 +12,7 @@ Each employee's schedule is resolved in this order:
 2. **Org policy (default)** — Otherwise, the organization's `attendance_policy` provides `work_start_time`, `work_end_time`, and `weekly_off_days`.
 
 Grace period and auto-punch-out buffer come from the org policy, even for users with custom schedules.  
-If a user has a custom schedule but no org policy row is found, code falls back to defaults: grace `15` minutes, buffer `30` minutes. If a user has **no** custom schedule and no org policy exists, the shift is `null` (treated as "no shift configured" — see edge cases).
+If a user has a custom schedule but no org policy row is found, code falls back to defaults: grace `15` minutes, buffer `5` minutes. If a user has **no** custom schedule and no org policy exists, the shift is `null` (treated as "no shift configured" — see edge cases).
 
 ## Time Zones During a Work Day
 

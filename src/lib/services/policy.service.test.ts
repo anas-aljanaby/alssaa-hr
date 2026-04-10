@@ -9,7 +9,7 @@ const policyRow = {
   work_start_time: '08:00',
   work_end_time: '16:00',
   grace_period_minutes: 10,
-  auto_punch_out_buffer_minutes: 30,
+  auto_punch_out_buffer_minutes: 5,
   weekly_off_days: [5, 6],
   max_late_days_before_warning: 3,
   absent_cutoff_time: '12:00',

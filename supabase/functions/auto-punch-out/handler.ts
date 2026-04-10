@@ -1,6 +1,9 @@
 // Supabase Edge Function: auto punch-out safety net.
 
 import { corsHeaders } from '../_shared/cors.ts';
+
+/** Keep in sync with `src/shared/attendance/constants.ts`. */
+const DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES = 5;
 import type { PunchServiceClient } from '../punch/handler.ts';
 
 /** Shifts a UTC Date to org local time (UTC+3) so date/time components are correct. */
@@ -193,7 +196,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         profile.work_end_time;
 
       const workEndTime = hasCustomSchedule ? profile!.work_end_time! : policy?.work_end_time ?? null;
-      const bufferMinutes = policy?.auto_punch_out_buffer_minutes ?? 30;
+      const bufferMinutes = policy?.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES;
       const weeklyOff = policy?.weekly_off_days ?? [5, 6];
 
       // No user schedule + no org policy means no configured shift, so this

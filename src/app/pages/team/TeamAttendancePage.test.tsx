@@ -20,7 +20,8 @@ const liveAvailabilityRows = [
     avatarUrl: null,
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
-    availabilityState: 'available_now' as const,
+    teamLiveState: 'available_now' as const,
+    hasOvertime: false,
   },
   {
     userId: 'producer-1',
@@ -30,7 +31,8 @@ const liveAvailabilityRows = [
     avatarUrl: null,
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
-    availabilityState: 'unavailable_now' as const,
+    teamLiveState: 'absent' as const,
+    hasOvertime: false,
   },
   {
     userId: 'editor-1',
@@ -40,7 +42,8 @@ const liveAvailabilityRows = [
     avatarUrl: null,
     departmentId: 'dept-editing',
     departmentNameAr: 'التحرير',
-    availabilityState: 'available_now' as const,
+    teamLiveState: 'available_now' as const,
+    hasOvertime: false,
   },
 ];
 
@@ -54,7 +57,8 @@ const dayAvailabilityRows = [
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
     date: '2026-04-06',
-    attendanceState: 'present_on_date' as const,
+    teamDateState: 'fulfilled_shift' as const,
+    hasOvertime: false,
   },
   {
     userId: 'producer-1',
@@ -65,7 +69,8 @@ const dayAvailabilityRows = [
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
     date: '2026-04-06',
-    attendanceState: 'not_present_on_date' as const,
+    teamDateState: 'absent' as const,
+    hasOvertime: false,
   },
   {
     userId: 'editor-1',
@@ -76,7 +81,8 @@ const dayAvailabilityRows = [
     departmentId: 'dept-editing',
     departmentNameAr: 'التحرير',
     date: '2026-04-06',
-    attendanceState: 'present_on_date' as const,
+    teamDateState: 'fulfilled_shift' as const,
+    hasOvertime: false,
   },
 ];
 
@@ -92,6 +98,8 @@ const detailedRows = [
     date: '2026-04-06',
     effectiveStatus: 'late' as const,
     displayStatus: 'late' as const,
+    teamLiveState: 'late' as const,
+    teamDateState: 'late' as const,
     firstCheckIn: '08:10',
     lastCheckOut: null,
     totalWorkMinutes: 120,
@@ -114,6 +122,8 @@ const detailedRows = [
     date: '2026-04-06',
     effectiveStatus: 'overtime_only' as const,
     displayStatus: 'overtime_only' as const,
+    teamLiveState: 'neutral' as const,
+    teamDateState: 'absent' as const,
     firstCheckIn: '18:00',
     lastCheckOut: '20:00',
     totalWorkMinutes: 120,
@@ -136,6 +146,8 @@ const detailedRows = [
     date: '2026-04-06',
     effectiveStatus: 'present' as const,
     displayStatus: 'present' as const,
+    teamLiveState: 'fulfilled_shift' as const,
+    teamDateState: 'fulfilled_shift' as const,
     firstCheckIn: '08:00',
     lastCheckOut: '17:12',
     totalWorkMinutes: 510,
@@ -158,6 +170,80 @@ const detailedRows = [
     date: '2026-04-06',
     effectiveStatus: 'on_leave' as const,
     displayStatus: 'on_leave' as const,
+    teamLiveState: 'on_leave' as const,
+    teamDateState: 'on_leave' as const,
+    firstCheckIn: null,
+    lastCheckOut: null,
+    totalWorkMinutes: 0,
+    totalOvertimeMinutes: 0,
+    hasOvertime: false,
+    sessionCount: 0,
+    isCheckedInNow: false,
+    hasAutoPunchOut: false,
+    needsReview: false,
+    isShortDay: false,
+  },
+  {
+    userId: 'pending-1',
+    nameAr: 'نور',
+    employeeId: 'EMP-9',
+    role: 'employee',
+    avatarUrl: null,
+    departmentId: 'dept-editing',
+    departmentNameAr: 'التحرير',
+    date: '2026-04-06',
+    effectiveStatus: 'absent' as const,
+    displayStatus: 'absent' as const,
+    teamLiveState: 'not_entered_yet' as const,
+    teamDateState: 'absent' as const,
+    firstCheckIn: null,
+    lastCheckOut: null,
+    totalWorkMinutes: 0,
+    totalOvertimeMinutes: 0,
+    hasOvertime: false,
+    sessionCount: 0,
+    isCheckedInNow: false,
+    hasAutoPunchOut: false,
+    needsReview: false,
+    isShortDay: false,
+  },
+  {
+    userId: 'incomplete-1',
+    nameAr: 'خالد',
+    employeeId: 'EMP-11',
+    role: 'employee',
+    avatarUrl: null,
+    departmentId: 'dept-news',
+    departmentNameAr: 'الأخبار',
+    date: '2026-04-06',
+    effectiveStatus: 'present' as const,
+    displayStatus: 'present' as const,
+    teamLiveState: 'neutral' as const,
+    teamDateState: 'incomplete_shift' as const,
+    firstCheckIn: '09:00',
+    lastCheckOut: '11:30',
+    totalWorkMinutes: 150,
+    totalOvertimeMinutes: 0,
+    hasOvertime: false,
+    sessionCount: 1,
+    isCheckedInNow: false,
+    hasAutoPunchOut: false,
+    needsReview: false,
+    isShortDay: true,
+  },
+  {
+    userId: 'absent-1',
+    nameAr: 'سالم',
+    employeeId: 'EMP-12',
+    role: 'employee',
+    avatarUrl: null,
+    departmentId: 'dept-editing',
+    departmentNameAr: 'التحرير',
+    date: '2026-04-06',
+    effectiveStatus: 'absent' as const,
+    displayStatus: 'absent' as const,
+    teamLiveState: 'absent' as const,
+    teamDateState: 'absent' as const,
     firstCheckIn: null,
     lastCheckOut: null,
     totalWorkMinutes: 0,
@@ -285,7 +371,7 @@ describe('TeamAttendancePage', () => {
     expect(within(stickyFilters).queryByRole('button', { name: /^متأخر/ })).not.toBeInTheDocument();
     expect(within(stickyFilters).queryByRole('button', { name: /^غائب/ })).not.toBeInTheDocument();
     expect(within(stickyFilters).queryByRole('button', { name: /^إجازة/ })).not.toBeInTheDocument();
-    expect(within(stickyFilters).queryByRole('button', { name: /^أنهى الدوام/ })).not.toBeInTheDocument();
+    expect(within(stickyFilters).queryByRole('button', { name: /^عمل إضافي/ })).not.toBeInTheDocument();
     expect(within(stickyFilters).queryByRole('button', { name: /^غير موجودين الآن/ })).not.toBeInTheDocument();
 
     expect(attendanceService.getRedactedDepartmentAvailability).toHaveBeenCalledWith({
@@ -325,12 +411,14 @@ describe('TeamAttendancePage', () => {
     expect(attendanceService.getTeamAttendanceDay).toHaveBeenCalledWith({
       date: '2026-04-06',
       departmentId: 'dept-news',
+      includeAllProfiles: true,
     });
     const filterBar = screen.getByTestId('team-attendance-sticky-filters');
     expect(within(filterBar).getByRole('button', { name: /^متأخر/ })).toBeInTheDocument();
+    expect(within(filterBar).getByRole('button', { name: /^لم يسجلوا بعد/ })).toBeInTheDocument();
     expect(within(filterBar).getByRole('button', { name: /^غائب/ })).toBeInTheDocument();
     expect(within(filterBar).getByRole('button', { name: /^إجازة/ })).toBeInTheDocument();
-    expect(within(filterBar).getByRole('button', { name: /^أنهى الدوام/ })).toBeInTheDocument();
+    expect(within(filterBar).getByRole('button', { name: /^عمل إضافي/ })).toBeInTheDocument();
     expect(within(filterBar).queryByRole('button', { name: /^غير موجودين الآن/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /علي/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /سارة/i })).not.toBeInTheDocument();
@@ -362,6 +450,8 @@ describe('TeamAttendancePage', () => {
     expect(stickyFilters).not.toContainElement(departmentSelect);
     expect(screen.getByDisplayValue('2026-04-06')).toBeInTheDocument();
     expect(screen.getAllByText(/غير حاضر/).length).toBeGreaterThan(0);
+    expect(within(stickyFilters).getByRole('button', { name: /^أكملوا الدوام/ })).toBeInTheDocument();
+    expect(within(stickyFilters).getByRole('button', { name: /^دوام غير مكتمل/ })).toBeInTheDocument();
   });
 
   it('gives admins full live visibility across departments and keeps department filtering intact', async () => {
@@ -381,18 +471,18 @@ describe('TeamAttendancePage', () => {
     });
 
     const overtimeAbsentRow = screen.getByRole('button', { name: /ريم/i });
-    expect(overtimeAbsentRow).toHaveTextContent('غائب');
+    expect(overtimeAbsentRow).not.toHaveTextContent('غائب');
     expect(overtimeAbsentRow).toHaveTextContent('عمل إضافي');
-    expect(overtimeAbsentRow).not.toHaveTextContent('أنهى الدوام');
+    expect(overtimeAbsentRow).not.toHaveTextContent('أكمل الدوام');
 
     expect(attendanceService.getTeamAttendanceDay).toHaveBeenCalledWith({
       date: '2026-04-06',
       departmentId: null,
+      includeAllProfiles: true,
     });
     expect(screen.getAllByText('متأخر').length).toBeGreaterThan(0);
     expect(screen.getAllByText('غائب').length).toBeGreaterThan(0);
     expect(screen.getAllByText('إجازة').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('أنهى الدوام').length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByRole('combobox'), {
       target: { value: 'dept-editing' },
@@ -402,6 +492,7 @@ describe('TeamAttendancePage', () => {
       expect(attendanceService.getTeamAttendanceDay).toHaveBeenLastCalledWith({
         date: '2026-04-06',
         departmentId: 'dept-editing',
+        includeAllProfiles: true,
       });
     });
 
@@ -413,7 +504,7 @@ describe('TeamAttendancePage', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('day-details-sheet')).toHaveTextContent(
-        'designer-1:2026-04-06:هدى:أنهى الدوام'
+        'designer-1:2026-04-06:هدى:أكمل الدوام'
       );
     });
   });
@@ -434,6 +525,7 @@ describe('TeamAttendancePage', () => {
       expect(attendanceService.getTeamAttendanceDay).toHaveBeenCalledWith({
         date: '2026-04-05',
         departmentId: null,
+        includeAllProfiles: true,
       });
     });
 

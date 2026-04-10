@@ -9,7 +9,7 @@ const defaultShift = {
   workStartTime: '09:00',
   workEndTime: '18:00',
   gracePeriodMinutes: 15,
-  bufferMinutesAfterShift: 30,
+  bufferMinutesAfterShift: 5,
   weeklyOffDays: [5, 6] as number[],
   minimumRequiredMinutes: null as number | null,
 };

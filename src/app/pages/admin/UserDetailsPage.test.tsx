@@ -144,7 +144,7 @@ function setupSuccessfulDataLoad() {
       workStartTime: '08:00',
       workEndTime: '16:00',
       gracePeriodMinutes: 15,
-      bufferMinutesAfterShift: 30,
+      bufferMinutesAfterShift: 5,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     },

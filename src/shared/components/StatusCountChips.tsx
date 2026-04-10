@@ -14,7 +14,7 @@ export interface StatusCountChipsProps {
 }
 
 function getActiveChipClasses(chip: ChipConfig): string {
-  const primaryStatus = chip.matchStatuses[0];
+  const primaryStatus = chip.themeStatus ?? chip.matchStatuses?.[0];
   if (!primaryStatus) {
     return 'bg-slate-700 text-white border-slate-700';
   }

@@ -6,6 +6,7 @@ import * as policyService from '@/lib/services/policy.service';
 import type { AttendancePolicy } from '@/lib/services/policy.service';
 import { Clock, Calendar, Settings, X } from 'lucide-react';
 import { PageLayout } from '../../components/layout/PageLayout';
+import { DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES } from '@/shared/attendance/constants';
 
 const dayNames: Record<number, string> = {
   0: 'الأحد',
@@ -91,7 +92,7 @@ export function AttendancePolicyPage() {
                 />
                 <PolicyRow
                   label="مهلة الانصراف التلقائي (دقيقة)"
-                  value={`${policy.auto_punch_out_buffer_minutes ?? 30} دقيقة`}
+                  value={`${policy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES} دقيقة`}
                 />
                 <PolicyRow label="وقت قطع الغياب" value={policy.absent_cutoff_time} />
                 <PolicyRow
@@ -187,7 +188,8 @@ export function AttendancePolicyPage() {
                     work_start_time: editPolicy.work_start_time,
                     work_end_time: editPolicy.work_end_time,
                     grace_period_minutes: editPolicy.grace_period_minutes,
-                    auto_punch_out_buffer_minutes: editPolicy.auto_punch_out_buffer_minutes ?? 30,
+                    auto_punch_out_buffer_minutes:
+                      editPolicy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
                     absent_cutoff_time: editPolicy.absent_cutoff_time,
                     weekly_off_days: editPolicy.weekly_off_days,
                     max_late_days_before_warning: editPolicy.max_late_days_before_warning,
@@ -249,7 +251,7 @@ export function AttendancePolicyPage() {
                   <label className="block text-xs text-gray-600 mb-1">مهلة الانصراف التلقائي (دقيقة)</label>
                   <input
                     type="number"
-                    value={editPolicy.auto_punch_out_buffer_minutes ?? 30}
+                    value={editPolicy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES}
                     onChange={(e) =>
                       setEditPolicy((prev) =>
                         prev ? { ...prev, auto_punch_out_buffer_minutes: Number(e.target.value) || 0 } : prev

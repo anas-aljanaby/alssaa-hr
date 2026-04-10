@@ -2,7 +2,13 @@ import { supabase } from '../supabase';
 import type { Database, Tables, InsertTables } from '../database.types';
 import { now } from '../time';
 import type { OvertimeRequest } from './overtime-requests.service';
-import { resolveDisplayStatus, type DayStatus } from '@/shared/attendance';
+import {
+  DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
+  resolveDisplayStatus,
+  type DayStatus,
+  type TeamAttendanceDateState,
+  type TeamAttendanceLiveState,
+} from '@/shared/attendance';
 
 export type AttendanceLog = Tables<'attendance_logs'>;
 export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
@@ -58,8 +64,6 @@ export interface MonthDaySummary {
 }
 
 export type TeamAttendanceDisplayStatus = AttendanceEffectiveStatus | 'overtime_offday' | null;
-export type AvailabilityState = 'available_now' | 'unavailable_now';
-export type AttendanceDayAvailabilityState = 'present_on_date' | 'not_present_on_date';
 
 export interface TeamAttendanceDayRow {
   userId: string;
@@ -72,6 +76,8 @@ export interface TeamAttendanceDayRow {
   date: string;
   effectiveStatus: AttendanceEffectiveStatus | null;
   displayStatus: TeamAttendanceDisplayStatus;
+  teamLiveState: TeamAttendanceLiveState;
+  teamDateState: TeamAttendanceDateState;
   firstCheckIn: string | null;
   lastCheckOut: string | null;
   totalWorkMinutes: number;
@@ -92,7 +98,8 @@ export interface SafeAvailabilityRow {
   avatarUrl: string | null;
   departmentId: string | null;
   departmentNameAr: string | null;
-  availabilityState: AvailabilityState;
+  teamLiveState: TeamAttendanceLiveState;
+  hasOvertime: boolean;
 }
 
 export interface SafeAttendanceDayRow {
@@ -104,7 +111,8 @@ export interface SafeAttendanceDayRow {
   departmentId: string | null;
   departmentNameAr: string | null;
   date: string;
-  attendanceState: AttendanceDayAvailabilityState;
+  teamDateState: TeamAttendanceDateState;
+  hasOvertime: boolean;
 }
 
 type TeamAttendanceDayRpcRow = Database['public']['Functions']['get_team_attendance_day']['Returns'][number];
@@ -422,7 +430,8 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
       workStartTime: profile.work_start_time!,
       workEndTime: profile.work_end_time!,
       gracePeriodMinutes: policy?.grace_period_minutes ?? 15,
-      bufferMinutesAfterShift: policy?.auto_punch_out_buffer_minutes ?? 30,
+      bufferMinutesAfterShift:
+        policy?.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
       weeklyOffDays,
       minimumRequiredMinutes: policy?.minimum_required_minutes ?? null,
     };
@@ -442,7 +451,8 @@ export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInf
     workStartTime: policy.work_start_time,
     workEndTime: policy.work_end_time,
     gracePeriodMinutes: policy.grace_period_minutes,
-    bufferMinutesAfterShift: policy.auto_punch_out_buffer_minutes ?? 30,
+    bufferMinutesAfterShift:
+      policy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
     weeklyOffDays: policy.weekly_off_days ?? [5, 6],
     minimumRequiredMinutes: policy.minimum_required_minutes ?? null,
   };
@@ -1096,14 +1106,13 @@ function mapTeamAttendanceDayRow(row: TeamAttendanceDayRpcRow): TeamAttendanceDa
     date: row.date,
     effectiveStatus: row.effective_status as AttendanceEffectiveStatus | null,
     displayStatus: row.display_status as TeamAttendanceDisplayStatus,
+    teamLiveState: row.team_live_state as TeamAttendanceLiveState,
+    teamDateState: row.team_date_state as TeamAttendanceDateState,
     firstCheckIn: row.first_check_in,
     lastCheckOut: row.last_check_out,
     totalWorkMinutes: row.total_work_minutes,
     totalOvertimeMinutes: row.total_overtime_minutes,
-    hasOvertime:
-      row.display_status === 'overtime_only' ||
-      row.display_status === 'overtime_offday' ||
-      Number(row.total_overtime_minutes ?? 0) > 0,
+    hasOvertime: Boolean(row.has_overtime) || Number(row.total_overtime_minutes ?? 0) > 0,
     sessionCount: row.session_count,
     isCheckedInNow: row.is_checked_in_now,
     hasAutoPunchOut: row.has_auto_punch_out,
@@ -1121,7 +1130,8 @@ function mapSafeAvailabilityRow(row: RedactedAvailabilityRpcRow): SafeAvailabili
     avatarUrl: row.avatar_url,
     departmentId: row.department_id,
     departmentNameAr: row.department_name_ar,
-    availabilityState: row.availability_state as AvailabilityState,
+    teamLiveState: row.team_live_state as TeamAttendanceLiveState,
+    hasOvertime: Boolean(row.has_overtime),
   };
 }
 
@@ -1135,17 +1145,20 @@ function mapSafeAttendanceDayRow(row: RedactedAttendanceDayRpcRow): SafeAttendan
     departmentId: row.department_id,
     departmentNameAr: row.department_name_ar,
     date: row.date,
-    attendanceState: row.attendance_state as AttendanceDayAvailabilityState,
+    teamDateState: row.team_date_state as TeamAttendanceDateState,
+    hasOvertime: Boolean(row.has_overtime),
   };
 }
 
 export async function getTeamAttendanceDay(params: {
   date: string;
   departmentId?: string | null;
+  includeAllProfiles?: boolean;
 }): Promise<TeamAttendanceDayRow[]> {
   const { data, error } = await supabase.rpc('get_team_attendance_day', {
     p_date: params.date,
     p_department_id: params.departmentId ?? null,
+    p_include_all_profiles: params.includeAllProfiles ?? false,
   });
 
   if (error) throw error;

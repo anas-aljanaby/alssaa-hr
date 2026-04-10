@@ -3,10 +3,10 @@
  * Renders a reusable attendance status pill using the shared display config.
  */
 
-import { getStatusConfig, isDisplayStatus, type DisplayStatus } from '../attendance';
+import { getStatusConfig, type VisualStatus } from '../attendance';
 
 export interface StatusBadgeProps {
-  status: DisplayStatus;
+  status: VisualStatus;
   size?: 'sm' | 'md';
   className?: string;
 }
@@ -18,7 +18,6 @@ export function StatusBadge({
 }: StatusBadgeProps) {
   const statusKey = String(status);
   const config = getStatusConfig(statusKey);
-  const label = isDisplayStatus(statusKey) ? config.label : statusKey;
   const sizeClasses =
     size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-sm px-2.5 py-1';
 
@@ -33,5 +32,5 @@ export function StatusBadge({
     .filter(Boolean)
     .join(' ');
 
-  return <span className={classes}>{label}</span>;
+  return <span className={classes}>{config.label}</span>;
 }

@@ -275,7 +275,7 @@ For every trigger above, validate these fields are up to date:
 
 > Corresponding test file: `supabase/functions/punch/handler.test.ts`
 
-Baseline: shift ends `18:00`, buffer `30` min -> auto-punch-out job fires at or after `18:30`.
+Baseline: shift ends `18:00`, buffer `5` min -> auto-punch-out job fires at or after `18:05`.
 
 | # | Implemented | Scenario | Expected behavior | Notes |
 | --- | --- | --- | --- | --- |

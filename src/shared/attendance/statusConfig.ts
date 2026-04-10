@@ -1,10 +1,15 @@
 /**
  * Module purpose:
  * Centralizes the visual display metadata for every attendance display status,
- * including Arabic labels and Tailwind color tokens used by shared UI pieces.
+ * including team-attendance-only derived states, plus the Tailwind color
+ * tokens used by shared UI pieces.
  */
 
 import { isDisplayStatus, type DisplayStatus } from './types';
+import {
+  isTeamAttendancePrimaryState,
+  type TeamAttendancePrimaryState,
+} from './teamState';
 
 export interface StatusDisplayConfig {
   label: string;
@@ -124,11 +129,84 @@ export const STATUS_DISPLAY: Record<DisplayStatus, StatusDisplayConfig> = {
   },
 };
 
-export function getStatusConfig(status: DisplayStatus): StatusDisplayConfig;
+export const TEAM_STATUS_DISPLAY: Record<TeamAttendancePrimaryState, StatusDisplayConfig> = {
+  available_now: {
+    label: 'موجود الآن',
+    labelEn: 'Available now',
+    color: 'text-emerald-700',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-500',
+    dotColor: 'bg-emerald-500',
+  },
+  fulfilled_shift: {
+    label: 'أكمل الدوام',
+    labelEn: 'Fulfilled shift',
+    color: 'text-green-700',
+    bgColor: 'bg-green-50',
+    borderColor: 'border-green-600',
+    dotColor: 'bg-green-600',
+  },
+  incomplete_shift: {
+    label: 'دوام غير مكتمل',
+    labelEn: 'Incomplete shift',
+    color: 'text-sky-700',
+    bgColor: 'bg-sky-50',
+    borderColor: 'border-sky-500',
+    dotColor: 'bg-sky-500',
+  },
+  late: {
+    label: 'متأخر',
+    labelEn: 'Late',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-500',
+    dotColor: 'bg-amber-500',
+  },
+  not_entered_yet: {
+    label: 'لم يسجل بعد',
+    labelEn: 'Not entered yet',
+    color: 'text-gray-500',
+    bgColor: 'bg-gray-50',
+    borderColor: 'border-gray-300',
+    dotColor: 'bg-gray-300',
+  },
+  absent: {
+    label: 'غائب',
+    labelEn: 'Absent',
+    color: 'text-red-700',
+    bgColor: 'bg-red-50',
+    borderColor: 'border-red-500',
+    dotColor: 'bg-red-500',
+  },
+  on_leave: {
+    label: 'في إجازة',
+    labelEn: 'On leave',
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-500',
+    dotColor: 'bg-purple-500',
+  },
+  neutral: {
+    label: 'خارج التصنيف',
+    labelEn: 'Neutral',
+    color: 'text-slate-600',
+    bgColor: 'bg-slate-50',
+    borderColor: 'border-slate-300',
+    dotColor: 'bg-slate-300',
+  },
+};
+
+export type VisualStatus = DisplayStatus | TeamAttendancePrimaryState;
+
+export function getStatusConfig(status: VisualStatus): StatusDisplayConfig;
 export function getStatusConfig(status: string): StatusDisplayConfig;
-export function getStatusConfig(status: DisplayStatus | string): StatusDisplayConfig {
+export function getStatusConfig(status: VisualStatus | string): StatusDisplayConfig {
   if (isDisplayStatus(status)) {
     return STATUS_DISPLAY[status];
+  }
+
+  if (isTeamAttendancePrimaryState(status)) {
+    return TEAM_STATUS_DISPLAY[status];
   }
 
   return NEUTRAL_STATUS_CONFIG;

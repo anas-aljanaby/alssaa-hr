@@ -13,7 +13,7 @@ Each employee's schedule is resolved in this order:
 
 The following values always come from the org policy, even for users with custom schedules:
 - Grace period (default: `15` minutes if no policy exists)
-- Auto-punch-out buffer (default: `30` minutes if no policy exists)
+- Auto-punch-out buffer (default: `5` minutes if no policy exists)
 - Early login window (default: `60` minutes if no policy exists)
 - Minimum required hours (default: none / not enforced if not set)
 

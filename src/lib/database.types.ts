@@ -932,6 +932,8 @@ export interface Database {
           department_id: string | null;
           department_name_ar: string | null;
           availability_state: string;
+          team_live_state: string;
+          has_overtime: boolean;
         }[];
       };
       get_redacted_team_attendance_day: {
@@ -949,12 +951,15 @@ export interface Database {
           department_name_ar: string | null;
           date: string;
           attendance_state: string;
+          team_date_state: string;
+          has_overtime: boolean;
         }[];
       };
       get_team_attendance_day: {
         Args: {
           p_date: string;
           p_department_id?: string | null;
+          p_include_all_profiles?: boolean;
         };
         Returns: {
           user_id: string;
@@ -967,10 +972,13 @@ export interface Database {
           date: string;
           effective_status: string | null;
           display_status: string | null;
+          team_live_state: string;
+          team_date_state: string;
           first_check_in: string | null;
           last_check_out: string | null;
           total_work_minutes: number;
           total_overtime_minutes: number;
+          has_overtime: boolean;
           session_count: number;
           is_checked_in_now: boolean;
           has_auto_punch_out: boolean;

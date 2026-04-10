@@ -49,7 +49,7 @@ const policyRow = {
   absent_cutoff_time: '12:00',
   annual_leave_per_year: 21,
   sick_leave_per_year: 10,
-  auto_punch_out_buffer_minutes: 30,
+  auto_punch_out_buffer_minutes: 5,
   minimum_required_minutes: null as number | null,
 };
 
@@ -71,7 +71,7 @@ describe('attendance.service', () => {
       workStartTime: '08:00',
       workEndTime: '16:00',
       gracePeriodMinutes: 10,
-      bufferMinutesAfterShift: 30,
+      bufferMinutesAfterShift: 5,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
@@ -90,7 +90,7 @@ describe('attendance.service', () => {
       workStartTime: '09:00',
       workEndTime: '18:00',
       gracePeriodMinutes: 15,
-      bufferMinutesAfterShift: 30,
+      bufferMinutesAfterShift: 5,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
@@ -111,7 +111,7 @@ describe('attendance.service', () => {
       workStartTime: '09:00',
       workEndTime: '18:00',
       gracePeriodMinutes: 15,
-      bufferMinutesAfterShift: 30,
+      bufferMinutesAfterShift: 5,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: 420,
     };
@@ -129,7 +129,7 @@ describe('attendance.service', () => {
       workStartTime: '09:00',
       workEndTime: '18:00',
       gracePeriodMinutes: 15,
-      bufferMinutesAfterShift: 30,
+      bufferMinutesAfterShift: 5,
       weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
@@ -198,6 +198,8 @@ describe('attendance.service', () => {
           department_id: 'd1',
           department_name_ar: 'التحرير',
           availability_state: 'available_now',
+          team_live_state: 'available_now',
+          has_overtime: false,
         },
       ],
       error: null,
@@ -214,7 +216,8 @@ describe('attendance.service', () => {
         userId: 'u1',
         nameAr: 'علي',
         departmentNameAr: 'التحرير',
-        availabilityState: 'available_now',
+        teamLiveState: 'available_now',
+        hasOvertime: false,
       }),
     ]);
   });
@@ -232,6 +235,8 @@ describe('attendance.service', () => {
           department_name_ar: 'التقنية',
           date: '2025-06-11',
           attendance_state: 'present_on_date',
+          team_date_state: 'fulfilled_shift',
+          has_overtime: false,
         },
       ],
       error: null,
@@ -249,7 +254,8 @@ describe('attendance.service', () => {
         userId: 'u2',
         nameAr: 'ليلى',
         departmentNameAr: 'التقنية',
-        attendanceState: 'present_on_date',
+        teamDateState: 'fulfilled_shift',
+        hasOvertime: false,
       }),
     ]);
   });
@@ -268,10 +274,13 @@ describe('attendance.service', () => {
           date: '2025-06-11',
           effective_status: 'late',
           display_status: 'late',
+          team_live_state: 'late',
+          team_date_state: 'late',
           first_check_in: '08:20',
           last_check_out: null,
           total_work_minutes: 120,
           total_overtime_minutes: 0,
+          has_overtime: false,
           session_count: 1,
           is_checked_in_now: true,
           has_auto_punch_out: false,
@@ -288,6 +297,7 @@ describe('attendance.service', () => {
     expect(sb.rpc).toHaveBeenCalledWith('get_team_attendance_day', {
       p_date: '2025-06-11',
       p_department_id: 'd1',
+      p_include_all_profiles: false,
     });
     expect(rows).toEqual([
       expect.objectContaining({
@@ -295,6 +305,8 @@ describe('attendance.service', () => {
         nameAr: 'منى',
         effectiveStatus: 'late',
         displayStatus: 'late',
+        teamLiveState: 'late',
+        teamDateState: 'late',
         hasOvertime: false,
         isCheckedInNow: true,
       }),
@@ -315,10 +327,13 @@ describe('attendance.service', () => {
           date: '2025-06-11',
           effective_status: 'overtime_only',
           display_status: 'overtime_only',
+          team_live_state: 'neutral',
+          team_date_state: 'absent',
           first_check_in: '18:00',
           last_check_out: '20:00',
           total_work_minutes: 120,
           total_overtime_minutes: 120,
+          has_overtime: true,
           session_count: 1,
           is_checked_in_now: false,
           has_auto_punch_out: false,
@@ -336,6 +351,8 @@ describe('attendance.service', () => {
       expect.objectContaining({
         userId: 'u2',
         displayStatus: 'overtime_only',
+        teamLiveState: 'neutral',
+        teamDateState: 'absent',
         totalOvertimeMinutes: 120,
         hasOvertime: true,
       }),
