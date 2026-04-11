@@ -58,14 +58,18 @@ These states are used exclusively on the team attendance page in live mode. They
 | State | Arabic Label | Definition |
 |---|---|---|
 | `available_now` | موجود الآن | Employee is currently checked in (open session), arrived on time, and it's a working day during shift hours. |
-| `late` | متأخر | Employee is currently checked in but arrived late (session status is `late`). |
+| `late` | متأخر | Employee has a `late` session today. Applies whether they are currently checked in or currently on break — lateness is a fact about today that doesn't go away when the employee steps out. |
+| `on_break` | في استراحة | Employee arrived on time and has at least one session today, but is not currently in an open session, has not yet met the shift minimum, and the shift window is still open. Distinct from `not_entered_yet` (they did show up) and from `fulfilled_shift` (their day isn't done yet). |
 | `not_entered_yet` | لم يسجل بعد | It's a working day, shift hasn't ended yet, and the employee has no sessions. They might still show up. |
 | `absent` | غائب | It's a working day, shift has ended, and the employee has no qualifying sessions. They didn't show up. |
 | `on_leave` | في إجازة | Employee has approved leave for today. |
 | `fulfilled_shift` | أكمل الدوام | Employee has checked out and met the shift minimum. Their work day is done. |
-| `neutral` | خارج التصنيف | Doesn't fit into the above: off-day with no shift, or checked out without meeting minimums. A catch-all for non-standard situations. |
+| `neutral` | خارج التصنيف | Off-day per the employee's schedule (weekend/holiday), or no shift configured for this employee/day. Used only for "no shift was expected" situations — never for mid-shift ambiguity. |
 
-> **Concern — `neutral` is vague:** This state covers too many different situations (off-day, no shift assigned, checked out early). The admin sees "خارج التصنيف" but can't tell *why*. We should consider splitting this or at least clarifying what situations land here.
+> **Sectioning vs. chips:** The "available now" / "not available now" split on the Live Board is driven purely by whether the employee currently has an open session, independent of which chip they carry. A `late` employee on break appears in "not available now" but still carries the `late` chip so the admin can follow up on the lateness. An on-time employee on break appears in "not available now" with the `on_break` chip, so the admin can distinguish them from employees who haven't shown up at all (who carry `not_entered_yet`).
+>
+> **Known gap:** An employee with no shift configured is indistinguishable from one who is legitimately on a weekend/holiday — both land in `neutral`. This hides config drift. Acceptable for now; see Future Work.
+
 
 ### Date Board States (Team Attendance — Date Mode)
 
@@ -110,13 +114,26 @@ These are the places in the admin panel that consume attendance state. Each has 
    | `future` | derived | Resolver returns this when `date > today` |
    | `not_joined` | derived | Resolver returns this when `date < employee.join_date` |
 
+5. **Breaks are an availability dimension, not a status change.** When an employee checks out mid-shift for a break, their underlying session status (`present` or `late`) does not change. On the Live Board, this is reflected two ways: (a) the `late` chip persists through breaks so lateness stays visible to the admin, and (b) an on-time employee on break shows the dedicated `on_break` chip instead of falling into `neutral`. The Live Board sections ("available now" vs "not available now") are driven purely by whether a session is currently open, independent of which chip the row carries. This keeps `neutral` meaning "no shift was expected" and prevents mid-shift activity from ever landing there.
+
 
 ## Open Concerns
 
 - **Legacy `attendance_logs` table:** Predates the session/day split. Needs to be phased out.
 - **State naming inconsistency:** Too many overlapping enums (`DayStatus`, `EffectiveStatus`, `TeamAttendanceLiveState`, `TeamAttendanceDateState`, `DisplayStatus`). Assess which can be consolidated.
-- **`neutral` is vague:** Covers off-day, no shift, checked out early. Consider splitting or clarifying.
+- **`neutral` collapses off-day and missing-shift-config:** After narrowing `neutral`, it still covers two distinct situations: legitimate off-day (weekend/holiday) and a missing shift configuration. The second case silently hides config drift. See Future Work for a planned split.
 - **`mark-absent` only runs for today:** No way to backfill an arbitrary date range, so a missed run leaves gaps. The underlying SQL function is idempotent and range-safe; the edge function should expose that.
 - **Weekend stores a row with `effective_status = NULL`:** Conflicts with decision #4 (weekend is derived). Decide whether to stop writing these rows or treat weekend as a sourced state.
 - **`overtime_only` still exists as a status value:** Conflicts with decision #3 (overtime is a modifier). Migrate to `absent` + `has_overtime`.
 - **Recalc reads current schedule, not historical:** Re-running recalc for a past date uses today's `work_days`/policy, so a schedule edit retroactively flips old verdicts. Breaks historical stability under idempotent re-runs.
+
+
+## Future Work
+
+### Splitting `neutral` further
+
+Even after narrowing, `neutral` still covers two distinct situations: a legitimate off-day (weekend/holiday) and a missing shift configuration. The cleaner model would split these into `off_day` and `unscheduled`, keeping `neutral` only as a safety-net fallback. Deferred because it adds new frontend chips, colors, and labels without fixing an immediately painful bug — the current single `neutral` label is workable while admins learn the system.
+
+When we revisit this, one UX direction worth exploring: instead of piling on more chips, visually distinguish off-day employees at the row level (e.g., subtle background tint or not greyed out) so "this person isn't expected today" is communicated without a dedicated chip. That would let `unscheduled` stand alone as a chip for the real problem case (config drift) while off-days become purely a visual treatment.
+
+**Known gap under the current approach:** an employee with no shift configured is indistinguishable from one who is legitimately on a weekend/holiday. Both land in `neutral`. This hides config drift from the admin. Acceptable for now; worth fixing when we do the split.
