@@ -101,15 +101,15 @@ function SessionRow({ session }: { session: AttendanceSession }) {
       style={statusTheme.accentStyle}
     >
       <span
-        className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium font-['IBM_Plex_Sans_Arabic',_sans-serif]"
+        className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium"
         style={statusTheme.badgeSolidStyle}
       >
         {typeBadgeLabel}
       </span>
       <div className="flex items-center gap-5">
         <div className="min-w-[78px] text-center">
-          <p className="text-[12px] font-normal text-[#94A3B8] font-['IBM_Plex_Sans_Arabic',_sans-serif]">{formatWeekday(session.date)}</p>
-          <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900 font-['IBM_Plex_Sans_Arabic',_sans-serif]">
+          <p className="text-[12px] font-normal text-[#94A3B8]">{formatWeekday(session.date)}</p>
+          <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900">
             <span className="text-[20px] font-bold leading-none">{dateParts.day}</span>
             <span className="text-[13px] font-bold leading-none">{dateParts.month}</span>
           </div>
@@ -120,12 +120,12 @@ function SessionRow({ session }: { session: AttendanceSession }) {
         <div className="flex-1 min-w-0 space-y-2">
           <div className="flex items-center gap-3 text-gray-800">
             <LogIn className="w-4 h-4 text-teal-700" />
-            <span className="text-[15px] font-medium text-[#334155] font-['IBM_Plex_Mono',_monospace] tabular-nums">{formatWallTime(session.check_in_time)}</span>
+            <span className="text-[15px] font-medium text-[#334155] tabular-nums">{formatWallTime(session.check_in_time)}</span>
           </div>
 
           <div className="flex items-center gap-3 text-gray-800">
             <LogOut className="w-4 h-4 text-gray-500" />
-            <span className={`text-[15px] font-medium font-['IBM_Plex_Mono',_monospace] tabular-nums ${openSession ? 'text-gray-300' : 'text-[#334155]'}`}>
+            <span className={`text-[15px] font-medium tabular-nums ${openSession ? 'text-gray-300' : 'text-[#334155]'}`}>
               {formatWallTime(session.check_out_time)}
             </span>
             {openSession ? (
@@ -157,15 +157,15 @@ function AbsentDayRow({ date }: { date: string }) {
       style={statusTheme.accentStyle}
     >
       <span
-        className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium font-['IBM_Plex_Sans_Arabic',_sans-serif]"
+        className="absolute top-3 left-4 inline-flex items-center px-[12px] py-[2px] rounded-[20px] text-[12px] font-medium"
         style={statusTheme.badgeSolidStyle}
       >
         {statusTheme.label}
       </span>
       <div className="flex items-center gap-5">
         <div className="min-w-[78px] text-center">
-          <p className="text-[12px] font-normal text-[#94A3B8] font-['IBM_Plex_Sans_Arabic',_sans-serif]">{formatWeekday(date)}</p>
-          <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900 font-['IBM_Plex_Sans_Arabic',_sans-serif]">
+          <p className="text-[12px] font-normal text-[#94A3B8]">{formatWeekday(date)}</p>
+          <div className="flex items-baseline justify-center gap-1 mt-1 text-blue-900">
             <span className="text-[20px] font-bold leading-none">{dateParts.day}</span>
             <span className="text-[13px] font-bold leading-none">{dateParts.month}</span>
           </div>

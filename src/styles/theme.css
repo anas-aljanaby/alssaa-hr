@@ -2,6 +2,7 @@
 
 :root {
   --font-size: 16px;
+  --font-sans: 'Cairo', 'Almarai', 'Segoe UI', 'Segoe UI Arabic', Tahoma, sans-serif;
   --background: #f8f9fc;
   --foreground: #1a1a2e;
   --card: #ffffff;
@@ -126,7 +127,6 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Cairo', sans-serif;
   }
 
   /**
@@ -136,6 +136,14 @@
 
   html {
     font-size: var(--font-size);
+  }
+
+  html,
+  body {
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1 {
@@ -166,17 +174,22 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
+    font-family: inherit;
   }
 
   button {
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
+    font-family: inherit;
   }
 
-  input {
+  input,
+  select,
+  textarea {
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+    font-family: inherit;
   }
 }

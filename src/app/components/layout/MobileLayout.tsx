@@ -253,7 +253,7 @@ function MobileLayoutContent() {
               </button>
             ) : null}
             <div className="flex min-w-0 items-center gap-2">
-              <h1 className="truncate text-sm font-semibold text-gray-900">
+              <h1 className="truncate text-sm font-medium text-gray-900">
                 {resolvedTopBar.title}
               </h1>
               {resolvedTopBar.meta ? (
