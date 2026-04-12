@@ -88,12 +88,15 @@ export function NotificationsPage() {
         <button
           type="button"
           onClick={handleMarkAllRead}
-          className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-100"
+          disabled={isOffline}
+          aria-disabled={isOffline}
+          title={isOffline ? 'يتطلب اتصالاً بالإنترنت' : undefined}
+          className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           تعليم الكل
         </button>
       ) : null,
-    [handleMarkAllRead, unreadCount]
+    [handleMarkAllRead, unreadCount, isOffline]
   );
 
   useAppTopBar({
@@ -150,7 +153,9 @@ export function NotificationsPage() {
             <button
               key={notif.id}
               onClick={() => handleMarkRead(notif.id)}
-              className={`w-full text-right rounded-xl p-4 border transition-all ${
+              disabled={isOffline && !notif.read_status}
+              aria-disabled={isOffline && !notif.read_status}
+              className={`w-full text-right rounded-xl p-4 border transition-all disabled:cursor-not-allowed ${
                 notif.read_status
                   ? 'bg-white border-gray-100'
                   : 'bg-blue-50/50 border-blue-100'

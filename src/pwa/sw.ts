@@ -2,9 +2,15 @@
 
 import { clientsClaim } from 'workbox-core';
 import { ExpirationPlugin } from 'workbox-expiration';
-import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching';
-import { registerRoute, NavigationRoute } from 'workbox-routing';
-import { CacheFirst } from 'workbox-strategies';
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
+import {
+  precacheAndRoute,
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+  matchPrecache,
+} from 'workbox-precaching';
+import { registerRoute, NavigationRoute, setCatchHandler } from 'workbox-routing';
+import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import type { PrecacheEntry } from 'workbox-precaching';
 
 declare let self: ServiceWorkerGlobalScope & {
@@ -21,6 +27,10 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Navigation (HTML) handling
+// ---------------------------------------------------------------------------
+
 const navigationHandler = createHandlerBoundToURL('/index.html');
 
 registerRoute(
@@ -29,6 +39,11 @@ registerRoute(
   })
 );
 
+// ---------------------------------------------------------------------------
+// Runtime caching
+// ---------------------------------------------------------------------------
+
+// Same-origin static assets (Vite build output, icons, fonts we ship ourselves).
 registerRoute(
   ({ request, sameOrigin }) =>
     sameOrigin &&
@@ -36,6 +51,7 @@ registerRoute(
   new CacheFirst({
     cacheName: 'alssaa-static-assets-v1',
     plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
       new ExpirationPlugin({
         maxEntries: 100,
         maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -43,3 +59,81 @@ registerRoute(
     ],
   })
 );
+
+// Supabase REST reads — stale-while-revalidate with a short TTL.
+// Scoped strictly to /rest/v1 GET requests, and we explicitly avoid caching
+// anything under /auth/v1 or /storage/v1/object/sign (tokens, session endpoints
+// and signed URLs must always hit the network).
+registerRoute(
+  ({ url, request }) => {
+    if (request.method !== 'GET') return false;
+    if (!url.pathname.startsWith('/rest/v1')) return false;
+    if (url.pathname.startsWith('/auth/v1')) return false;
+    return true;
+  },
+  new StaleWhileRevalidate({
+    cacheName: 'alssaa-supabase-read-v1',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({
+        maxEntries: 80,
+        maxAgeSeconds: 60 * 60 * 24, // 24 hours
+        purgeOnQuotaError: true,
+      }),
+    ],
+  })
+);
+
+// Cross-origin images coming from Supabase Storage (avatars, uploaded files).
+registerRoute(
+  ({ url, request }) =>
+    request.destination === 'image' &&
+    /\/storage\/v1\/object\/public\//.test(url.pathname),
+  new CacheFirst({
+    cacheName: 'alssaa-supabase-images-v1',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({
+        maxEntries: 60,
+        maxAgeSeconds: 60 * 60 * 24 * 30,
+        purgeOnQuotaError: true,
+      }),
+    ],
+  })
+);
+
+// Google Fonts (stylesheet + font files) if used by the app or its docs.
+registerRoute(
+  ({ url }) => url.origin === 'https://fonts.googleapis.com',
+  new StaleWhileRevalidate({
+    cacheName: 'alssaa-google-fonts-stylesheets-v1',
+  })
+);
+registerRoute(
+  ({ url }) => url.origin === 'https://fonts.gstatic.com',
+  new CacheFirst({
+    cacheName: 'alssaa-google-fonts-webfonts-v1',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({
+        maxEntries: 30,
+        maxAgeSeconds: 60 * 60 * 24 * 365,
+      }),
+    ],
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Offline fallback — if navigation handler cannot serve /index.html from the
+// precache (e.g. the cache was wiped or never populated because the PWA was
+// installed from a stale dev build), serve offline.html instead of letting the
+// browser show its native network error page.
+// ---------------------------------------------------------------------------
+
+setCatchHandler(async ({ request }) => {
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    const cached = await matchPrecache('/offline.html');
+    if (cached) return cached;
+  }
+  return Response.error();
+});

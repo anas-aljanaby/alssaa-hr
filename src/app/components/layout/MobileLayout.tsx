@@ -16,6 +16,7 @@ import {
   Users,
   CheckSquare,
   UsersRound,
+  RefreshCw,
 } from 'lucide-react';
 
 const MOBILE_TOP_BAR_OFFSET = 'calc(env(safe-area-inset-top, 0px) + 3.5rem)';
@@ -266,6 +267,17 @@ function MobileLayoutContent() {
 
           <div className="flex shrink-0 items-center gap-2">
             {resolvedTopBar.action}
+            {location.pathname.startsWith('/team-attendance') && (
+              <button
+                type="button"
+                onClick={refreshApp}
+                aria-label="تحديث التطبيق"
+                title="تحديث"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition-colors hover:bg-gray-50 active:bg-gray-100"
+              >
+                <RefreshCw className="h-4.5 w-4.5" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setNotificationsOpen((prev) => !prev)}

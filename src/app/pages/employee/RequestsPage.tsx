@@ -321,11 +321,22 @@ export function RequestsPage() {
       {!showForm && (
         <button
           type="button"
-          onClick={() => setShowForm(true)}
-          className="fixed bottom-24 right-4 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
+          onClick={() => {
+            if (isOffline) {
+              toast.error(OFFLINE_ACTION_MESSAGE);
+              return;
+            }
+            setShowForm(true);
+          }}
+          disabled={isOffline}
+          aria-disabled={isOffline}
+          title={isOffline ? OFFLINE_ACTION_MESSAGE : undefined}
+          className="fixed bottom-24 right-4 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-600"
         >
           <Plus className="w-4 h-4" />
-          <span className="text-sm">طلب جديد</span>
+          <span className="text-sm">
+            {isOffline ? 'غير متصل' : 'طلب جديد'}
+          </span>
         </button>
       )}
     </PageLayout>

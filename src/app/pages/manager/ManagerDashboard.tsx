@@ -31,6 +31,7 @@ import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { useTodayPunch } from '../../hooks/useTodayPunch';
 import { UnavailableState } from '../../components/shared/UnavailableState';
 import { isOfflineError } from '@/lib/network';
+import { usePwa } from '../../contexts/PwaContext';
 
 function dateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -53,6 +54,7 @@ const DASHBOARD_FILTER_BY_SUMMARY_KEY: Record<DashboardSummaryKey, string> = {
 
 export function ManagerDashboard() {
   const { currentUser } = useAuth();
+  const { isOffline } = usePwa();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [missingDepartment, setMissingDepartment] = useState(false);
@@ -292,6 +294,7 @@ export function ManagerDashboard() {
           actionLoading={todayPunch.actionLoading}
           onCheckIn={todayPunch.handleCheckIn}
           onCheckOut={todayPunch.handleCheckOut}
+          isOffline={isOffline}
         />
       )}
 

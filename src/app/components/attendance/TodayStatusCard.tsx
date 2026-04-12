@@ -18,6 +18,12 @@ interface Props {
   actionLoading: boolean;
   onCheckIn: () => void;
   onCheckOut: (checkoutTime?: string) => void;
+  /**
+   * When true, the check-in / check-out buttons are visually disabled and a
+   * short Arabic hint is shown. All writes require a live connection per
+   * company policy.
+   */
+  isOffline?: boolean;
 }
 
 function toMinutes(t: string): number {
@@ -60,7 +66,7 @@ function todayArabicDate(): string {
   });
 }
 
-export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }: Props) {
+export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, isOffline = false }: Props) {
   const { log, shift } = today;
   const overtimeColor = getStatusTheme('overtime_only').color;
   const overtimeClockColor = '#D97706';
@@ -195,7 +201,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
     onCheckIn();
   };
 
-  const buttonDisabled = actionLoading;
+  const buttonDisabled = actionLoading || isOffline;
 
   // Visual state for the clock circle
   const clockIsOvertime =
@@ -379,27 +385,42 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut }:
             <button
               onClick={handleCheckInClick}
               disabled={buttonDisabled || !canPunchIn}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+              title={isOffline ? 'تحتاج إلى اتصال بالإنترنت لتسجيل الحضور' : undefined}
+              aria-disabled={buttonDisabled || !canPunchIn}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
             >
               <LogIn className="w-5 h-5" />
               {actionLoading
                 ? 'جاري التسجيل...'
-                : !canPunchIn
-                  ? 'يمكنك التسجيل قبل ساعة من بدء الدوام'
-                  : isOvertime
-                    ? 'تسجيل الحضور (عمل إضافي)'
-                    : 'تسجيل الحضور'}
+                : isOffline
+                  ? 'غير متصل — لا يمكن تسجيل الحضور'
+                  : !canPunchIn
+                    ? 'يمكنك التسجيل قبل ساعة من بدء الدوام'
+                    : isOvertime
+                      ? 'تسجيل الحضور (عمل إضافي)'
+                      : 'تسجيل الحضور'}
             </button>
           )}
           {isCheckedIn && (
             <button
               onClick={() => onCheckOut()}
-              disabled={actionLoading}
-              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+              disabled={actionLoading || isOffline}
+              title={isOffline ? 'تحتاج إلى اتصال بالإنترنت لتسجيل الانصراف' : undefined}
+              aria-disabled={actionLoading || isOffline}
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
             >
               <LogOut className="w-5 h-5" />
-              {actionLoading ? 'جاري التسجيل...' : 'تسجيل الانصراف'}
+              {actionLoading
+                ? 'جاري التسجيل...'
+                : isOffline
+                  ? 'غير متصل — لا يمكن تسجيل الانصراف'
+                  : 'تسجيل الانصراف'}
             </button>
+          )}
+          {isOffline && (
+            <p className="text-center text-[11px] text-amber-700">
+              الاتصال بالإنترنت مطلوب لتسجيل الحضور والانصراف.
+            </p>
           )}
         </div>
       </div>

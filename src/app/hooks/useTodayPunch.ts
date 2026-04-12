@@ -3,6 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import * as attendanceService from '@/lib/services/attendance.service';
 import type { AttendanceLog, TodayRecord } from '@/lib/services/attendance.service';
 import { isOfflineError } from '@/lib/network';
+import { cachedFetch } from '@/lib/offlineCache';
 
 const EMPTY_TODAY: TodayRecord = { log: null, punches: [], shift: null };
 
@@ -18,17 +19,25 @@ export function useTodayPunch({ userId, onLogUpdated }: UseTodayPunchOptions) {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const actionInFlightRef = useRef(false);
 
   const refreshToday = useCallback(async () => {
     if (!userId) return;
     try {
-      const record = await attendanceService.getAttendanceToday(userId);
+      const result = await cachedFetch(
+        `attendance.today:${userId}`,
+        () => attendanceService.getAttendanceToday(userId)
+      );
       setLoadError(null);
-      setToday(record);
-      onLogUpdated?.(record.log);
+      setToday(result.data);
+      setLastUpdatedAt(result.fetchedAt);
+      setFromCache(result.fromCache);
+      onLogUpdated?.(result.data.log);
     } catch (error) {
       setToday(EMPTY_TODAY);
+      setFromCache(false);
       setLoadError(
         isOfflineError(error)
           ? 'تعذر تحميل حالة اليوم بدون اتصال بالإنترنت.'
@@ -89,6 +98,8 @@ export function useTodayPunch({ userId, onLogUpdated }: UseTodayPunchOptions) {
     loading,
     loadError,
     actionLoading,
+    lastUpdatedAt,
+    fromCache,
     handleCheckIn,
     handleCheckOut,
     refreshToday,

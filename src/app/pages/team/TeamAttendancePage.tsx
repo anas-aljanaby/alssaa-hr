@@ -42,7 +42,6 @@ import {
   ChevronDown,
   ChevronLeft,
   Clock3,
-  RefreshCcw,
   ShieldAlert,
 } from 'lucide-react';
 
@@ -708,7 +707,6 @@ export function TeamAttendancePage() {
     dayAvailabilityRows: [],
   });
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [selectedDetailRow, setSelectedDetailRow] = useState<AttendanceBoardRow | null>(null);
@@ -785,9 +783,7 @@ export function TeamAttendancePage() {
         dayAvailabilityRows: [],
       };
 
-      if (silent) {
-        setRefreshing(true);
-      } else {
+      if (!silent) {
         setLoading(true);
       }
       setErrorMessage(null);
@@ -870,9 +866,7 @@ export function TeamAttendancePage() {
         });
         setErrorMessage('تعذر تحميل البيانات الحالية');
       } finally {
-        if (silent) {
-          setRefreshing(false);
-        } else {
+        if (!silent) {
           setLoading(false);
         }
       }
@@ -977,7 +971,7 @@ export function TeamAttendancePage() {
   }, [departments, selectedDepartmentDbId]);
 
   const handleRefresh = useCallback(() => {
-    void loadBoard(true);
+    void loadBoard(false);
   }, [loadBoard]);
 
   const resetFilters = useCallback(() => {
@@ -1066,16 +1060,6 @@ export function TeamAttendancePage() {
               </button>
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-10 w-10 rounded-2xl border-gray-200"
-              onClick={handleRefresh}
-              aria-label="تحديث"
-            >
-              <RefreshCcw className={cn('h-4 w-4', refreshing ? 'animate-spin' : '')} />
-            </Button>
           </div>
           {mode === 'date' ? (
             <div

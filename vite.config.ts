@@ -19,12 +19,18 @@ export default defineConfig({
       manifest: false,
       includeAssets: [
         'manifest.webmanifest',
+        'offline.html',
         'pwa/apple-touch-icon.png',
         'pwa/icon-192.png',
         'pwa/icon-512.png',
         'pwa/maskable-192.png',
         'pwa/maskable-512.png',
       ],
+      injectManifest: {
+        // Our bundle imports workbox-expiration/workbox-strategies for runtime
+        // caching, which is bigger than the default 2 MiB safety limit.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
     }),
   ],
   resolve: {

@@ -30,9 +30,14 @@ import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { useTodayPunch } from '../../hooks/useTodayPunch';
 import { UnavailableState } from '../../components/shared/UnavailableState';
 import { isOfflineError } from '@/lib/network';
+import { cachedFetch } from '@/lib/offlineCache';
+import { useVisibilityRefetch } from '../../hooks/useVisibilityRefetch';
+import { usePwa } from '../../contexts/PwaContext';
+import { LastUpdatedNote } from '../../components/shared/LastUpdatedNote';
 
 export function EmployeeDashboard() {
   const { currentUser } = useAuth();
+  const { isOffline } = usePwa();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
@@ -41,6 +46,8 @@ export function EmployeeDashboard() {
   const [userRequests, setUserRequests] = useState<LeaveRequest[]>([]);
   const [department, setDepartment] = useState<Department | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const todayPunch = useTodayPunch({
     userId: currentUser?.uid,
     onLogUpdated: setTodayLog,
@@ -50,6 +57,11 @@ export function EmployeeDashboard() {
     if (!currentUser) return;
     loadData();
   }, [currentUser?.uid]);
+
+  // Refresh when the PWA comes back to the foreground or regains connection.
+  useVisibilityRefetch(() => {
+    if (currentUser) void loadData();
+  }, { enabled: !!currentUser });
 
   useRealtimeSubscription(
     () => {
@@ -83,21 +95,32 @@ export function EmployeeDashboard() {
     try {
       setLoading(true);
       const n = now();
-      const [log, monthStats, balance, reqs, dept] = await Promise.all([
-        attendanceService.getTodayLog(currentUser.uid),
-        attendanceService.getMonthlyStats(currentUser.uid, n.getFullYear(), n.getMonth()),
-        leaveBalanceService.getUserBalance(currentUser.uid),
-        requestsService.getUserRequests(currentUser.uid),
-        currentUser.departmentId
-          ? departmentsService.getDepartmentById(currentUser.departmentId)
-          : Promise.resolve(null),
-      ]);
+      // Read-through cache for the critical employee read-only data. Each
+      // key is scoped per user so multiple accounts on the same device do
+      // not leak into each other.
+      const result = await cachedFetch(
+        `dashboard.employee:${currentUser.uid}:${n.getFullYear()}-${n.getMonth()}`,
+        async () => {
+          const [log, monthStats, balance, reqs, dept] = await Promise.all([
+            attendanceService.getTodayLog(currentUser.uid),
+            attendanceService.getMonthlyStats(currentUser.uid, n.getFullYear(), n.getMonth()),
+            leaveBalanceService.getUserBalance(currentUser.uid),
+            requestsService.getUserRequests(currentUser.uid),
+            currentUser.departmentId
+              ? departmentsService.getDepartmentById(currentUser.departmentId)
+              : Promise.resolve(null),
+          ]);
+          return { log, monthStats, balance, reqs, dept };
+        }
+      );
       setLoadError(null);
-      setTodayLog(log);
-      setStats(monthStats);
-      setLeaveBalance(balance);
-      setUserRequests(reqs);
-      setDepartment(dept);
+      setTodayLog(result.data.log);
+      setStats(result.data.monthStats);
+      setLeaveBalance(result.data.balance);
+      setUserRequests(result.data.reqs);
+      setDepartment(result.data.dept);
+      setLastUpdatedAt(result.fetchedAt);
+      setFromCache(result.fromCache);
     } catch (error) {
       const message = isOfflineError(error)
         ? 'تعذر تحميل لوحة التحكم بدون اتصال بالإنترنت.'
@@ -142,6 +165,14 @@ export function EmployeeDashboard() {
 
   return (
     <div className="mx-auto max-w-lg space-y-3 px-4 pb-24 pt-3">
+      {(fromCache || isOffline) && (
+        <LastUpdatedNote
+          lastUpdatedAt={lastUpdatedAt}
+          fromCache={fromCache}
+          alwaysShow={isOffline}
+          className="justify-end"
+        />
+      )}
       <DashboardHeader
         gradientClassName="bg-gradient-to-l from-blue-600 to-blue-700"
         title={currentUser.nameAr}
@@ -177,6 +208,7 @@ export function EmployeeDashboard() {
           actionLoading={todayPunch.actionLoading}
           onCheckIn={todayPunch.handleCheckIn}
           onCheckOut={todayPunch.handleCheckOut}
+          isOffline={isOffline}
         />
       )}
 

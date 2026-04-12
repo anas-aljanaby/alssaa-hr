@@ -5,6 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { approvalSchema, type ApprovalFormData } from '@/lib/validations';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import { usePwa } from '../../contexts/PwaContext';
+import { OFFLINE_ACTION_MESSAGE } from '@/lib/network';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as requestsService from '@/lib/services/requests.service';
@@ -41,6 +43,7 @@ export function ApprovalsPage() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const { updateRequestStatus, updateOvertimeRequestStatus } = useApp();
+  const { isOffline } = usePwa();
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequestWithSessionAndReviewer[]>([]);
@@ -312,11 +315,18 @@ export function ApprovalsPage() {
                 />
               </div>
 
+              {isOffline && (
+                <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {OFFLINE_ACTION_MESSAGE}
+                </p>
+              )}
               <div className="flex gap-3">
                 <button
                   type="submit"
-                  disabled={actionLoading}
-                  className={`flex-1 py-3 text-white rounded-xl transition-colors disabled:opacity-50 ${
+                  disabled={actionLoading || isOffline}
+                  aria-disabled={actionLoading || isOffline}
+                  title={isOffline ? OFFLINE_ACTION_MESSAGE : undefined}
+                  className={`flex-1 py-3 text-white rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     actionModal.action === 'approve'
                       ? 'bg-emerald-500 hover:bg-emerald-600'
                       : 'bg-red-500 hover:bg-red-600'
@@ -324,9 +334,11 @@ export function ApprovalsPage() {
                 >
                   {actionLoading
                     ? 'جاري التحديث...'
-                    : actionModal.action === 'approve'
-                      ? 'تأكيد الموافقة'
-                      : 'تأكيد الرفض'}
+                    : isOffline
+                      ? 'غير متصل'
+                      : actionModal.action === 'approve'
+                        ? 'تأكيد الموافقة'
+                        : 'تأكيد الرفض'}
                 </button>
                 <button
                   type="button"
