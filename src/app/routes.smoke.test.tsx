@@ -32,10 +32,6 @@ vi.mock('./contexts/AppContext', () => ({
   AppProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('./contexts/DevTimeContext', () => ({
-  DevTimeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 vi.mock('./components/layout/RootLayout', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./components/layout/RootLayout')>();
   const { Outlet } = await import('react-router');

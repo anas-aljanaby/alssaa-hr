@@ -7,7 +7,6 @@ import {
   wallTimeToMinutes,
   type TodayRecord,
 } from '@/lib/services/attendance.service';
-import { now } from '@/lib/time';
 import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
 import { getStatusTheme } from './attendanceStatusTheme';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
@@ -58,7 +57,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 function todayArabicDate(): string {
-  return now().toLocaleDateString('ar-IQ', {
+  return new Date().toLocaleDateString('ar-IQ', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -85,7 +84,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
     showShiftCongrats,
   } = punchUi;
 
-  const currentNow = now();
+  const currentNow = new Date();
 
   // Real elapsed since punch-in (for the main clock and "hours worked")
   useEffect(() => {
@@ -97,7 +96,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
       const hm = wallTimeHHMM(activeCheckInTime);
       if (!hm) return 0;
       const [h, m] = hm.split(':').map(Number);
-      const currentDate = now();
+      const currentDate = new Date();
       const inMs = new Date(currentDate).setHours(h, m, 0, 0);
       return Math.max(0, Math.floor((currentDate.getTime() - inMs) / 1000));
     };
@@ -115,7 +114,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
     const startM = toMinutes(shift.workStartTime);
     const endM = toMinutes(shift.workEndTime);
     const computeWorkdayElapsed = () => {
-      const current = now();
+      const current = new Date();
       const currentMinutes = current.getHours() * 60 + current.getMinutes();
       const currentSeconds = current.getSeconds();
       if (currentMinutes < startM) return 0;

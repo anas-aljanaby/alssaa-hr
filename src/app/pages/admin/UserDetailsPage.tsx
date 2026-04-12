@@ -32,7 +32,6 @@ import type {
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { AuditLog } from '@/lib/services/audit.service';
-import { now } from '@/lib/time';
 import {
   Mail,
   Calendar,
@@ -165,11 +164,11 @@ export function UserDetailsPage() {
   const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>('all');
   const [attendanceViewMode, setAttendanceViewMode] = useState<'all_time' | 'range'>('all_time');
   const [dateFrom, setDateFrom] = useState(() => {
-    const n = now();
+    const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
   });
   const [dateTo, setDateTo] = useState(() => {
-    const n = now();
+    const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
   });
   const [showEditModal, setShowEditModal] = useState(false);
@@ -419,7 +418,7 @@ export function UserDetailsPage() {
       : userRequests.filter((r) => r.status === requestFilter);
   const displayedHistory = attendanceViewMode === 'all_time' ? allTimeHistory : rangeHistory;
   const todayDisplayStatus = useMemo(
-    () => (todayRecord ? resolveTodayDisplayStatus(todayRecord, now()) : null),
+    () => (todayRecord ? resolveTodayDisplayStatus(todayRecord, new Date()) : null),
     [todayRecord]
   );
   const todayStatusConfig = todayDisplayStatus ? getStatusConfig(todayDisplayStatus) : null;

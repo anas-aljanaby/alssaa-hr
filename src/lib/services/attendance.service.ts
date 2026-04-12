@@ -1,6 +1,5 @@
 import { supabase } from '../supabase';
 import type { Database, Tables, InsertTables } from '../database.types';
-import { now } from '../time';
 import type { OvertimeRequest } from './overtime-requests.service';
 import {
   DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
@@ -296,7 +295,7 @@ export interface TodayPunchUiState {
   showShiftCongrats: boolean;
 }
 
-export function getTodayPunchUiState(today: TodayRecord, at: Date = now()): TodayPunchUiState {
+export function getTodayPunchUiState(today: TodayRecord, at: Date = new Date()): TodayPunchUiState {
   const { shift } = today;
   const currentMinutes = at.getHours() * 60 + at.getMinutes();
   const dayOfWeek = at.getDay();
@@ -319,7 +318,7 @@ export function isShiftRequirementMet(shift: ShiftInfo, totalWorkedMinutes: numb
   return totalWorkedMinutes >= full || (min != null && totalWorkedMinutes >= min);
 }
 
-export function shouldShowShiftCongrats(today: TodayRecord, at: Date = now()): boolean {
+export function shouldShowShiftCongrats(today: TodayRecord, at: Date = new Date()): boolean {
   const { log, shift } = today;
   if (!shift) return false;
   const dayOfWeek = at.getDay();
@@ -782,7 +781,7 @@ export async function getAttendanceMonthly(
   const summaryMap = new Map((summariesRes.data ?? []).map((s) => [s.date, s]));
   const offDays = shift?.weeklyOffDays ?? [5, 6];
 
-  const today = now();
+  const today = new Date();
   const todayStr_ = todayStr(today);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -843,7 +842,7 @@ export async function getAttendanceHistoryMonth(
     sessionsByDate.set(session.date, existing);
   }
 
-  const todayStr_ = todayStr(now());
+  const todayStr_ = todayStr(new Date());
   const items: AttendanceHistoryDay[] = [];
   for (let day = 1; day <= lastDay; day++) {
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -862,12 +861,12 @@ export async function getAttendanceHistoryMonth(
 }
 
 export function todayStr(d?: Date): string {
-  const date = d ?? now();
+  const date = d ?? new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 export function nowTimeStr(d?: Date): string {
-  const date = d ?? now();
+  const date = d ?? new Date();
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
@@ -929,16 +928,6 @@ function parsePunchCheckoutPayload(data: unknown): {
   };
 }
 
-/** UTC instant for devOverrideTime; matches punch handler org wall via toOrgLocalDate (+3). */
-function orgWallToPunchUtcIso(dateStr: string, wallTime: string): string {
-  const [y, mo, d] = dateStr.split('-').map(Number);
-  const parts = wallTime.split(':').map(Number);
-  const h = parts[0] ?? 0;
-  const mi = parts[1] ?? 0;
-  const s = parts[2] ?? 0;
-  return new Date(Date.UTC(y, mo - 1, d, h, mi, s, 0) - 3 * 60 * 60 * 1000).toISOString();
-}
-
 function normalizeEdgeInvokeError(invokeResult: EdgeInvokeResult): Error | null {
   const edgeError = invokeResult.error;
   const edgeData = invokeResult.data as { error?: string; code?: string } | null | undefined;
@@ -953,7 +942,7 @@ function normalizeEdgeInvokeError(invokeResult: EdgeInvokeResult): Error | null 
   return new Error(code ? `${message} (${code})` : message);
 }
 
-async function invokePunchAuthenticated(payload: { action: 'check_in' | 'check_out'; devOverrideTime?: string }): Promise<EdgeInvokeResult | null> {
+async function invokePunchAuthenticated(payload: { action: 'check_in' | 'check_out' }): Promise<EdgeInvokeResult | null> {
   const edgeInvoke = (supabase as unknown as { functions?: { invoke?: Function } }).functions?.invoke;
   if (typeof edgeInvoke !== 'function') return null;
 
@@ -981,12 +970,8 @@ async function invokePunchAuthenticated(payload: { action: 'check_in' | 'check_o
   }) as EdgeInvokeResult;
 }
 
-export async function checkIn(userId: string, devSimulatedNowIso?: string): Promise<CheckInResult> {
-  const invoked = await invokePunchAuthenticated(
-    import.meta.env.DEV && devSimulatedNowIso
-      ? { action: 'check_in', devOverrideTime: devSimulatedNowIso }
-      : { action: 'check_in' }
-  );
+export async function checkIn(userId: string): Promise<CheckInResult> {
+  const invoked = await invokePunchAuthenticated({ action: 'check_in' });
   if (invoked) {
     const normalizedError = normalizeEdgeInvokeError(invoked);
     if (normalizedError) throw normalizedError;
@@ -1035,7 +1020,7 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
   }
 
   const shift = await getEffectiveShiftForUser(userId);
-  const nowDate = now();
+  const nowDate = new Date();
   const dayOfWeek = nowDate.getDay();
   const nowMin = toMinutes(time);
   const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
@@ -1076,21 +1061,8 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
   return { log, overtimeRequest };
 }
 
-export async function checkOut(
-  userId: string,
-  checkoutTime?: string,
-  devSimulatedNowIso?: string
-): Promise<CheckOutResult> {
-  let devOverrideTime: string | undefined;
-  if (checkoutTime) {
-    devOverrideTime = orgWallToPunchUtcIso(todayStr(), checkoutTime);
-  } else if (import.meta.env.DEV && devSimulatedNowIso) {
-    devOverrideTime = devSimulatedNowIso;
-  }
-  const payload = devOverrideTime
-    ? { action: 'check_out' as const, devOverrideTime }
-    : { action: 'check_out' as const };
-  const invoked = await invokePunchAuthenticated(payload);
+export async function checkOut(userId: string): Promise<CheckOutResult> {
+  const invoked = await invokePunchAuthenticated({ action: 'check_out' });
   if (invoked) {
     const normalizedError = normalizeEdgeInvokeError(invoked);
     if (normalizedError) throw normalizedError;
@@ -1120,7 +1092,7 @@ export async function checkOut(
     return { log: today.log, overtimeRequest };
   }
 
-  const log = await checkOutLegacy(userId, checkoutTime);
+  const log = await checkOutLegacy(userId);
   return { log, overtimeRequest: null };
 }
 
@@ -1234,7 +1206,7 @@ export async function getMonthlyStats(
 
 export async function getAllTimeStats(userId: string): Promise<MonthlyStats> {
   const joinDate = await getUserJoinDate(userId);
-  const today = now();
+  const today = new Date();
   const todayYear = today.getFullYear();
   const todayMonth = today.getMonth();
 
@@ -1279,7 +1251,7 @@ export async function getAllTimeStats(userId: string): Promise<MonthlyStats> {
 
 export async function getAllTimeSummaries(userId: string): Promise<MonthDaySummary[]> {
   const joinDate = await getUserJoinDate(userId);
-  const today = now();
+  const today = new Date();
   const todayYear = today.getFullYear();
   const todayMonth = today.getMonth();
 
@@ -1309,7 +1281,7 @@ export async function getAllTimeSummaries(userId: string): Promise<MonthDaySumma
 
 export async function getAttendanceHistoryAllTime(userId: string): Promise<AttendanceHistoryDay[]> {
   const joinDate = await getUserJoinDate(userId);
-  const today = now();
+  const today = new Date();
   const todayYear = today.getFullYear();
   const todayMonth = today.getMonth();
 

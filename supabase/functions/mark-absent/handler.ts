@@ -21,7 +21,6 @@ export type MarkAbsentEnv = {
   supabaseUrl: string;
   supabaseAnonKey: string;
   serviceRoleKey: string;
-  isProduction: boolean;
 };
 
 export type MarkAbsentUserClient = {
@@ -32,6 +31,8 @@ export type MarkAbsentDeps = {
   getEnv: () => MarkAbsentEnv;
   createUserClient: (authHeader: string) => MarkAbsentUserClient;
   createServiceClient: () => PunchServiceClient;
+  /** Injected clock for deterministic tests. */
+  now?: () => Date;
 };
 
 export async function handleMarkAbsent(req: Request, deps: MarkAbsentDeps): Promise<Response> {
@@ -56,7 +57,7 @@ export async function handleMarkAbsent(req: Request, deps: MarkAbsentDeps): Prom
     }
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    const { isProduction, serviceRoleKey } = deps.getEnv();
+    const { serviceRoleKey } = deps.getEnv();
     const admin = deps.createServiceClient();
 
     if (token !== serviceRoleKey) {
@@ -83,19 +84,7 @@ export async function handleMarkAbsent(req: Request, deps: MarkAbsentDeps): Prom
       }
     }
 
-    let effectiveNow: Date;
-    try {
-      const body = (await req.json()) as { devOverrideTime?: string };
-      if (!isProduction && typeof body?.devOverrideTime === 'string' && body.devOverrideTime) {
-        const parsed = new Date(body.devOverrideTime);
-        if (isNaN(parsed.getTime())) throw new Error('Invalid date');
-        effectiveNow = parsed;
-      } else {
-        effectiveNow = new Date();
-      }
-    } catch {
-      effectiveNow = new Date();
-    }
+    const effectiveNow = deps.now?.() ?? new Date();
 
     const today = toDateStr(effectiveNow);
 

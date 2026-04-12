@@ -1,7 +1,6 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TodayStatusCard } from './TodayStatusCard';
-import { setNowFn } from '@/lib/time';
 import type { TodayRecord } from '@/lib/services/attendance.service';
 import { todayRecord24_1, todayRecord24_1a } from '@/lib/services/__fixtures__/todayMultiSession';
 
@@ -26,11 +25,12 @@ function makeToday(weeklyOffDays: number[]): TodayRecord {
 describe('TodayStatusCard overtime confirmation', () => {
   beforeEach(() => {
     // Use fixed dates so off-day calculations are deterministic.
-    setNowFn(() => new Date('2025-06-06T10:00:00')); // Friday
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-06-06T10:00:00')); // Friday
   });
 
   afterEach(() => {
-    setNowFn(() => new Date());
+    vi.useRealTimers();
   });
 
   it('shows confirmation on weekly off-day before submitting check-in', () => {
@@ -58,7 +58,7 @@ describe('TodayStatusCard overtime confirmation', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
 
-    setNowFn(() => new Date('2025-06-09T10:00:00')); // Monday
+    vi.setSystemTime(new Date('2025-06-09T10:00:00')); // Monday
 
     render(
       <TodayStatusCard
@@ -78,7 +78,7 @@ describe('TodayStatusCard overtime confirmation', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
 
-    setNowFn(() => new Date('2025-06-10T10:00:00')); // Tuesday
+    vi.setSystemTime(new Date('2025-06-10T10:00:00')); // Tuesday
 
     render(
       <TodayStatusCard
@@ -95,9 +95,7 @@ describe('TodayStatusCard overtime confirmation', () => {
   });
 
   it('increments worked hours after check-in when check_in_time is ISO datetime', async () => {
-    vi.useFakeTimers();
-    let mockedNow = new Date('2025-06-10T10:05:00');
-    setNowFn(() => mockedNow);
+    vi.setSystemTime(new Date('2025-06-10T10:05:00'));
 
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
@@ -133,13 +131,11 @@ describe('TodayStatusCard overtime confirmation', () => {
 
     expect(screen.getAllByText('05:00').length).toBeGreaterThanOrEqual(1);
 
-    mockedNow = new Date('2025-06-10T10:06:00');
     await act(async () => {
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(60000);
     });
 
     expect(screen.getAllByText('06:00').length).toBeGreaterThanOrEqual(1);
-    vi.useRealTimers();
   });
 
   /**
@@ -147,10 +143,7 @@ describe('TodayStatusCard overtime confirmation', () => {
    * Fails fast until `check_in_time` parsing matches wall-clock vs punch time (currently shows NaN:NaN).
    */
   it('20.2 worked-hours line advances each second when check_in_time is ISO datetime', async () => {
-    vi.useFakeTimers();
-    const punchIso = '2025-06-10T10:00:00.000Z';
-    let mockedNow = new Date('2025-06-10T10:05:00.000Z');
-    setNowFn(() => mockedNow);
+    vi.setSystemTime(new Date('2025-06-10T10:05:00.000Z'));
 
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
@@ -161,7 +154,7 @@ describe('TodayStatusCard overtime confirmation', () => {
         org_id: 'o1',
         user_id: 'u1',
         date: '2025-06-10',
-        check_in_time: punchIso,
+        check_in_time: '2025-06-10T10:00:00.000Z',
         check_out_time: null,
         check_in_lat: null,
         check_in_lng: null,
@@ -191,20 +184,17 @@ describe('TodayStatusCard overtime confirmation', () => {
     const hoursLabel = screen.getByText(/ساعات العمل/);
     expect(hoursLabel.textContent).toMatch(/05:00/);
 
-    mockedNow = new Date('2025-06-10T10:05:01.000Z');
     await act(async () => {
       vi.advanceTimersByTime(1000);
     });
 
     expect(hoursLabel.textContent).toMatch(/05:01/);
-
-    vi.useRealTimers();
   });
 
   it('does not show shift congrats or overtime-only CTA for a mid-shift closed segment', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
-    setNowFn(() => new Date('2025-06-10T13:20:00')); // Tuesday, before shift end
+    vi.setSystemTime(new Date('2025-06-10T13:20:00')); // Tuesday, before shift end
 
     const today: TodayRecord = {
       log: {
@@ -246,7 +236,7 @@ describe('TodayStatusCard overtime confirmation', () => {
   it('allows overtime confirmation after shift end when between sessions', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
-    setNowFn(() => new Date('2025-06-10T18:20:00')); // Tuesday, after shift end
+    vi.setSystemTime(new Date('2025-06-10T18:20:00')); // Tuesday, after shift end
 
     const today: TodayRecord = {
       log: {
@@ -284,7 +274,7 @@ describe('TodayStatusCard overtime confirmation', () => {
   it('keeps an open regular session in regular UI before the overtime minimum is reached', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
-    setNowFn(() => new Date('2025-06-10T18:10:00'));
+    vi.setSystemTime(new Date('2025-06-10T18:10:00'));
 
     const today: TodayRecord = {
       log: {
@@ -343,7 +333,7 @@ describe('TodayStatusCard overtime confirmation', () => {
   it('switches an open regular session to overtime UI once the overtime minimum is reached', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
-    setNowFn(() => new Date('2025-06-10T18:30:00'));
+    vi.setSystemTime(new Date('2025-06-10T18:30:00'));
 
     const today: TodayRecord = {
       log: {
@@ -402,7 +392,7 @@ describe('TodayStatusCard overtime confirmation', () => {
   it('renders checked-in state when latest session is open', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
-    setNowFn(() => new Date('2025-06-10T13:20:00'));
+    vi.setSystemTime(new Date('2025-06-10T13:20:00'));
 
     const today: TodayRecord = {
       log: {
@@ -483,7 +473,7 @@ describe('TodayStatusCard overtime confirmation', () => {
   it('24.1a after second check-in bug-shaped aggregate log still shows checkout button', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
-    setNowFn(() => new Date('2025-06-10T13:20:00'));
+    vi.setSystemTime(new Date('2025-06-10T13:20:00'));
 
     const today = todayRecord24_1a();
 
@@ -508,7 +498,7 @@ describe('TodayStatusCard overtime confirmation', () => {
   it('24.1 open third session with bug-shaped aggregate log still shows checkout button', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
-    setNowFn(() => new Date('2025-06-10T15:00:00'));
+    vi.setSystemTime(new Date('2025-06-10T15:00:00'));
 
     const today = todayRecord24_1();
 

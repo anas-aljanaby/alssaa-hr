@@ -1,7 +1,6 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import * as attendanceService from '@/lib/services/attendance.service';
-import { useDevTime } from './DevTimeContext';
 import * as requestsService from '@/lib/services/requests.service';
 import * as overtimeRequestsService from '@/lib/services/overtime-requests.service';
 import * as notificationsService from '@/lib/services/notifications.service';
@@ -17,7 +16,7 @@ type OvertimeRequest = overtimeRequestsService.OvertimeRequest;
 
 interface AppContextType {
   checkIn: (userId: string) => Promise<CheckInResult>;
-  checkOut: (userId: string, checkoutTime?: string) => Promise<CheckOutResult>;
+  checkOut: (userId: string) => Promise<CheckOutResult>;
   submitRequest: (request: Omit<LeaveRequestInsert, 'id' | 'status' | 'created_at'>) => Promise<LeaveRequest>;
   updateRequestStatus: (requestId: string, status: 'approved' | 'rejected', approverId: string, note: string) => Promise<LeaveRequest>;
   updateOvertimeRequestStatus: (
@@ -33,7 +32,6 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const devTime = useDevTime();
   const { isOffline } = usePwa();
 
   const ensureOnline = () => {
@@ -45,9 +43,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const checkIn = async (userId: string): Promise<CheckInResult> => {
     try {
       ensureOnline();
-      const devIso =
-        import.meta.env.DEV && devTime?.isOverrideActive ? devTime.now().toISOString() : undefined;
-      const result = await attendanceService.checkIn(userId, devIso);
+      const result = await attendanceService.checkIn(userId);
       if (result.overtimeRequest) {
         toast.success('تم تسجيل الحضور — تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة');
       } else {
@@ -61,14 +57,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const checkOut = async (userId: string, checkoutTime?: string): Promise<CheckOutResult> => {
+  const checkOut = async (userId: string): Promise<CheckOutResult> => {
     try {
       ensureOnline();
-      const devIso =
-        import.meta.env.DEV && devTime?.isOverrideActive && checkoutTime == null
-          ? devTime.now().toISOString()
-          : undefined;
-      const result = await attendanceService.checkOut(userId, checkoutTime, devIso);
+      const result = await attendanceService.checkOut(userId);
       if (result.overtimeRequest) {
         toast.success('تم تسجيل الانصراف — تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة');
       } else {

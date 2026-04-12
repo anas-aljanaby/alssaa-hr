@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminDashboard } from './AdminDashboard';
 
 vi.mock('sonner', () => ({
@@ -11,10 +11,6 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/lib/hooks/useRealtimeSubscription', () => ({
   useRealtimeSubscription: vi.fn(),
-}));
-
-vi.mock('@/lib/time', () => ({
-  now: () => new Date('2026-04-04T09:00:00.000Z'),
 }));
 
 vi.mock('@/lib/services/profiles.service', () => ({
@@ -47,6 +43,8 @@ function LocationDisplay() {
 
 describe('AdminDashboard', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-04-04T09:00:00.000Z'));
     vi.clearAllMocks();
 
     vi.mocked(profilesService.listUsers).mockResolvedValue([
@@ -222,6 +220,10 @@ describe('AdminDashboard', () => {
       },
     ] as any);
     vi.mocked(requestsService.getAllPendingRequests).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('navigates to team attendance with the matching live filter when a summary card is clicked', async () => {

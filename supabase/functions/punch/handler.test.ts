@@ -16,7 +16,6 @@ type Session = {
   is_auto_punch_out: boolean;
   is_early_departure: boolean;
   needs_review: boolean;
-  is_dev: boolean;
 };
 
 type Summary = {
@@ -88,7 +87,6 @@ const baseEnv: PunchEnv = {
   supabaseUrl: 'https://x.supabase.co',
   supabaseAnonKey: 'anon',
   serviceRoleKey: 'service',
-  isProduction: false,
 };
 
 function makeDeps(opts?: {
@@ -250,7 +248,6 @@ function makeDeps(opts?: {
               is_auto_punch_out: Boolean(payload?.is_auto_punch_out),
               is_early_departure: Boolean(payload?.is_early_departure),
               needs_review: Boolean(payload?.needs_review),
-              is_dev: Boolean(payload?.is_dev),
             };
             sessions.push(row);
             data = row;
@@ -364,13 +361,17 @@ function makeDeps(opts?: {
 }
 
 async function punch(deps: PunchDeps, action: 'check_in' | 'check_out', iso: string): Promise<Response> {
+  const depsWithClock: PunchDeps = {
+    ...deps,
+    now: () => new Date(iso),
+  };
   return handlePunch(
     new Request('http://x', {
       method: 'POST',
       headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, devOverrideTime: iso }),
+      body: JSON.stringify({ action }),
     }),
-    deps
+    depsWithClock
   );
 }
 
@@ -1185,7 +1186,6 @@ Deno.test('part 5.5 correction applied (new session) recalculates summary fields
       is_auto_punch_out: false,
       is_early_departure: false,
       needs_review: false,
-      is_dev: false,
     })
     .single();
 

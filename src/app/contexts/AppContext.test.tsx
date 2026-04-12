@@ -33,10 +33,6 @@ vi.mock('@/lib/services/notifications.service', () => ({
   markAllAsRead: vi.fn(),
 }));
 
-vi.mock('./DevTimeContext', () => ({
-  useDevTime: () => null,
-}));
-
 vi.mock('./PwaContext', () => ({
   usePwa: () => ({
     isOffline: true,

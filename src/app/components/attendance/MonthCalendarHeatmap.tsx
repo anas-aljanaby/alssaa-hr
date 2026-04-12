@@ -1,7 +1,6 @@
 import { ChevronRight, ChevronLeft, Calendar } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import type { MonthDaySummary } from '@/lib/services/attendance.service';
-import { now } from '@/lib/time';
 import { CALENDAR_LEGEND_STATUSES, getCalendarDotClass, getStatusTheme } from './attendanceStatusTheme';
 
 interface Props {
@@ -23,7 +22,7 @@ const MONTH_NAMES = [
 const DAY_HEADERS = ['أح', 'إث', 'ثل', 'أر', 'خم', 'جم', 'سب'];
 
 export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMonth, onNextMonth, onDayTap }: Props) {
-  const today = now();
+  const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth();
   const todayDate = today.getDate();

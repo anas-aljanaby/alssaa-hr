@@ -29,10 +29,9 @@ const baseEnv: AutoPunchEnv = {
   supabaseUrl: 'https://x.supabase.co',
   supabaseAnonKey: 'anon',
   serviceRoleKey: 'service',
-  isProduction: false,
 };
 
-function makeDeps(queue: QResult[]): AutoPunchDeps {
+function makeDeps(queue: QResult[], nowIso?: string): AutoPunchDeps {
   const admin = createQueuedFromClient(queue);
   return {
     getEnv: () => baseEnv,
@@ -43,17 +42,18 @@ function makeDeps(queue: QResult[]): AutoPunchDeps {
         },
       }) as AutoPunchUserClient,
     createServiceClient: () => admin as unknown as PunchServiceClient,
+    ...(nowIso ? { now: () => new Date(nowIso) } : {}),
   };
 }
 
-function post(body: unknown) {
+function post() {
   return new Request('http://x', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${baseEnv.serviceRoleKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: '{}',
   });
 }
 
@@ -74,8 +74,8 @@ Deno.test('missing Bearer returns 401', async () => {
 
 Deno.test('openLogs query error returns 500 QUERY_FAILED', async () => {
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T17:00:00.000Z' }),
-    makeDeps([{ data: null, error: { message: 'db' } }])
+    post(),
+    makeDeps([{ data: null, error: { message: 'db' } }], '2025-06-04T17:00:00.000Z')
   );
   assertEquals(res.status, 500);
   assertEquals(((await json(res)) as { code: string }).code, 'QUERY_FAILED');
@@ -83,8 +83,8 @@ Deno.test('openLogs query error returns 500 QUERY_FAILED', async () => {
 
 Deno.test('no open logs returns processed 0', async () => {
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T17:00:00.000Z' }),
-    makeDeps([{ data: [], error: null }])
+    post(),
+    makeDeps([{ data: [], error: null }], '2025-06-04T17:00:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number };
@@ -114,8 +114,8 @@ Deno.test('when now past cutoff, updates and inserts notification', async () => 
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T13:10:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T13:10:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number; total: number };
@@ -144,8 +144,8 @@ Deno.test('when now before cutoff, no update', async () => {
     },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T09:00:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T09:00:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number };
@@ -175,8 +175,8 @@ Deno.test('part 6.1 standard auto punch-out after cutoff is processed', async ()
     { data: null, error: null }, // insert notifications
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T15:20:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T15:20:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number; total: number };
@@ -205,8 +205,8 @@ Deno.test('part 6.2 before cutoff buffer auto punch-out is skipped', async () =>
     },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T15:00:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T15:00:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number; total: number };
@@ -217,8 +217,8 @@ Deno.test('part 6.2 before cutoff buffer auto punch-out is skipped', async () =>
 Deno.test('part 6.3 overtime open sessions are not auto-closed', async () => {
   // Query filters is_overtime=false, so overtime-only open sessions are excluded.
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T17:00:00.000Z' }),
-    makeDeps([{ data: [], error: null }])
+    post(),
+    makeDeps([{ data: [], error: null }], '2025-06-04T17:00:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number };
@@ -254,8 +254,8 @@ Deno.test('part 6.4 off-day sessions are skipped', async () => {
     },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-06T17:00:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-06T17:00:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number; total: number };
@@ -294,8 +294,8 @@ Deno.test('part 6.5 multiple open non-overtime sessions are handled consistently
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T15:20:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T15:20:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number; total: number };
@@ -326,8 +326,8 @@ Deno.test('part 6.6 regression guard uses execution time beyond shift end', asyn
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T15:20:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T15:20:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number };
@@ -362,8 +362,8 @@ Deno.test('part 6.1b delayed auto punch-out splits when overtime reaches the min
     { data: null, error: null }, // insert notification
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T15:35:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T15:35:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number; total: number };
@@ -385,8 +385,8 @@ Deno.test('no configured shift does not auto punch out when org policy is missin
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(
-    post({ devOverrideTime: '2025-06-04T17:00:00.000Z' }),
-    makeDeps(q)
+    post(),
+    makeDeps(q, '2025-06-04T17:00:00.000Z')
   );
   assertEquals(res.status, 200);
   const b = (await json(res)) as { processed: number; total: number };

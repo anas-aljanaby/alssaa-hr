@@ -1,5 +1,5 @@
 /**
- * Testable punch handler: check-in / check-out with optional devOverrideTime.
+ * Testable punch handler: check-in / check-out.
  * Geofence / coords are not implemented (N/A for tests).
  */
 
@@ -10,7 +10,6 @@ const DEFAULT_MINIMUM_OVERTIME_MINUTES = 30;
 
 export interface PunchBody {
   action: 'check_in' | 'check_out';
-  devOverrideTime?: string;
 }
 
 /** Shifts a UTC Date to org local time (UTC+3) so date/time components are correct. */
@@ -35,7 +34,6 @@ export type PunchEnv = {
   supabaseUrl: string;
   supabaseAnonKey: string;
   serviceRoleKey: string;
-  isProduction: boolean;
 };
 
 /** Minimal client shapes for DI; production uses createClient from supabase-js. */
@@ -76,6 +74,8 @@ export type PunchDeps = {
   getEnv: () => PunchEnv;
   createUserClient: (authHeader: string) => PunchUserClient;
   createServiceClient: () => PunchServiceClient;
+  /** Injected clock for deterministic tests. */
+  now?: () => Date;
 };
 
 type ProfileRow = {
@@ -99,7 +99,6 @@ type SessionRow = {
   is_auto_punch_out?: boolean;
   is_early_departure?: boolean;
   needs_review?: boolean;
-  is_dev?: boolean;
 };
 
 type DailySummaryRow = {
@@ -431,8 +430,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       );
     }
 
-    const { isProduction } = deps.getEnv();
-
     const clientWithAuth = deps.createUserClient(authHeader);
     const { data: { user: caller } } = await clientWithAuth.auth.getUser();
     if (!caller) {
@@ -451,19 +448,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       );
     }
 
-    let effectiveNow: Date;
-    if (!isProduction && typeof body?.devOverrideTime === 'string' && body.devOverrideTime) {
-      const parsed = new Date(body.devOverrideTime);
-      if (isNaN(parsed.getTime())) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid devOverrideTime', code: 'INVALID_TIME' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      effectiveNow = parsed;
-    } else {
-      effectiveNow = new Date();
-    }
+    const effectiveNow = deps.now?.() ?? new Date();
 
     const today = toDateStr(effectiveNow);
     const time = toTimeStr(effectiveNow);
@@ -518,8 +503,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
       const classification = classifySessionCheckIn(currentSecondsOfDay(effectiveNow), schedule);
 
-      const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
-
       const { data: inserted, error } = await admin
         .from('attendance_sessions')
         .insert({
@@ -531,7 +514,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           is_overtime: classification.isOvertime,
           duration_minutes: 0,
           last_action_at: effectiveNow.toISOString(),
-          is_dev: isDev,
         })
         .select()
         .single();
@@ -577,7 +559,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       );
     }
 
-    const isDev = !isProduction && typeof body?.devOverrideTime === 'string' && !!body.devOverrideTime;
     const checkoutHandling = resolveCheckoutOvertimeHandling({
       hasShift: schedule.hasShift,
       isWorkingDay: schedule.isWorkingDay,
@@ -640,7 +621,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           is_auto_punch_out: false,
           needs_review: false,
           last_action_at: effectiveNow.toISOString(),
-          is_dev: isDev,
         })
         .eq('id', openSession.id)
         .select()
@@ -665,7 +645,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           is_overtime: true,
           duration_minutes: otDuration,
           last_action_at: effectiveNow.toISOString(),
-          is_dev: isDev,
         })
         .select()
         .single();
@@ -721,7 +700,6 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         is_auto_punch_out: false,
         needs_review: false,
         last_action_at: effectiveNow.toISOString(),
-        is_dev: isDev,
       })
       .eq('id', openSession.id)
       .select()

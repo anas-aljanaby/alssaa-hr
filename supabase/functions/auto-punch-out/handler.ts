@@ -60,7 +60,6 @@ export type AutoPunchEnv = {
   supabaseAnonKey: string;
   serviceRoleKey: string;
   cronAuthToken?: string | null;
-  isProduction: boolean;
 };
 
 export type AutoPunchUserClient = {
@@ -71,6 +70,8 @@ export type AutoPunchDeps = {
   getEnv: () => AutoPunchEnv;
   createUserClient: (authHeader: string) => AutoPunchUserClient;
   createServiceClient: () => PunchServiceClient;
+  /** Injected clock for deterministic tests. */
+  now?: () => Date;
 };
 
 export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Promise<Response> {
@@ -95,7 +96,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     }
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    const { isProduction, serviceRoleKey, cronAuthToken } = deps.getEnv();
+    const { serviceRoleKey, cronAuthToken } = deps.getEnv();
     const admin = deps.createServiceClient();
     const systemAuthToken = cronAuthToken?.trim() || serviceRoleKey;
     const isServiceRoleJwt = parseJwtRole(token) === 'service_role';
@@ -126,19 +127,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       }
     }
 
-    let effectiveNow: Date;
-    try {
-      const body = (await req.json()) as { devOverrideTime?: string };
-      if (!isProduction && typeof body?.devOverrideTime === 'string' && body.devOverrideTime) {
-        const parsed = new Date(body.devOverrideTime);
-        if (isNaN(parsed.getTime())) throw new Error('Invalid date');
-        effectiveNow = parsed;
-      } else {
-        effectiveNow = new Date();
-      }
-    } catch {
-      effectiveNow = new Date();
-    }
+    const effectiveNow = deps.now?.() ?? new Date();
 
     const today = toDateStr(effectiveNow);
     const localNow = toOrgLocalDate(effectiveNow);

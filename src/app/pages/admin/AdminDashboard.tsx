@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
 import { StatCard } from '../../components/shared/StatCard';
-import { now } from '@/lib/time';
 import { UnavailableState } from '../../components/shared/UnavailableState';
 import { isOfflineError } from '@/lib/network';
 import {
@@ -95,7 +94,7 @@ export function AdminDashboard() {
 
   const handleAttendanceEvent = useCallback(
     (event: attendanceService.AttendanceChangeEvent) => {
-      const today = dateStr(now());
+      const today = dateStr(new Date());
       if (event.new.date !== today) return;
       void loadData();
     },
@@ -126,7 +125,7 @@ export function AdminDashboard() {
   async function loadData() {
     try {
       setLoading(true);
-      const today = dateStr(now());
+      const today = dateStr(new Date());
       const [profs, depts, rows, pendingReqs] = await Promise.all([
         profilesService.listUsers(),
         departmentsService.listDepartments(),
@@ -140,7 +139,7 @@ export function AdminDashboard() {
       setPendingRequests(pendingReqs);
 
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-      const base = now();
+      const base = new Date();
       const weekDays = Array.from({ length: 5 }, (_, idx) => {
         const i = 4 - idx;
         const d = new Date(base);
@@ -178,7 +177,7 @@ export function AdminDashboard() {
     (key: TeamAttendanceChipKey) => {
       const params = new URLSearchParams({
         mode: summaryMode,
-        date: dateStr(now()),
+        date: dateStr(new Date()),
         filter: key,
       });
 
@@ -188,7 +187,7 @@ export function AdminDashboard() {
   );
 
   const eligibleTodayRows = useMemo(() => {
-    const today = dateStr(now());
+    const today = dateStr(new Date());
     const activeEmployees = allNonAdmin.filter((e) => hasJoinedBy(today, e.join_date));
     const activeUserIds = new Set(activeEmployees.map((employee) => employee.id));
 
@@ -244,7 +243,7 @@ export function AdminDashboard() {
   );
 
   const deptChartData = useMemo(() => {
-    const today = dateStr(now());
+    const today = dateStr(new Date());
     return departments.map((dept) => {
       const eligibleRows = todayRows
         .filter((row) => row.departmentId === dept.id && row.role !== 'admin')

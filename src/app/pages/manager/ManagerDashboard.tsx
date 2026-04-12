@@ -17,7 +17,6 @@ import {
   AttendanceCharts,
 } from '../../components/dashboard';
 import { todayStr } from '@/lib/services/attendance.service';
-import { now } from '@/lib/time';
 import {
   Users,
   CheckCircle2,
@@ -149,7 +148,7 @@ export function ManagerDashboard() {
         return;
       }
       const today = todayStr();
-      const base = now();
+      const base = new Date();
       const [dept, emps, logs, reqs] = await Promise.all([
         departmentsService.getDepartmentById(departmentId),
         profilesService.getDepartmentEmployees(departmentId),

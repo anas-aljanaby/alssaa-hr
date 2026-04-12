@@ -19,7 +19,6 @@ import type {
   SafeAvailabilityRow,
   TeamAttendanceDayRow,
 } from '@/lib/services/attendance.service';
-import { now } from '@/lib/time';
 import {
   TEAM_ATTENDANCE_DATE_CHIPS,
   TEAM_ATTENDANCE_LIVE_CHIPS,
@@ -688,7 +687,7 @@ function DepartmentAttendanceSection({
 export function TeamAttendancePage() {
   const { currentUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = useMemo(() => now(), []);
+  const today = useMemo(() => new Date(), []);
   const todayDate = toDateInputValue(today);
   const yesterdayDate = shiftDays(today, -1);
   const initialMode = parseTeamAttendanceMode(searchParams.get('mode'));

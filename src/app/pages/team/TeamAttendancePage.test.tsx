@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TeamAttendancePage } from './TeamAttendancePage';
 
 let mockUser: { uid: string; role: 'employee' | 'manager' | 'admin'; departmentId?: string } | null = {
@@ -267,10 +267,6 @@ vi.mock('@/app/contexts/AuthContext', () => ({
   useAuth: () => ({ currentUser: mockUser }),
 }));
 
-vi.mock('@/lib/time', () => ({
-  now: () => new Date('2026-04-06T09:00:00.000Z'),
-}));
-
 vi.mock('@/app/components/attendance/DayDetailsSheet', () => ({
   DayDetailsSheet: ({
     userId,
@@ -314,6 +310,8 @@ function filterByDepartment<T extends { departmentId: string | null }>(
 
 describe('TeamAttendancePage', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-04-06T09:00:00.000Z'));
     vi.clearAllMocks();
     vi.mocked(departmentsService.listDepartments).mockResolvedValue([
       {
@@ -346,6 +344,10 @@ describe('TeamAttendancePage', () => {
     vi.mocked(attendanceService.getTeamAttendanceDay).mockImplementation(
       async ({ departmentId }) => filterByDepartment(detailedRows, departmentId)
     );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('defaults employees to a live grouped board with generic visibility only', async () => {

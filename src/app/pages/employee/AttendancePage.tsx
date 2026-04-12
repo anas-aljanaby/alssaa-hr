@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { useDevTime } from '../../contexts/DevTimeContext';
 import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import * as attendanceService from '@/lib/services/attendance.service';
 import type {
   AttendanceHistoryDay,
   MonthDaySummary,
 } from '@/lib/services/attendance.service';
-import { now } from '@/lib/time';
 import { AttendanceHistoryList } from '../../components/attendance/AttendanceHistoryList';
 import { MonthCalendarHeatmap } from '../../components/attendance/MonthCalendarHeatmap';
 import { getStatusConfig } from '@/shared/attendance';
@@ -77,11 +75,10 @@ function formatSelectedDateLabel(date: string): string {
 
 export function AttendancePage() {
   const { currentUser } = useAuth();
-  const devTime = useDevTime();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const parsedMonth = parseMonthParam(searchParams.get('month'));
-  const initialMonth = parsedMonth ?? { year: now().getFullYear(), month: now().getMonth() };
+  const initialMonth = parsedMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() };
   const initialStatus = mapUrlStatusToFilter(searchParams.get('status'));
 
   const [selectedMonth, setSelectedMonth] = useState(initialMonth.month);
@@ -126,12 +123,6 @@ export function AttendancePage() {
   }, [currentUser, loadMonthData]);
 
   useEffect(() => {
-    if (devTime?.override?.date && currentUser) {
-      void loadMonthData();
-    }
-  }, [currentUser, devTime?.override?.date, loadMonthData]);
-
-  useEffect(() => {
     const monthFromUrl = parseMonthParam(searchParams.get('month'));
     const statusFromUrl = mapUrlStatusToFilter(searchParams.get('status'));
     if (monthFromUrl) {
@@ -169,7 +160,7 @@ export function AttendancePage() {
   };
 
   const nextMonth = () => {
-    const currentNow = now();
+    const currentNow = new Date();
     const isAtCurrentMonth =
       selectedYear === currentNow.getFullYear() && selectedMonth === currentNow.getMonth();
     if (isAtCurrentMonth) return;

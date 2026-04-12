@@ -13,7 +13,6 @@ import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
 import type { Department } from '@/lib/services/departments.service';
 import { DashboardSkeleton } from '../../components/skeletons';
-import { now } from '@/lib/time';
 import {
   Clock,
   CalendarDays,
@@ -94,7 +93,7 @@ export function EmployeeDashboard() {
     if (!currentUser) return;
     try {
       setLoading(true);
-      const n = now();
+      const n = new Date();
       // Read-through cache for the critical employee read-only data. Each
       // key is scoped per user so multiple accounts on the same device do
       // not leak into each other.
@@ -153,10 +152,10 @@ export function EmployeeDashboard() {
 
   const pendingRequests = userRequests.filter((r) => r.status === 'pending');
   const upcomingLeaves = userRequests.filter(
-    (r) => r.status === 'approved' && new Date(r.from_date_time) > now()
+    (r) => r.status === 'approved' && new Date(r.from_date_time) > new Date()
   );
 
-  const current = now();
+  const current = new Date();
   const greeting = current.getHours() < 12 ? 'صباح الخير' : 'مساء الخير';
   const monthParam = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
   const openAttendanceWithStatus = (status: 'present' | 'late' | 'absent' | 'on_leave') => {

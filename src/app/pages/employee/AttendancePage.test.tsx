@@ -4,16 +4,11 @@ import { MemoryRouter } from 'react-router';
 import { AttendancePage } from './AttendancePage';
 
 const mockUseAuth = vi.hoisted(() => vi.fn());
-const mockUseDevTime = vi.hoisted(() => vi.fn());
 const mockGetAttendanceMonthly = vi.hoisted(() => vi.fn());
 const mockGetAttendanceHistoryMonth = vi.hoisted(() => vi.fn());
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
-}));
-
-vi.mock('../../contexts/DevTimeContext', () => ({
-  useDevTime: () => mockUseDevTime(),
 }));
 
 vi.mock('sonner', () => ({
@@ -46,7 +41,6 @@ vi.mock('../../components/attendance/MonthCalendarHeatmap', () => ({
 describe('AttendancePage', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ currentUser: { uid: 'u1' } });
-    mockUseDevTime.mockReturnValue({ override: null });
     mockGetAttendanceMonthly.mockResolvedValue([
       { date: '2026-03-01', status: 'present', totalMinutesWorked: 480 },
       { date: '2026-03-03', status: 'absent', totalMinutesWorked: 0 },

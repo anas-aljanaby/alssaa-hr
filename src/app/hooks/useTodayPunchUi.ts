@@ -4,8 +4,6 @@ import {
   type TodayPunchUiState,
   type TodayRecord,
 } from '@/lib/services/attendance.service';
-import { now } from '@/lib/time';
-
 /** Keeps punch CTA/badge state in sync with wall clock when a shift exists (matches TodayStatusCard tick). */
 export function useTodayPunchUi(today: TodayRecord): TodayPunchUiState {
   const [, setTick] = useState(0);
@@ -15,5 +13,5 @@ export function useTodayPunchUi(today: TodayRecord): TodayPunchUiState {
     return () => clearInterval(id);
   }, [today.shift]);
 
-  return getTodayPunchUiState(today, now());
+  return getTodayPunchUiState(today, new Date());
 }

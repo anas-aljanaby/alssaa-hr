@@ -12,7 +12,6 @@ import type { Department } from '@/lib/services/departments.service';
 import type { AttendanceLog } from '@/lib/services/attendance.service';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { ReportsSkeleton } from '../../components/skeletons';
-import { now } from '@/lib/time';
 import {
   Download,
   FileSpreadsheet,
@@ -60,14 +59,14 @@ function downloadExcel(monthlyReport: MonthlyReportRow[], deptReport: DeptReport
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'تقرير الموظفين');
   XLSX.utils.book_append_sheet(wb, ws2, 'نسبة الأقسام');
-  const n = now();
+  const n = new Date();
   const name = `تقرير_${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}.xlsx`;
   XLSX.writeFile(wb, name);
 }
 
 function downloadPdf(monthlyReport: MonthlyReportRow[], deptReport: DeptReportRow[]) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const n = now();
+  const n = new Date();
   const title = `تقرير شهري - ${n.getFullYear()}/${String(n.getMonth() + 1).padStart(2, '0')}`;
   doc.setFontSize(14);
   doc.text(title, 14, 16);
@@ -118,7 +117,7 @@ export function ReportsPage() {
     if (!currentUser) return;
     try {
       setLoading(true);
-      const n = now();
+      const n = new Date();
 
       if (isAdmin) {
         const [profs, depts] = await Promise.all([
