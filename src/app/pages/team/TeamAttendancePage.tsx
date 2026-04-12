@@ -993,20 +993,22 @@ export function TeamAttendancePage() {
     return formatSelectedDateLabel(selectedDate);
   }, [lastUpdatedAt, mode, selectedDate]);
 
+  const topBarAction = useMemo(() => (
+    <button
+      type="button"
+      onClick={handleRefresh}
+      aria-label="تحديث البيانات"
+      title="تحديث"
+      className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition-colors hover:bg-gray-50 active:bg-gray-100"
+    >
+      <RefreshCw className="h-4 w-4" />
+    </button>
+  ), [handleRefresh]);
+
   useAppTopBar({
     title: 'حضور الفريق',
     meta: topBarMeta,
-    action: (
-      <button
-        type="button"
-        onClick={handleRefresh}
-        aria-label="تحديث البيانات"
-        title="تحديث"
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition-colors hover:bg-gray-50 active:bg-gray-100"
-      >
-        <RefreshCw className="h-4 w-4" />
-      </button>
-    ),
+    action: topBarAction,
   });
 
   if (!currentUser) return null;
