@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/contexts/AuthContext';
@@ -132,6 +132,19 @@ function isValidDateParam(raw: string): boolean {
 function normalizeTeamAttendanceDate(raw: string | null, todayDate: string): string {
   if (!raw || !isValidDateParam(raw) || raw > todayDate) {
     return todayDate;
+  }
+
+  return raw;
+}
+
+/** Past dates only: used in «سجل» (history) mode; «اليوم» tab is for the current day. */
+function normalizeHistoryDate(
+  raw: string | null,
+  todayDate: string,
+  yesterdayDate: string
+): string {
+  if (!raw || !isValidDateParam(raw) || raw >= todayDate) {
+    return yesterdayDate;
   }
 
   return raw;
@@ -607,31 +620,19 @@ function EmployeeAttendanceRow({
 function DepartmentAttendanceSection({
   section,
   boardMode,
-  isTodayInDateMode,
   expanded,
   onToggle,
   onOpenDetails,
 }: {
   section: BoardSection;
   boardMode: TeamAttendanceMode;
-  isTodayInDateMode: boolean;
   expanded: boolean;
   onToggle: () => void;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
   const colorTokens = getDepartmentColorTokens(section.color);
-  const presentHeading =
-    boardMode === 'live'
-      ? 'موجودون الآن'
-      : isTodayInDateMode
-        ? 'حضروا اليوم'
-        : 'حضروا في هذا اليوم';
-  const notPresentHeading =
-    boardMode === 'live'
-      ? 'غير موجودون الآن'
-      : isTodayInDateMode
-        ? 'غير حاضرين اليوم'
-        : 'غير حاضرين في هذا اليوم';
+  const presentHeading = boardMode === 'live' ? 'موجودون الآن' : 'حضروا في هذا اليوم';
+  const notPresentHeading = boardMode === 'live' ? 'غير موجودون الآن' : 'غير حاضرين في هذا اليوم';
 
   return (
     <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -691,8 +692,18 @@ export function TeamAttendancePage() {
   const todayDate = toDateInputValue(today);
   const yesterdayDate = shiftDays(today, -1);
   const initialMode = parseTeamAttendanceMode(searchParams.get('mode'));
-  const initialSelectedDate = normalizeTeamAttendanceDate(searchParams.get('date'), todayDate);
+  const initialSelectedDate =
+    initialMode === 'date'
+      ? normalizeHistoryDate(searchParams.get('date'), todayDate, yesterdayDate)
+      : normalizeTeamAttendanceDate(searchParams.get('date'), todayDate);
   const initialStatusFilter = parseStatusFilterParam(searchParams.get('filter'));
+  const preservedHistoryDateRef = useRef(
+    initialMode === 'date'
+      ? initialSelectedDate
+      : initialSelectedDate !== todayDate
+        ? initialSelectedDate
+        : yesterdayDate
+  );
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [managerDepartmentId, setManagerDepartmentId] = useState<string | null>(null);
@@ -714,7 +725,10 @@ export function TeamAttendancePage() {
 
   useEffect(() => {
     const nextMode = parseTeamAttendanceMode(searchParams.get('mode'));
-    const nextSelectedDate = normalizeTeamAttendanceDate(searchParams.get('date'), todayDate);
+    const nextSelectedDate =
+      nextMode === 'date'
+        ? normalizeHistoryDate(searchParams.get('date'), todayDate, yesterdayDate)
+        : normalizeTeamAttendanceDate(searchParams.get('date'), todayDate);
     const nextStatusFilter = parseStatusFilterParam(searchParams.get('filter'));
 
     setMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
@@ -724,7 +738,13 @@ export function TeamAttendancePage() {
     setStatusFilter((currentFilter) =>
       currentFilter === nextStatusFilter ? currentFilter : nextStatusFilter
     );
-  }, [searchParams, todayDate]);
+  }, [searchParams, todayDate, yesterdayDate]);
+
+  useEffect(() => {
+    if (mode === 'date') {
+      preservedHistoryDateRef.current = selectedDate;
+    }
+  }, [mode, selectedDate]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -769,7 +789,6 @@ export function TeamAttendancePage() {
 
   const selectedDepartmentDbId =
     selectedDepartmentId === ALL_DEPARTMENTS ? null : selectedDepartmentId;
-  const isTodayInDateMode = selectedDate === todayDate;
   const activeRole = (currentUser?.role ?? 'employee') as UserRole;
 
   const loadBoard = useCallback(
@@ -928,9 +947,10 @@ export function TeamAttendancePage() {
     const currentDate = searchParams.get('date');
     const currentFilter = searchParams.get('filter');
 
+    const effectiveDate = mode === 'live' ? todayDate : selectedDate;
     if (
       currentMode === mode &&
-      currentDate === selectedDate &&
+      currentDate === effectiveDate &&
       currentFilter === statusFilter
     ) {
       return;
@@ -938,10 +958,10 @@ export function TeamAttendancePage() {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('mode', mode);
-    nextParams.set('date', selectedDate);
+    nextParams.set('date', effectiveDate);
     nextParams.set('filter', statusFilter);
     setSearchParams(nextParams, { replace: true });
-  }, [mode, searchParams, selectedDate, setSearchParams, statusFilter]);
+  }, [mode, searchParams, selectedDate, setSearchParams, statusFilter, todayDate]);
 
   const filteredRows = useMemo(() => {
     const activeChip = activeChips.find((chip) => chip.key === statusFilter);
@@ -978,9 +998,10 @@ export function TeamAttendancePage() {
     setSelectedDepartmentId(ALL_DEPARTMENTS);
     setStatusFilter('all');
     if (mode === 'date') {
-      setSelectedDate(todayDate);
+      setSelectedDate(yesterdayDate);
+      preservedHistoryDateRef.current = yesterdayDate;
     }
-  }, [mode, todayDate]);
+  }, [mode, yesterdayDate]);
 
   const hasNoDepartmentData = !loading && !errorMessage && departments.length === 0 && boardRows.length === 0;
   const showFilterEmptyState = !loading && !errorMessage && boardRows.length > 0 && filteredRows.length === 0;
@@ -1053,23 +1074,32 @@ export function TeamAttendancePage() {
             <div className="grid min-w-0 grid-cols-2 rounded-2xl bg-slate-50 p-1 ring-1 ring-gray-200">
               <button
                 type="button"
-                onClick={() => setMode('live')}
+                onClick={() => {
+                  if (mode === 'date') {
+                    preservedHistoryDateRef.current = selectedDate;
+                  }
+                  setMode('live');
+                  setSelectedDate(todayDate);
+                }}
                 className={cn(
                   'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
                   mode === 'live' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-blue-50'
                 )}
               >
-                الآن
+                اليوم
               </button>
               <button
                 type="button"
-                onClick={() => setMode('date')}
+                onClick={() => {
+                  setMode('date');
+                  setSelectedDate(preservedHistoryDateRef.current);
+                }}
                 className={cn(
                   'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
                   mode === 'date' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-blue-50'
                 )}
               >
-                اليوم/التاريخ
+                سجل
               </button>
             </div>
 
@@ -1080,18 +1110,6 @@ export function TeamAttendancePage() {
               className="mt-2 max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-2"
             >
               <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectedDate(todayDate)}
-                  className={cn(
-                    'shrink-0 rounded-full border px-3 py-2 text-xs transition-colors',
-                    selectedDate === todayDate
-                      ? 'border-blue-600 bg-blue-600 text-white'
-                      : 'border-blue-100 bg-blue-50 text-blue-700'
-                  )}
-                >
-                  اليوم
-                </button>
                 <button
                   type="button"
                   onClick={() => setSelectedDate(yesterdayDate)}
@@ -1109,9 +1127,10 @@ export function TeamAttendancePage() {
                   <input
                     type="date"
                     value={selectedDate}
-                    max={todayDate}
+                    max={yesterdayDate}
                     onChange={(event) => setSelectedDate(event.target.value)}
                     dir="ltr"
+                    title="لا يتضمن يوم اليوم — استخدم «اليوم» أعلاه"
                     className="block h-10 w-full rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
                   />
                 </div>
@@ -1170,7 +1189,6 @@ export function TeamAttendancePage() {
                 key={section.id}
                 section={section}
                 boardMode={mode}
-                isTodayInDateMode={isTodayInDateMode}
                 expanded={isExpanded}
                 onToggle={
                   forceExpanded
