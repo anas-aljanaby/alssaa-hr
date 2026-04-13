@@ -1,7 +1,7 @@
 /**
  * Module purpose:
- * Bridges legacy attendance status sources into the shared display system so
- * older services and UI surfaces can migrate without duplicating mappings.
+ * Bridges shared attendance statuses into the visual theme helpers used by a
+ * few legacy surfaces while keeping overtime as a separate modifier.
  */
 
 import type { CSSProperties } from 'react';
@@ -11,13 +11,11 @@ import type { DisplayStatus } from './types';
 export type HistoricalAttendanceStatus = 'present' | 'late' | 'absent' | 'on_leave';
 export type CalendarStatusLike =
   | HistoricalAttendanceStatus
-  | 'overtime_only'
-  | 'overtime_offday'
   | 'weekend'
   | 'future'
   | null;
 export type SessionStatusLike = 'present' | 'late';
-export type VisualStatus = DisplayStatus | 'overtime_only' | 'overtime_offday';
+export type VisualStatus = DisplayStatus;
 
 export interface StatusVisualTheme {
   label: string;
@@ -104,21 +102,20 @@ export function getDisplayStatusForCalendarStatus(
       return 'weekend';
     case 'future':
     case null:
-    case 'overtime_only':
-    case 'overtime_offday':
     default:
       return null;
   }
 }
 
-export function isOvertimeCalendarStatus(status: CalendarStatusLike): boolean {
-  return status === 'overtime_only' || status === 'overtime_offday';
+export function isOvertimeCalendarStatus(hasOvertime: boolean): boolean {
+  return hasOvertime;
 }
 
 export function getVisualTheme(
-  status: VisualStatus
+  status: VisualStatus,
+  hasOvertime = false
 ): StatusVisualTheme {
-  if (status === 'overtime_only' || status === 'overtime_offday') {
+  if (hasOvertime) {
     return OVERTIME_VISUAL_THEME;
   }
 
@@ -126,9 +123,10 @@ export function getVisualTheme(
 }
 
 export function getCalendarVisualTheme(
-  status: CalendarStatusLike
+  status: CalendarStatusLike,
+  hasOvertime = false
 ): StatusVisualTheme | null {
-  if (isOvertimeCalendarStatus(status)) {
+  if (hasOvertime) {
     return OVERTIME_VISUAL_THEME;
   }
 
@@ -152,5 +150,4 @@ export const CALENDAR_LEGEND_VISUALS: VisualStatus[] = [
   'late',
   'absent_day',
   'on_leave_day',
-  'overtime_only',
 ];

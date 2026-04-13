@@ -20,6 +20,7 @@ const liveAvailabilityRows = [
     avatarUrl: null,
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
+    availabilityState: 'available_now' as const,
     teamLiveState: 'available_now' as const,
     hasOvertime: false,
   },
@@ -31,6 +32,7 @@ const liveAvailabilityRows = [
     avatarUrl: null,
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
+    availabilityState: 'unavailable_now' as const,
     teamLiveState: 'absent' as const,
     hasOvertime: false,
   },
@@ -42,6 +44,7 @@ const liveAvailabilityRows = [
     avatarUrl: null,
     departmentId: 'dept-editing',
     departmentNameAr: 'التحرير',
+    availabilityState: 'available_now' as const,
     teamLiveState: 'available_now' as const,
     hasOvertime: false,
   },
@@ -109,7 +112,7 @@ const detailedRows = [
     isCheckedInNow: true,
     hasAutoPunchOut: false,
     needsReview: false,
-    isShortDay: false,
+    isIncompleteShift: false,
   },
   {
     userId: 'producer-1',
@@ -120,8 +123,8 @@ const detailedRows = [
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
     date: '2026-04-06',
-    effectiveStatus: 'overtime_only' as const,
-    displayStatus: 'overtime_only' as const,
+    effectiveStatus: 'absent' as const,
+    displayStatus: 'absent' as const,
     teamLiveState: 'neutral' as const,
     teamDateState: 'absent' as const,
     firstCheckIn: '18:00',
@@ -133,7 +136,7 @@ const detailedRows = [
     isCheckedInNow: false,
     hasAutoPunchOut: false,
     needsReview: false,
-    isShortDay: false,
+    isIncompleteShift: false,
   },
   {
     userId: 'designer-1',
@@ -157,7 +160,7 @@ const detailedRows = [
     isCheckedInNow: false,
     hasAutoPunchOut: false,
     needsReview: false,
-    isShortDay: false,
+    isIncompleteShift: false,
   },
   {
     userId: 'vacation-1',
@@ -181,7 +184,7 @@ const detailedRows = [
     isCheckedInNow: false,
     hasAutoPunchOut: false,
     needsReview: false,
-    isShortDay: false,
+    isIncompleteShift: false,
   },
   {
     userId: 'pending-1',
@@ -205,7 +208,7 @@ const detailedRows = [
     isCheckedInNow: false,
     hasAutoPunchOut: false,
     needsReview: false,
-    isShortDay: false,
+    isIncompleteShift: false,
   },
   {
     userId: 'incomplete-1',
@@ -229,7 +232,7 @@ const detailedRows = [
     isCheckedInNow: false,
     hasAutoPunchOut: false,
     needsReview: false,
-    isShortDay: true,
+    isIncompleteShift: true,
   },
   {
     userId: 'absent-1',
@@ -253,7 +256,7 @@ const detailedRows = [
     isCheckedInNow: false,
     hasAutoPunchOut: false,
     needsReview: false,
-    isShortDay: false,
+    isIncompleteShift: false,
   },
 ];
 

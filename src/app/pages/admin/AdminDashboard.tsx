@@ -58,13 +58,10 @@ function mapTeamRowLivePresence(row: TeamAttendanceDayRow): LivePresence {
 
 function resolveTeamRowDisplayStatus(row: TeamAttendanceDayRow, liveMode: boolean): DisplayStatus {
   return resolveAttendanceDisplayStatus(
-    {
-      ...resolveAttendanceDayState(row.displayStatus),
-      hasOvertime: row.hasOvertime,
-    },
+    resolveAttendanceDayState(row.effectiveStatus, row.hasOvertime),
     liveMode ? mapTeamRowLivePresence(row) : null,
     {
-      isWithinShiftWindow: row.displayStatus == null,
+      isWithinShiftWindow: liveMode && row.isCheckedInNow,
     }
   );
 }

@@ -144,7 +144,7 @@ describe('AdminDashboard', () => {
         isCheckedInNow: true,
         hasAutoPunchOut: false,
         needsReview: false,
-        isShortDay: false,
+        isIncompleteShift: false,
       },
       {
         userId: 'emp-2',
@@ -168,7 +168,7 @@ describe('AdminDashboard', () => {
         isCheckedInNow: true,
         hasAutoPunchOut: false,
         needsReview: false,
-        isShortDay: false,
+        isIncompleteShift: false,
       },
       {
         userId: 'emp-3',
@@ -192,7 +192,7 @@ describe('AdminDashboard', () => {
         isCheckedInNow: false,
         hasAutoPunchOut: false,
         needsReview: false,
-        isShortDay: false,
+        isIncompleteShift: false,
       },
       {
         userId: 'emp-4',
@@ -216,7 +216,7 @@ describe('AdminDashboard', () => {
         isCheckedInNow: false,
         hasAutoPunchOut: false,
         needsReview: false,
-        isShortDay: true,
+        isIncompleteShift: true,
       },
     ] as any);
     vi.mocked(requestsService.getAllPendingRequests).mockResolvedValue([]);

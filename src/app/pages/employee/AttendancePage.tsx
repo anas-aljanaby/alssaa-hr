@@ -46,7 +46,7 @@ function parseMonthParam(raw: string | null): { year: number; month: number } | 
 function mapUrlStatusToFilter(raw: string | null): StatusFilter {
   if (!raw) return null;
   if (raw === 'present') return 'fulfilled_shift';
-  if (raw === 'overtime' || raw === 'overtime_only' || raw === 'overtime_offday') return 'overtime';
+  if (raw === 'overtime') return 'overtime';
   if (
     raw === 'fulfilled_shift' ||
     raw === 'incomplete_shift' ||

@@ -46,6 +46,13 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     matchesRow: (row) => row.primaryState === 'late',
   },
   {
+    key: 'on_break',
+    label: 'في استراحة',
+    themeStatus: 'on_break',
+    visibleToRoles: MANAGEMENT_ROLES,
+    matchesRow: (row) => row.primaryState === 'on_break',
+  },
+  {
     key: 'not_entered_yet',
     label: 'لم يسجلوا بعد',
     themeStatus: 'not_entered_yet',
@@ -202,6 +209,7 @@ export function isTeamAttendanceChipKey(value: string): value is TeamAttendanceC
     'fulfilled_shift',
     'incomplete_shift',
     'late',
+    'on_break',
     'not_entered_yet',
     'absent',
     'on_leave',

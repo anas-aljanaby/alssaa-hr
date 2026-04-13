@@ -35,7 +35,10 @@ export function createQueuedFromClient(queue: QResult[]) {
       Promise.resolve(dq()).then(onF, onR);
     return b as PromiseLike<QResult> & Record<string, () => unknown>;
   }
-  return { from: (_table: string) => mkBuilder() };
+  return {
+    from: (_table: string) => mkBuilder(),
+    rpc: async (_fn: string, _args?: Record<string, unknown>) => dq(),
+  };
 }
 
 export function json(res: Response): Promise<unknown> {

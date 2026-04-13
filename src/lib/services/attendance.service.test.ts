@@ -20,6 +20,41 @@ const logRow = {
   auto_punch_out: false,
 };
 
+const sessionRow = {
+  id: 'sess1',
+  org_id: 'o1',
+  user_id: 'u1',
+  date: '2025-06-11',
+  check_in_time: '08:00',
+  check_out_time: null as string | null,
+  status: 'present' as const,
+  is_overtime: false,
+  is_auto_punch_out: false,
+  is_early_departure: false,
+  needs_review: false,
+  duration_minutes: 0,
+  last_action_at: '2025-06-11T08:00:00Z',
+  is_dev: false,
+  created_at: '2025-06-11T08:00:00Z',
+  updated_at: '2025-06-11T08:00:00Z',
+};
+
+const summaryRow = {
+  id: 'sum1',
+  org_id: 'o1',
+  user_id: 'u1',
+  date: '2025-06-11',
+  first_check_in: '08:00' as string | null,
+  last_check_out: null as string | null,
+  total_work_minutes: 0,
+  total_overtime_minutes: 0,
+  effective_status: 'present' as const,
+  has_overtime: false,
+  is_incomplete_shift: false,
+  session_count: 1,
+  updated_at: '2025-06-11T08:00:00Z',
+};
+
 const profileShift = {
   id: 'u1',
   org_id: 'o1',
@@ -290,7 +325,7 @@ describe('attendance.service', () => {
           is_checked_in_now: true,
           has_auto_punch_out: false,
           needs_review: false,
-          is_short_day: false,
+          is_incomplete_shift: false,
         },
       ],
       error: null,
@@ -330,8 +365,8 @@ describe('attendance.service', () => {
           department_id: 'd1',
           department_name_ar: 'الأخبار',
           date: '2025-06-11',
-          effective_status: 'overtime_only',
-          display_status: 'overtime_only',
+          effective_status: 'absent',
+          display_status: 'absent',
           team_live_state: 'neutral',
           team_date_state: 'absent',
           first_check_in: '18:00',
@@ -343,7 +378,7 @@ describe('attendance.service', () => {
           is_checked_in_now: false,
           has_auto_punch_out: false,
           needs_review: false,
-          is_short_day: false,
+          is_incomplete_shift: false,
         },
       ],
       error: null,
@@ -355,7 +390,7 @@ describe('attendance.service', () => {
     expect(rows).toEqual([
       expect.objectContaining({
         userId: 'u2',
-        displayStatus: 'overtime_only',
+        displayStatus: 'absent',
         teamLiveState: 'neutral',
         teamDateState: 'absent',
         totalOvertimeMinutes: 120,
@@ -365,13 +400,13 @@ describe('attendance.service', () => {
   });
 
   it('getAttendanceToday combines log and shift', async () => {
-    sb.queueResult({ data: logRow, error: null });
+    sb.queueResult({ data: [sessionRow], error: null });
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: policyRow, error: null });
-    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: summaryRow, error: null });
     const { getAttendanceToday } = await import('./attendance.service');
     const rec = await getAttendanceToday('u1');
-    expect(rec.log?.id).toBe('log1');
+    expect(rec.log?.id).toBe('sum1');
     expect(rec.shift?.workStartTime).toBe('08:00');
     expect(rec.shift?.minimumRequiredMinutes).toBeNull();
     expect(rec.punches.length).toBeGreaterThan(0);
@@ -384,10 +419,10 @@ describe('attendance.service', () => {
   });
 
   it('getAttendanceDay loads log for date', async () => {
-    // Promise.all evaluates getEffectiveShiftForUser() second arg before the first thenable is consumed,
-    // so the profiles query runs first, then attendance_logs, then policy.
+    // Promise.all kicks off the shift lookup alongside sessions and summary reads.
     sb.queueResult({ data: profileShift, error: null });
-    sb.queueResult({ data: logRow, error: null });
+    sb.queueResult({ data: [sessionRow], error: null });
+    sb.queueResult({ data: summaryRow, error: null });
     sb.queueResult({ data: policyRow, error: null });
     const { getAttendanceDay } = await import('./attendance.service');
     const day = await getAttendanceDay('u1', '2025-06-11');
@@ -396,7 +431,7 @@ describe('attendance.service', () => {
 
   it('getMonthlyLogs returns rows', async () => {
     sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
-    sb.queueResult({ data: [logRow], error: null });
+    sb.queueResult({ data: [summaryRow], error: null });
     const { getMonthlyLogs } = await import('./attendance.service');
     const logs = await getMonthlyLogs('u1', 2025, 5);
     expect(logs).toHaveLength(1);
@@ -406,8 +441,18 @@ describe('attendance.service', () => {
     sb.queueResult({ data: { join_date: '2025-06-10' }, error: null });
     sb.queueResult({
       data: [
-        { ...logRow, id: 'old', date: '2025-06-08', status: 'absent' as const },
-        { ...logRow, id: 'new', date: '2025-06-11', status: 'present' as const },
+        {
+          ...summaryRow,
+          id: 'old',
+          date: '2025-06-08',
+          effective_status: 'absent' as const,
+        },
+        {
+          ...summaryRow,
+          id: 'new',
+          date: '2025-06-11',
+          effective_status: 'present' as const,
+        },
       ],
       error: null,
     });
@@ -432,7 +477,8 @@ describe('attendance.service', () => {
           total_work_minutes: 480,
           total_overtime_minutes: 0,
           effective_status: 'late',
-          is_short_day: false,
+          has_overtime: false,
+          is_incomplete_shift: false,
           session_count: 1,
           updated_at: '2025-06-10T17:00:00Z',
         },
@@ -446,7 +492,8 @@ describe('attendance.service', () => {
           total_work_minutes: 480,
           total_overtime_minutes: 0,
           effective_status: 'present',
-          is_short_day: false,
+          has_overtime: false,
+          is_incomplete_shift: false,
           session_count: 1,
           updated_at: '2025-06-11T16:00:00Z',
         },
@@ -460,7 +507,7 @@ describe('attendance.service', () => {
     expect(stats.lateDays).toBe(1);
   });
 
-  it('calendar maps overtime_only summary to overtime_only status', async () => {
+  it('calendar maps overtime-only summaries to absent with overtime', async () => {
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
     sb.queueResult({
@@ -473,8 +520,9 @@ describe('attendance.service', () => {
         last_check_out: '22:00',
         total_work_minutes: 120,
         total_overtime_minutes: 120,
-        effective_status: 'overtime_only',
-        is_short_day: true,
+        effective_status: 'absent',
+        has_overtime: true,
+        is_incomplete_shift: false,
         session_count: 1,
         updated_at: '2025-06-10T22:00:00Z',
       }],
@@ -485,10 +533,11 @@ describe('attendance.service', () => {
     const { getAttendanceMonthly } = await import('./attendance.service');
     const month = await getAttendanceMonthly('u1', 2025, 5); // June
     const day = month.find((d) => d.date === '2025-06-10');
-    expect(day?.status).toBe('overtime_only');
+    expect(day?.status).toBe('absent');
+    expect(day?.hasOvertime).toBe(true);
   });
 
-  it('calendar maps off-day sessions to overtime_offday indicator', async () => {
+  it('calendar maps off-day overtime work to weekend with overtime', async () => {
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
     sb.queueResult({
@@ -502,7 +551,8 @@ describe('attendance.service', () => {
         total_work_minutes: 420,
         total_overtime_minutes: 420,
         effective_status: null,
-        is_short_day: false,
+        has_overtime: true,
+        is_incomplete_shift: false,
         session_count: 2,
         updated_at: '2025-06-06T19:00:00Z',
       }],
@@ -513,7 +563,8 @@ describe('attendance.service', () => {
     const { getAttendanceMonthly } = await import('./attendance.service');
     const month = await getAttendanceMonthly('u1', 2025, 5); // June
     const day = month.find((d) => d.date === '2025-06-06');
-    expect(day?.status).toBe('overtime_offday');
+    expect(day?.status).toBe('weekend');
+    expect(day?.hasOvertime).toBe(true);
   });
 
   it('calendar does not mark pre-join working days as absent', async () => {
@@ -546,9 +597,16 @@ describe('attendance.service', () => {
 
   it('checkIn inserts when no existing log', async () => {
     sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: { org_id: 'o1' }, error: null });
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: policyRow, error: null });
-    sb.queueResult({ data: { ...logRow, check_in_time: '10:00' }, error: null });
+    sb.queueResult({
+      data: {
+        ...sessionRow,
+        check_in_time: '10:00',
+      },
+      error: null,
+    });
     const { checkIn } = await import('./attendance.service');
     const r = await checkIn('u1');
     expect(r.log.check_in_time).toBe('10:00');
@@ -823,7 +881,7 @@ describe('attendance.service', () => {
   it('subscribeToAttendanceLogs unsubscribes', async () => {
     const { subscribeToAttendanceLogs } = await import('./attendance.service');
     const unsub = subscribeToAttendanceLogs(vi.fn());
-    expect(sb.channelInstances.at(-1)?.name).toBe('attendance_logs:all');
+    expect(sb.channelInstances.at(-1)?.name).toBe('attendance_daily_summary:all');
     unsub();
     expect(sb.removeChannel).toHaveBeenCalledWith('SUBSCRIBED');
   });
@@ -831,7 +889,7 @@ describe('attendance.service', () => {
   it('subscribeToUserAttendance uses user filter channel', async () => {
     const { subscribeToUserAttendance } = await import('./attendance.service');
     subscribeToUserAttendance('u1', vi.fn());
-    expect(sb.channelInstances.at(-1)?.name).toBe('attendance_logs:user:u1');
+    expect(sb.channelInstances.at(-1)?.name).toBe('attendance_daily_summary:user:u1');
   });
 
   describe('getTodayPunchUiState / isCheckedInToday (pseudo log + sessions)', () => {

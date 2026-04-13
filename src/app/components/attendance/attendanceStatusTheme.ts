@@ -1,26 +1,20 @@
 import type { MonthDaySummary } from '@/lib/services/attendance.service';
 import type { CSSProperties } from 'react';
 
-// ─── Change colors here only ─────────────────────────────────────────────────
-
 const STATUS_COLORS = {
-  present:  '#0D9488',
-  late:     '#D97706',
-  absent:   '#E11D48',
+  present: '#0D9488',
+  late: '#D97706',
+  absent: '#E11D48',
   on_leave: '#2563EB',
   overtime: '#475569',
-  // overtime: '#7A7EB5'
 } as const;
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 type AttendanceStatusKey =
   | 'present'
   | 'late'
   | 'absent'
   | 'on_leave'
-  | 'overtime_only'
-  | 'overtime_offday';
+  | 'overtime';
 
 type SessionStatusKey = 'present' | 'late' | 'overtime';
 
@@ -69,38 +63,28 @@ function makeTheme(label: string, color: StatusColor): AttendanceStatusTheme {
   };
 }
 
-export const ATTENDANCE_STATUS_THEME: Record<
-  AttendanceStatusKey,
-  AttendanceStatusTheme
-> = {
-  present:         makeTheme('حاضر',      STATUS_COLORS.present),
-  late:            makeTheme('متأخر',     STATUS_COLORS.late),
-  absent:          makeTheme('غائب',      STATUS_COLORS.absent),
-  on_leave:        makeTheme('إجازة',     STATUS_COLORS.on_leave),
-  overtime_only:   makeTheme('عمل إضافي', STATUS_COLORS.overtime),
-  overtime_offday: makeTheme('عمل إضافي', STATUS_COLORS.overtime),
+export const ATTENDANCE_STATUS_THEME: Record<AttendanceStatusKey, AttendanceStatusTheme> = {
+  present: makeTheme('حاضر', STATUS_COLORS.present),
+  late: makeTheme('متأخر', STATUS_COLORS.late),
+  absent: makeTheme('غائب', STATUS_COLORS.absent),
+  on_leave: makeTheme('إجازة', STATUS_COLORS.on_leave),
+  overtime: makeTheme('عمل إضافي', STATUS_COLORS.overtime),
 };
 
-export const CALENDAR_LEGEND_STATUSES: AttendanceStatusKey[] = [
+export const CALENDAR_LEGEND_STATUSES: Array<Exclude<AttendanceStatusKey, 'overtime'>> = [
   'present',
   'late',
   'absent',
   'on_leave',
-  'overtime_only',
 ];
 
-const SESSION_STATUS_TO_ATTENDANCE_STATUS: Record<
-  SessionStatusKey,
-  AttendanceStatusKey
-> = {
-  present:  'present',
-  late:     'late',
-  overtime: 'overtime_only',
+const SESSION_STATUS_TO_ATTENDANCE_STATUS: Record<SessionStatusKey, AttendanceStatusKey> = {
+  present: 'present',
+  late: 'late',
+  overtime: 'overtime',
 };
 
-export function getStatusTheme(
-  status: AttendanceStatusKey,
-): AttendanceStatusTheme {
+export function getStatusTheme(status: AttendanceStatusKey): AttendanceStatusTheme {
   return ATTENDANCE_STATUS_THEME[status];
 }
 
@@ -108,7 +92,7 @@ export function getCalendarDotClass(
   status: MonthDaySummary['status'],
 ): CSSProperties | null {
   if (!status || status === 'future' || status === 'weekend') return null;
-  return ATTENDANCE_STATUS_THEME[status as AttendanceStatusKey]?.dotStyle ?? null;
+  return ATTENDANCE_STATUS_THEME[status]?.dotStyle ?? null;
 }
 
 export function getSessionTheme(

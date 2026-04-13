@@ -13,8 +13,6 @@ export type OvertimeAwareAttendanceStatus =
   | 'late'
   | 'absent'
   | 'on_leave'
-  | 'overtime_only'
-  | 'overtime_offday'
   | null
   | undefined;
 
@@ -24,24 +22,21 @@ export interface AttendanceDayState {
 }
 
 export function resolveAttendanceDayState(
-  status: OvertimeAwareAttendanceStatus
+  status: OvertimeAwareAttendanceStatus,
+  hasOvertime = false
 ): AttendanceDayState {
   switch (status) {
     case 'late':
-      return { dayStatus: 'late', hasOvertime: false };
+      return { dayStatus: 'late', hasOvertime };
     case 'absent':
-      return { dayStatus: 'absent', hasOvertime: false };
+      return { dayStatus: 'absent', hasOvertime };
     case 'on_leave':
       return { dayStatus: 'on_leave', hasOvertime: false };
-    case 'overtime_only':
-      return { dayStatus: 'absent', hasOvertime: true };
-    case 'overtime_offday':
-      return { dayStatus: 'weekend', hasOvertime: true };
     case 'present':
     case null:
     case undefined:
     default:
-      return { dayStatus: 'present', hasOvertime: false };
+      return { dayStatus: 'present', hasOvertime };
   }
 }
 

@@ -8,9 +8,6 @@ export function getStatusColor(status: string): string {
       return 'bg-red-100 text-red-700';
     case 'on_leave':
       return 'bg-blue-100 text-blue-700';
-    case 'overtime_only':
-    case 'overtime_offday':
-      return 'bg-violet-100 text-violet-700';
     default:
       return 'bg-gray-100 text-gray-700';
   }
@@ -26,4 +23,3 @@ export function getTimeAgoLabel(dateStr: string): string {
   if (hours < 24) return `منذ ${hours} ساعة`;
   return `منذ ${days} يوم`;
 }
-

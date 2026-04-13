@@ -101,7 +101,7 @@ function getDayStateForTodayRecord(todayRecord: TodayRecord, at: Date) {
     ? (todayRecord.shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek)
     : false;
   const hasOvertime =
-    todayRecord.summary?.effective_status === 'overtime_only' ||
+    todayRecord.summary?.has_overtime === true ||
     (todayRecord.summary?.total_overtime_minutes ?? 0) > 0 ||
     todayRecord.sessions?.some((session) => session.is_overtime) === true;
 
@@ -113,8 +113,7 @@ function getDayStateForTodayRecord(todayRecord: TodayRecord, at: Date) {
   }
 
   return {
-    ...resolveAttendanceDayState(todayRecord.summary?.effective_status),
-    hasOvertime,
+    ...resolveAttendanceDayState(todayRecord.summary?.effective_status, hasOvertime),
   };
 }
 

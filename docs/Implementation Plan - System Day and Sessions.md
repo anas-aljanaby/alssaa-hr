@@ -1154,45 +1154,45 @@ Track completion of every task here. **This section is the single source of trut
 - [x] Task 2.7 — Verify leave recalc trigger still works
 
 ### Phase 3: Edge Functions (Deno/TypeScript)
-- [ ] Task 3.1 — Update punch handler (remove `overtime_only`, rename fields, add `has_overtime`)
-- [ ] Task 3.2 — Update auto-punch-out handler (verify types)
-- [ ] Task 3.3 — Update mark-absent handler (add date range support)
+- [x] Task 3.1 — Update punch handler (remove `overtime_only`, rename fields, add `has_overtime`)
+- [x] Task 3.2 — Update auto-punch-out handler (verify types)
+- [x] Task 3.3 — Update mark-absent handler (add date range support)
 
 ### Phase 4: Shared Frontend Types & Utilities
-- [ ] Task 4.1 — Update `teamState.ts` (add `on_break`, `incomplete_shift` to live states)
-- [ ] Task 4.2 — Update `dayState.ts` (remove `overtime_only`/`overtime_offday`, add `hasOvertime` param)
-- [ ] Task 4.3 — Update `statusConfig.ts` (add `on_break` display config)
-- [ ] Task 4.4 — Update `statusAdapters.ts` (remove `overtime_only`/`overtime_offday` refs)
-- [ ] Task 4.5 — Update `todayRecord.ts` (use `has_overtime` field)
-- [ ] Task 4.6 — Verify `types.ts` needs no changes
-- [ ] Task 4.7 — Verify `resolveDisplayStatus.ts` needs no changes
+- [x] Task 4.1 — Update `teamState.ts` (add `on_break`, `incomplete_shift` to live states)
+- [x] Task 4.2 — Update `dayState.ts` (remove `overtime_only`/`overtime_offday`, add `hasOvertime` param)
+- [x] Task 4.3 — Update `statusConfig.ts` (add `on_break` display config)
+- [x] Task 4.4 — Update `statusAdapters.ts` (remove `overtime_only`/`overtime_offday` refs)
+- [x] Task 4.5 — Update `todayRecord.ts` (use `has_overtime` field)
+- [x] Task 4.6 — Verify `types.ts` needs no changes
+- [x] Task 4.7 — Verify `resolveDisplayStatus.ts` needs no changes
 
 ### Phase 5: Service Layer
-- [ ] Task 5.1 — Update `attendance.service.ts` (all sub-tasks A through J)
-- [ ] Task 5.2 — Update `database.types.ts` (regenerate or manual edit)
-- [ ] Task 5.3 — Update `ui-helpers.ts`
+- [~] Task 5.1 — Update `attendance.service.ts` (all sub-tasks A through J)
+- [x] Task 5.2 — Update `database.types.ts` (regenerate or manual edit)
+- [x] Task 5.3 — Update `ui-helpers.ts`
 
 ### Phase 6: Frontend Components
-- [ ] Task 6.1 — Update `attendanceStatusTheme.ts`
-- [ ] Task 6.2 — Update `DayDetailsSheet.tsx`
-- [ ] Task 6.3 — Update `MonthCalendarHeatmap.tsx`
-- [ ] Task 6.4 — Update `TodayStatusCard.tsx`
-- [ ] Task 6.5 — Update `AttendancePage.tsx` (employee)
-- [ ] Task 6.6 — Update `UserDetailsPage.tsx` (admin)
-- [ ] Task 6.7 — Update `TeamAttendancePage.tsx` (on_break handling)
-- [ ] Task 6.8 — Update all test files
+- [x] Task 6.1 — Update `attendanceStatusTheme.ts`
+- [x] Task 6.2 — Update `DayDetailsSheet.tsx`
+- [x] Task 6.3 — Update `MonthCalendarHeatmap.tsx`
+- [x] Task 6.4 — Update `TodayStatusCard.tsx`
+- [x] Task 6.5 — Update `AttendancePage.tsx` (employee)
+- [x] Task 6.6 — Update `UserDetailsPage.tsx` (admin)
+- [x] Task 6.7 — Update `TeamAttendancePage.tsx` (on_break handling)
+- [x] Task 6.8 — Update all test files
 
 ### Phase 7: Legacy Cleanup & Consolidation
-- [ ] Task 7.1 — Remove `attendance_logs` from application code
+- [x] Task 7.1 — Remove `attendance_logs` from application code
 - [ ] Task 7.2 — Consolidate status enums (assessment + action)
 - [ ] Task 7.3 — Verify weekend row handling end-to-end
 
 ### Final Verification
 - [ ] Run `npx tsc --noEmit` — zero errors
-- [ ] Run `npm test` — all tests pass
-- [ ] Grep codebase for `overtime_only` — only in historical migrations
-- [ ] Grep codebase for `is_short_day` — only in historical migrations
-- [ ] Grep codebase for `attendance_logs` — no application code references
+- [x] Run `npm test` — all tests pass
+- [x] Grep codebase for `overtime_only` — only in historical migrations
+- [x] Grep codebase for `is_short_day` — only in historical migrations
+- [x] Grep codebase for `attendance_logs` — no application code references
 
 ### Run 1 log
 - [x] Task 1.1 — Added `attendance_daily_summary.has_overtime` in migration `023_state_system_alignment.sql` and backfilled historical overtime flags — 2026-04-13 / Run 1
@@ -1212,5 +1212,34 @@ Track completion of every task here. **This section is the single source of trut
 
 ---
 
+### Run 2 log
+- [x] Task 3.1 — Updated `supabase/functions/punch/handler.ts` and its Deno tests for `absent + has_overtime` plus `is_incomplete_shift` storage — 2026-04-13 / Run 2
+- [x] Task 3.2 — Verified `supabase/functions/auto-punch-out/handler.ts` still matched the shared punch types; no logic change was required — 2026-04-13 / Run 2
+- [x] Task 3.3 — Added `date` / `from_date` / `to_date` handling to `supabase/functions/mark-absent/handler.ts` and covered it with a new Deno test file — 2026-04-13 / Run 2
+- [x] Task 4.1 — Added `on_break` and `incomplete_shift` support across the shared team-attendance state model and chip config — 2026-04-13 / Run 2
+- [x] Task 4.2 — Removed `overtime_only` / `overtime_offday` from `dayState.ts` and made overtime an explicit modifier input — 2026-04-13 / Run 2
+- [x] Task 4.3 — Rebuilt `statusConfig.ts` with `on_break` styling plus the missing hex/tone metadata used by downstream adapters — 2026-04-13 / Run 2
+- [x] Task 4.4 — Reworked `statusAdapters.ts` so overtime visuals are driven by `hasOvertime` instead of pseudo-status strings — 2026-04-13 / Run 2
+- [x] Task 4.5 — Updated `todayRecord.ts` to read `has_overtime` directly from the daily summary — 2026-04-13 / Run 2
+- [x] Task 4.6 — Verified `src/shared/attendance/types.ts` still matched the target state model without edits — 2026-04-13 / Run 2
+- [x] Task 4.7 — Verified `src/shared/attendance/resolveDisplayStatus.ts` needed no logic change after the day-state cleanup — 2026-04-13 / Run 2
+- [~] Task 5.1 — Refactored `attendance.service.ts` off `attendance_logs`, removed `normalizeSessions()`, renamed `is_incomplete_shift`, and switched overtime handling to `has_overtime`. Still TODO: decide whether to remove the compatibility `log` field from `TodayRecord` / `DayRecord` or keep it as an intentional adapter layer — 2026-04-13 / Run 2
+- [x] Task 5.2 — Manually updated `src/lib/database.types.ts` for `has_overtime`, `is_incomplete_shift`, and the updated RPC return shapes — 2026-04-13 / Run 2
+- [x] Task 5.3 — Removed overtime pseudo-status cases from `src/lib/ui-helpers.ts` — 2026-04-13 / Run 2
+- [x] Task 6.1 — Replaced overtime pseudo-status themes with a standalone overtime modifier theme in `attendanceStatusTheme.ts` — 2026-04-13 / Run 2
+- [x] Task 6.2 — Updated `DayDetailsSheet.tsx` to derive overtime display from `has_overtime` instead of pseudo-statuses — 2026-04-13 / Run 2
+- [x] Task 6.3 — Updated `MonthCalendarHeatmap.tsx` to mark overtime via `MonthDaySummary.hasOvertime` — 2026-04-13 / Run 2
+- [x] Task 6.4 — Updated `TodayStatusCard.tsx` to use the standalone overtime theme — 2026-04-13 / Run 2
+- [x] Task 6.5 — Removed legacy overtime status URL mapping from `AttendancePage.tsx` — 2026-04-13 / Run 2
+- [x] Task 6.6 — Updated `UserDetailsPage.tsx` to use `has_overtime` with the shared day-state resolver — 2026-04-13 / Run 2
+- [x] Task 6.7 — Updated `TeamAttendancePage.tsx` for `on_break` plus availability-driven live grouping from `availability_state` / `isCheckedInNow` — 2026-04-13 / Run 2
+- [x] Task 6.8 — Updated the affected Vitest suites and Deno tests to the new state model; `npm test` and `npm run test:edge` now pass — 2026-04-13 / Run 2
+- [x] Task 7.1 — Removed `attendance_logs` usage from application code and realtime subscriptions; remaining references are limited to generated DB table types — 2026-04-13 / Run 2
+- [~] Final verification — `npm test`, `npm run test:edge`, and `npm run build` all pass. `npx tsc --noEmit` could not be executed because `typescript` is not installed as a project dependency — 2026-04-13 / Run 2
+
+--- Run 2 ended ---
+
+---
+
 ### Next run should start with:
-Task 3.1 (Phase 3 — Edge Functions). Phases 1-2 are complete in `supabase/migrations/023_state_system_alignment.sql`; the TypeScript/service/frontend layers still expect legacy attendance fields and status values.
+Task 5.1 follow-up / Task 7.2. The state-model migration is implemented through backend, service, UI, and tests; the main open decision is whether to remove the compatibility `log` field from `TodayRecord` / `DayRecord` or formalize it as a long-term adapter while consolidating the remaining overlapping enums.

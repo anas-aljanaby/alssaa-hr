@@ -302,8 +302,9 @@ export interface Database {
           last_check_out: string | null;
           total_work_minutes: number;
           total_overtime_minutes: number;
-          effective_status: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
-          is_short_day: boolean;
+          effective_status: 'present' | 'late' | 'absent' | 'on_leave' | null;
+          has_overtime: boolean;
+          is_incomplete_shift: boolean;
           session_count: number;
           updated_at: string;
         };
@@ -316,8 +317,9 @@ export interface Database {
           last_check_out?: string | null;
           total_work_minutes?: number;
           total_overtime_minutes?: number;
-          effective_status?: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
-          is_short_day?: boolean;
+          effective_status?: 'present' | 'late' | 'absent' | 'on_leave' | null;
+          has_overtime?: boolean;
+          is_incomplete_shift?: boolean;
           session_count?: number;
           updated_at?: string;
         };
@@ -330,8 +332,9 @@ export interface Database {
           last_check_out?: string | null;
           total_work_minutes?: number;
           total_overtime_minutes?: number;
-          effective_status?: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
-          is_short_day?: boolean;
+          effective_status?: 'present' | 'late' | 'absent' | 'on_leave' | null;
+          has_overtime?: boolean;
+          is_incomplete_shift?: boolean;
           session_count?: number;
           updated_at?: string;
         };
@@ -986,7 +989,7 @@ export interface Database {
           is_checked_in_now: boolean;
           has_auto_punch_out: boolean;
           needs_review: boolean;
-          is_short_day: boolean;
+          is_incomplete_shift: boolean;
         }[];
       };
     };

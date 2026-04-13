@@ -123,11 +123,13 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 function deriveStatusMeta(record: DayRecord | null, summary: DayDetailsSheetSummary | null) {
   if (summary) return summary;
 
+  const hasOvertime =
+    record?.summary?.has_overtime === true ||
+    (record?.summary?.total_overtime_minutes ?? 0) > 0 ||
+    record?.sessions?.some((session) => session.is_overtime) === true;
   const displayStatus =
     record?.summary?.effective_status ??
-    (((record?.summary?.session_count ?? 0) > 0 && !record?.summary?.effective_status)
-      ? 'overtime_offday'
-      : record?.log?.status);
+    (hasOvertime ? 'overtime' : record?.log?.status);
 
   if (
     displayStatus &&
@@ -135,8 +137,7 @@ function deriveStatusMeta(record: DayRecord | null, summary: DayDetailsSheetSumm
       displayStatus === 'late' ||
       displayStatus === 'absent' ||
       displayStatus === 'on_leave' ||
-      displayStatus === 'overtime_only' ||
-      displayStatus === 'overtime_offday')
+      displayStatus === 'overtime')
   ) {
     const theme = getStatusTheme(displayStatus);
     return {

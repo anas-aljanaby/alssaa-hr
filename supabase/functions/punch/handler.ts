@@ -68,6 +68,10 @@ export type PgChain = PromiseLike<PgResult> & {
 
 export type PunchServiceClient = {
   from: (table: string) => PgChain;
+  rpc: (
+    fn: string,
+    args?: Record<string, unknown>
+  ) => Promise<{ data: unknown; error: unknown | null }>;
 };
 
 export type PunchDeps = {
@@ -109,8 +113,9 @@ type DailySummaryRow = {
   last_check_out: string | null;
   total_work_minutes: number;
   total_overtime_minutes: number;
-  effective_status: 'present' | 'late' | 'overtime_only' | 'absent' | 'on_leave' | null;
-  is_short_day: boolean;
+  effective_status: 'present' | 'late' | 'absent' | 'on_leave' | null;
+  is_incomplete_shift: boolean;
+  has_overtime: boolean;
   session_count: number;
 };
 
@@ -344,7 +349,7 @@ function resolveEffectiveStatus(
 
   if (hasLate && !hasPresent) return 'late';
   if (hasPresent) return 'present';
-  if (sessions.every((s) => s.is_overtime)) return 'overtime_only';
+  if (sessions.every((s) => s.is_overtime)) return 'absent';
   return null;
 }
 
@@ -370,6 +375,7 @@ export async function recalculateDailySummary(
   const totalOvertimeMinutes = sessions
     .filter((s) => s.is_overtime)
     .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+  const hasOvertime = sessions.some((s) => s.is_overtime);
   const firstCheckIn = sessions.length ? sessions[0].check_in_time : null;
   const lastCheckOut = sessions
     .filter((s) => !!s.check_out_time)
@@ -380,9 +386,11 @@ export async function recalculateDailySummary(
   const todayDate = toDateStr(new Date());
   const isPastOrToday = dateStr <= todayDate;
   const effectiveStatus = resolveEffectiveStatus(sessions, schedule.isWorkingDay, hasApprovedLeave, isPastOrToday);
-  const isShortDay = schedule.minimumRequiredMinutes != null
-    ? totalWorkMinutes < schedule.minimumRequiredMinutes
-    : false;
+  const isIncompleteShift =
+    (effectiveStatus === 'present' || effectiveStatus === 'late') &&
+    schedule.minimumRequiredMinutes != null
+      ? totalWorkMinutes < schedule.minimumRequiredMinutes
+      : false;
 
   const payload = {
     org_id: orgId,
@@ -393,7 +401,8 @@ export async function recalculateDailySummary(
     total_work_minutes: totalWorkMinutes,
     total_overtime_minutes: totalOvertimeMinutes,
     effective_status: effectiveStatus,
-    is_short_day: isShortDay,
+    is_incomplete_shift: isIncompleteShift,
+    has_overtime: hasOvertime,
     session_count: sessions.length,
     updated_at: new Date().toISOString(),
   };

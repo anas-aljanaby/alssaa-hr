@@ -157,6 +157,7 @@ function parseStatusFilterParam(raw: string | null): AttendanceStatusFilter {
     [
       'all',
       'available_now',
+      'on_break',
       'fulfilled_shift',
       'incomplete_shift',
       'late',
@@ -184,7 +185,7 @@ function rowMetaText(role: AttendanceBoardRow['role']): string | null {
 
 function isPresentGroup(primaryState: TeamAttendancePrimaryState, mode: TeamAttendanceMode): boolean {
   if (mode === 'live') {
-    return primaryState === 'available_now' || primaryState === 'late';
+    return primaryState === 'available_now';
   }
 
   return (
@@ -201,17 +202,21 @@ function sortRankForState(primaryState: TeamAttendancePrimaryState, mode: TeamAt
         return 0;
       case 'available_now':
         return 1;
-      case 'fulfilled_shift':
+      case 'on_break':
         return 2;
       case 'not_entered_yet':
         return 3;
-      case 'absent':
+      case 'incomplete_shift':
         return 4;
-      case 'on_leave':
+      case 'fulfilled_shift':
         return 5;
+      case 'absent':
+        return 6;
+      case 'on_leave':
+        return 7;
       case 'neutral':
       default:
-        return 6;
+        return 8;
     }
   }
 
@@ -247,23 +252,25 @@ function buildDetailSummary(
         : primaryState === 'incomplete_shift'
           ? 'blue'
           : primaryState === 'late'
-          ? 'amber'
-          : primaryState === 'absent'
-            ? 'red'
-            : primaryState === 'on_leave'
-              ? 'blue'
-              : 'gray',
+            ? 'amber'
+            : primaryState === 'absent'
+              ? 'red'
+              : primaryState === 'on_leave' || primaryState === 'on_break'
+                ? 'blue'
+                : 'gray',
   };
 }
 
 function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
   const primaryState = row.teamLiveState;
-  const group: BoardGroup = isPresentGroup(primaryState, 'live') ? 'present' : 'not_present';
+  const group: BoardGroup = row.isCheckedInNow ? 'present' : 'not_present';
 
   let factText: string | null = null;
-  if ((primaryState === 'available_now' || primaryState === 'late') && row.firstCheckIn) {
+  if (row.isCheckedInNow && (primaryState === 'available_now' || primaryState === 'late') && row.firstCheckIn) {
     factText = `دخل ${formatWallTime(row.firstCheckIn)}`;
-  } else if (primaryState === 'fulfilled_shift' && row.lastCheckOut) {
+  } else if ((primaryState === 'on_break' || primaryState === 'late') && row.lastCheckOut) {
+    factText = `غادر ${formatWallTime(row.lastCheckOut)}`;
+  } else if ((primaryState === 'fulfilled_shift' || primaryState === 'incomplete_shift') && row.lastCheckOut) {
     factText = `غادر ${formatWallTime(row.lastCheckOut)}`;
   } else if (primaryState === 'neutral' && row.lastCheckOut) {
     factText = `غادر ${formatWallTime(row.lastCheckOut)}`;
@@ -330,7 +337,7 @@ function buildGenericLiveRow(row: SafeAvailabilityRow): AttendanceBoardRow {
     departmentId: row.departmentId,
     departmentNameAr: row.departmentNameAr ?? 'بدون قسم',
     scope: 'generic',
-    group: isPresentGroup(primaryState, 'live') ? 'present' : 'not_present',
+    group: row.availabilityState === 'available_now' ? 'present' : 'not_present',
     primaryState,
     hasOvertime: row.hasOvertime,
     metaText: rowMetaText(row.role),
@@ -411,6 +418,7 @@ function buildSectionSummary(
   if (mode === 'live') {
     const availableCount = liveChips.available_now ?? 0;
     const lateCount = liveChips.late ?? 0;
+    const onBreakCount = liveChips.on_break ?? 0;
     const pendingCount = liveChips.not_entered_yet ?? 0;
     const absentCount = liveChips.absent ?? 0;
     const overtimeCount = liveChips.overtime ?? 0;
@@ -418,6 +426,7 @@ function buildSectionSummary(
 
     segments.push(`${availableCount} موجودون الآن`);
     if (lateCount > 0) segments.push(`${lateCount} متأخر`);
+    if (onBreakCount > 0) segments.push(`${onBreakCount} في استراحة`);
     if (pendingCount > 0) segments.push(`${pendingCount} لم يسجلوا بعد`);
     if (absentCount > 0) segments.push(`${absentCount} غائب`);
     if (overtimeCount > 0) segments.push(`${overtimeCount} إضافي`);

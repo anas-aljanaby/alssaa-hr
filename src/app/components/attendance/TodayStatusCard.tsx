@@ -67,7 +67,7 @@ function todayArabicDate(): string {
 
 export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, isOffline = false }: Props) {
   const { log, shift } = today;
-  const overtimeColor = getStatusTheme('overtime_only').color;
+  const overtimeColor = getStatusTheme('overtime').color;
   const overtimeClockColor = '#D97706';
 
   const [punchInElapsedSeconds, setPunchInElapsedSeconds] = useState(0);

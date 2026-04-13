@@ -1,5 +1,5 @@
 import { supabase } from '../supabase';
-import type { Database, Tables, InsertTables } from '../database.types';
+import type { Database, Tables } from '../database.types';
 import type { OvertimeRequest } from './overtime-requests.service';
 import {
   DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
@@ -10,14 +10,30 @@ import {
   type TeamAttendanceLiveState,
 } from '@/shared/attendance';
 
-export type AttendanceLog = Tables<'attendance_logs'>;
-export type AttendanceLogInsert = InsertTables<'attendance_logs'>;
-export type AttendanceStatus = AttendanceLog['status'];
+export type AttendanceStatus = 'present' | 'late';
+export type AttendanceLogStatus = AttendanceStatus | 'absent' | 'on_leave';
+
+export interface AttendanceLog {
+  id: string;
+  org_id: string;
+  user_id: string;
+  date: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  check_in_lat: number | null;
+  check_in_lng: number | null;
+  check_out_lat: number | null;
+  check_out_lng: number | null;
+  status: AttendanceLogStatus;
+  is_dev: boolean;
+  auto_punch_out: boolean;
+}
+
 export type AttendanceSession = Tables<'attendance_sessions'>;
 export type AttendanceDailySummary = Tables<'attendance_daily_summary'>;
 export type AttendanceEffectiveStatus = AttendanceDailySummary['effective_status'];
 export type ProfileRole = Tables<'profiles'>['role'];
-export type CalendarStatus = AttendanceStatus | 'overtime_only' | 'overtime_offday' | 'weekend' | 'future' | null;
+export type CalendarStatus = 'present' | 'late' | 'absent' | 'on_leave' | 'weekend' | 'future' | null;
 
 export type PunchType = 'clock_in' | 'clock_out';
 
@@ -62,6 +78,7 @@ export interface DayRecord {
 export interface MonthDaySummary {
   date: string;
   status: CalendarStatus;
+  hasOvertime: boolean;
   totalMinutesWorked: number;
 }
 
@@ -105,7 +122,7 @@ export interface AttendanceHistoryStats {
   totalWorkingDays: number;
 }
 
-export type TeamAttendanceDisplayStatus = AttendanceEffectiveStatus | 'overtime_offday' | null;
+export type TeamAttendanceDisplayStatus = AttendanceEffectiveStatus | null;
 
 export interface TeamAttendanceDayRow {
   userId: string;
@@ -129,7 +146,7 @@ export interface TeamAttendanceDayRow {
   isCheckedInNow: boolean;
   hasAutoPunchOut: boolean;
   needsReview: boolean;
-  isShortDay: boolean;
+  isIncompleteShift: boolean;
 }
 
 export interface SafeAvailabilityRow {
@@ -140,6 +157,7 @@ export interface SafeAvailabilityRow {
   avatarUrl: string | null;
   departmentId: string | null;
   departmentNameAr: string | null;
+  availabilityState: 'available_now' | 'unavailable_now';
   teamLiveState: TeamAttendanceLiveState;
   hasOvertime: boolean;
 }
@@ -163,7 +181,7 @@ type RedactedAvailabilityRpcRow =
 type RedactedAttendanceDayRpcRow =
   Database['public']['Functions']['get_redacted_team_attendance_day']['Returns'][number];
 
-type CalendarResolutionInput = DayStatus | 'overtime_only' | 'overtime_offday';
+type CalendarResolutionInput = DayStatus;
 
 function resolveCalendarInput(
   dateStr: string,
@@ -182,9 +200,6 @@ function resolveCalendarInput(
   if (summary?.effective_status === 'late') return 'late';
   if (summary?.effective_status === 'absent') return 'absent';
   if (summary?.effective_status === 'on_leave') return 'on_leave';
-  if (summary?.effective_status === 'overtime_only') return 'overtime_only';
-  if (isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_offday';
-  if (!isOffDay && (summary?.session_count ?? 0) > 0) return 'overtime_only';
   if (isOffDay) return 'weekend';
   if (isToday) return 'not_joined';
   return 'absent';
@@ -201,7 +216,6 @@ function resolveCalendarStatus(
 
   if (resolved === 'future') return 'future';
   if (resolved === 'not_joined') return null;
-  if (resolved === 'overtime_only' || resolved === 'overtime_offday') return resolved;
 
   const displayStatus = resolveDisplayStatus(resolved, null, {
     isWithinShiftWindow: false,
@@ -409,7 +423,7 @@ function buildSummaryFallback(
   let effectiveStatus: AttendanceEffectiveStatus | null = null;
   if (hasRegularPresent) effectiveStatus = 'present';
   else if (hasRegularLate) effectiveStatus = 'late';
-  else if (allOvertime) effectiveStatus = 'overtime_only';
+  else if (allOvertime) effectiveStatus = 'absent';
 
   return {
     id: `fallback-${sorted[0]?.date ?? 'unknown'}`,
@@ -421,7 +435,8 @@ function buildSummaryFallback(
     total_work_minutes: computeTotalMinutesFromSessions(sorted),
     total_overtime_minutes: computeOvertimeMinutesFromSessions(sorted),
     effective_status: effectiveStatus,
-    is_short_day: false,
+    has_overtime: sorted.some((session) => session.is_overtime),
+    is_incomplete_shift: false,
     session_count: sorted.length,
     updated_at: new Date().toISOString(),
   } as AttendanceDailySummary;
@@ -437,19 +452,17 @@ function mapSessionClassification(
 
 function mapHistoryPrimaryState(
   status: CalendarStatus,
-  isShortDay: boolean
+  isIncompleteShift: boolean
 ): AttendanceHistoryPrimaryState | null {
   switch (status) {
     case 'present':
-      return isShortDay ? 'incomplete_shift' : 'fulfilled_shift';
+      return isIncompleteShift ? 'incomplete_shift' : 'fulfilled_shift';
     case 'late':
       return 'late';
     case 'absent':
-    case 'overtime_only':
       return 'absent';
     case 'on_leave':
       return 'on_leave';
-    case 'overtime_offday':
     case 'weekend':
       return 'weekend';
     case 'holiday':
@@ -485,7 +498,7 @@ function buildHistoryDay(params: {
   const isOffDay = offDays.includes(new Date(`${date}T00:00:00`).getDay());
   const summary = buildSummaryFallback(sessions, params.summary);
   const calendarStatus = resolveCalendarStatus(date, isOffDay, summary, todayStr_, joinDate);
-  const primaryState = mapHistoryPrimaryState(calendarStatus, summary?.is_short_day ?? false);
+  const primaryState = mapHistoryPrimaryState(calendarStatus, summary?.is_incomplete_shift ?? false);
 
   if (!shouldIncludeHistoryDay(primaryState, sessions)) {
     return null;
@@ -513,7 +526,7 @@ function buildHistoryDay(params: {
     totalWorkedMinutes,
     sessionCount: summary?.session_count ?? sortedSessions.length,
     hasOvertime:
-      (summary?.effective_status === 'overtime_only' || totalOvertimeMinutes > 0) &&
+      (summary?.has_overtime ?? totalOvertimeMinutes > 0) &&
       sortedSessions.length > 0,
     hasAutoPunchOut: sortedSessions.some((session) => !!session.is_auto_punch_out),
     needsReview: sortedSessions.some((session) => !!session.needs_review),
@@ -528,33 +541,6 @@ function buildHistoryDay(params: {
       needsReview: !!session.needs_review,
     })),
   };
-}
-
-function normalizeSessions(data: unknown, dateHint: string): AttendanceSession[] {
-  if (Array.isArray(data)) return data as AttendanceSession[];
-  if (!data || typeof data !== 'object') return [];
-  const row = data as Partial<AttendanceLog>;
-  if (!row.check_in_time) return [];
-  return [{
-    id: String(row.id ?? `legacy-${dateHint}`),
-    org_id: String(row.org_id ?? ''),
-    user_id: String(row.user_id ?? ''),
-    date: String(row.date ?? dateHint),
-    check_in_time: row.check_in_time,
-    check_out_time: row.check_out_time ?? null,
-    status: row.status === 'late' ? 'late' : 'present',
-    is_overtime: false,
-    is_auto_punch_out: Boolean(row.auto_punch_out),
-    is_early_departure: false,
-    needs_review: false,
-    duration_minutes: row.check_out_time
-      ? Math.max(0, wallTimeToMinutes(row.check_out_time) - wallTimeToMinutes(row.check_in_time!))
-      : 0,
-    last_action_at: new Date().toISOString(),
-    is_dev: Boolean(row.is_dev),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }];
 }
 
 function normalizeSummary(data: unknown): AttendanceDailySummary | null {
@@ -575,9 +561,9 @@ function buildPseudoLog(
   const last = [...sorted].reverse().find((s) => !!s.check_out_time) ?? sorted[sorted.length - 1];
   const rawStatus = summary?.effective_status ?? first?.status ?? null;
   const status: AttendanceLog['status'] =
-    rawStatus === 'overtime_only'
-      ? 'present'
-      : (rawStatus as AttendanceLog['status']) ?? 'present';
+    rawStatus === 'late' || rawStatus === 'absent' || rawStatus === 'on_leave'
+      ? rawStatus
+      : 'present';
 
   return {
     id: summary?.id ?? first?.id ?? `pseudo-${date}`,
@@ -676,7 +662,7 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
   if (sessionsRes.error) throw sessionsRes.error;
   if (summaryRes.error) throw summaryRes.error;
 
-  const sessions = normalizeSessions(sessionsRes.data, today);
+  const sessions = Array.isArray(sessionsRes.data) ? (sessionsRes.data as AttendanceSession[]) : [];
   const summary = normalizeSummary(summaryRes.data);
   const punches = buildPunchesFromSessions(sessions);
   const log = buildPseudoLog(today, sessions, summary);
@@ -704,7 +690,7 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
   if (sessionsRes.error) throw sessionsRes.error;
   if (summaryRes.error) throw summaryRes.error;
 
-  const sessions = normalizeSessions(sessionsRes.data, date);
+  const sessions = Array.isArray(sessionsRes.data) ? (sessionsRes.data as AttendanceSession[]) : [];
   const summary = normalizeSummary(summaryRes.data);
   const punches = buildPunchesFromSessions(sessions);
   const totalMinutesWorked = summary?.total_work_minutes ?? computeTotalMinutesFromSessions(sessions);
@@ -796,6 +782,8 @@ export async function getAttendanceMonthly(
     summaries.push({
       date: dateStr,
       status,
+      hasOvertime:
+        Boolean(summary?.has_overtime) || Number(summary?.total_overtime_minutes ?? 0) > 0,
       totalMinutesWorked: summary?.total_work_minutes ?? 0,
     });
   }
@@ -872,15 +860,29 @@ export function nowTimeStr(d?: Date): string {
 
 export async function getTodayLog(userId: string): Promise<AttendanceLog | null> {
   const today = todayStr();
-  const { data, error } = await supabase
-    .from('attendance_logs')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle();
+  const [sessionsRes, summaryRes] = await Promise.all([
+    supabase
+      .from('attendance_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .order('check_in_time', { ascending: true }),
+    supabase
+      .from('attendance_daily_summary')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .maybeSingle(),
+  ]);
 
-  if (error) throw error;
-  return data;
+  if (sessionsRes.error) throw sessionsRes.error;
+  if (summaryRes.error) throw summaryRes.error;
+
+  return buildPseudoLog(
+    today,
+    Array.isArray(sessionsRes.data) ? (sessionsRes.data as AttendanceSession[]) : [],
+    normalizeSummary(summaryRes.data)
+  );
 }
 
 export interface CheckInResult {
@@ -1008,10 +1010,13 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
   const today = todayStr();
   const time = nowTimeStr();
   const { data: existing, error: existingError } = await supabase
-    .from('attendance_logs')
+    .from('attendance_sessions')
     .select('*')
     .eq('user_id', userId)
     .eq('date', today)
+    .is('check_out_time', null)
+    .order('check_in_time', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (existingError) throw existingError;
@@ -1019,7 +1024,16 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
     throw new Error('Already checked in today');
   }
 
-  const shift = await getEffectiveShiftForUser(userId);
+  const [{ data: profile, error: profileError }, shift] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('org_id')
+      .eq('id', userId)
+      .single(),
+    getEffectiveShiftForUser(userId),
+  ]);
+
+  if (profileError || !profile?.org_id) throw profileError ?? new Error('Missing profile org');
   const nowDate = new Date();
   const dayOfWeek = nowDate.getDay();
   const nowMin = toMinutes(time);
@@ -1032,24 +1046,28 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
     if (nowMin > startMinutes) status = 'late';
   }
 
-  let log: AttendanceLog;
-  if (existing) {
-    const { data: updated, error } = await supabase
-      .from('attendance_logs')
-      .update({ check_in_time: time, check_out_time: null, status })
-      .eq('id', existing.id)
-      .select()
-      .single();
-    if (error) throw error;
-    log = updated;
-  } else {
-    const { data: inserted, error } = await supabase
-      .from('attendance_logs')
-      .insert({ user_id: userId, date: today, check_in_time: time, status })
-      .select()
-      .single();
-    if (error) throw error;
-    log = inserted;
+  const { data: inserted, error } = await supabase
+    .from('attendance_sessions')
+    .insert({
+      org_id: profile.org_id,
+      user_id: userId,
+      date: today,
+      check_in_time: time,
+      check_out_time: null,
+      status,
+      is_overtime: isOvertimePunch,
+      duration_minutes: 0,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  const log = buildPseudoLog(today, [inserted as AttendanceSession], null);
+  if (!log) {
+    throw new Error('Unable to build check-in result');
   }
 
   let overtimeRequest: OvertimeRequest | null = null;
@@ -1126,24 +1144,39 @@ async function checkOutLegacy(userId: string, checkoutTime?: string): Promise<At
   const today = todayStr();
   const time = checkoutTime ?? nowTimeStr();
   const { data: existing, error: existingError } = await supabase
-    .from('attendance_logs')
+    .from('attendance_sessions')
     .select('*')
     .eq('user_id', userId)
     .eq('date', today)
+    .is('check_out_time', null)
+    .order('check_in_time', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (existingError) throw existingError;
   if (!existing?.check_in_time) throw new Error('Must check in before checking out');
   if (existing.check_out_time) throw new Error('Already checked out today');
 
+  const durationMinutes = Math.max(
+    0,
+    wallTimeToMinutes(time) - wallTimeToMinutes(existing.check_in_time)
+  );
   const { data, error } = await supabase
-    .from('attendance_logs')
-    .update({ check_out_time: time, auto_punch_out: false })
+    .from('attendance_sessions')
+    .update({
+      check_out_time: time,
+      duration_minutes: durationMinutes,
+      is_auto_punch_out: false,
+    })
     .eq('id', existing.id)
     .select()
     .single();
   if (error) throw error;
-  return data;
+  const log = buildPseudoLog(today, [data as AttendanceSession], null);
+  if (!log) {
+    throw new Error('Unable to build check-out result');
+  }
+  return log;
 }
 
 async function getLogsInRange(
@@ -1153,7 +1186,7 @@ async function getLogsInRange(
 ): Promise<AttendanceLog[]> {
   const [{ data, error }, joinDate] = await Promise.all([
     supabase
-      .from('attendance_logs')
+      .from('attendance_daily_summary')
       .select('*')
       .eq('user_id', userId)
       .gte('date', fromDate)
@@ -1163,7 +1196,15 @@ async function getLogsInRange(
   ]);
 
   if (error) throw error;
-  const logs = data ?? [];
+  const logs = (data ?? [])
+    .map((summary) =>
+      buildPseudoLog(
+        (summary as AttendanceDailySummary).date,
+        [],
+        summary as AttendanceDailySummary
+      )
+    )
+    .filter((log): log is AttendanceLog => !!log);
   if (!joinDate) return logs;
   return logs.filter((log) => log.date >= joinDate);
 }
@@ -1413,14 +1454,22 @@ export async function getDepartmentLogsForDate(
   const userIds = employees.map((e) => e.id);
 
   const { data, error } = await supabase
-    .from('attendance_logs')
+    .from('attendance_daily_summary')
     .select('*')
     .in('user_id', userIds)
     .eq('date', date)
-    .order('check_in_time');
+    .order('first_check_in', { ascending: true });
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? [])
+    .map((summary) =>
+      buildPseudoLog(
+        date,
+        [],
+        summary as AttendanceDailySummary
+      )
+    )
+    .filter((log): log is AttendanceLog => !!log);
 }
 
 function mapTeamAttendanceDayRow(row: TeamAttendanceDayRpcRow): TeamAttendanceDayRow {
@@ -1446,7 +1495,7 @@ function mapTeamAttendanceDayRow(row: TeamAttendanceDayRpcRow): TeamAttendanceDa
     isCheckedInNow: row.is_checked_in_now,
     hasAutoPunchOut: row.has_auto_punch_out,
     needsReview: row.needs_review,
-    isShortDay: row.is_short_day,
+    isIncompleteShift: row.is_incomplete_shift,
   };
 }
 
@@ -1459,6 +1508,7 @@ function mapSafeAvailabilityRow(row: RedactedAvailabilityRpcRow): SafeAvailabili
     avatarUrl: row.avatar_url,
     departmentId: row.department_id,
     departmentNameAr: row.department_name_ar,
+    availabilityState: row.availability_state as 'available_now' | 'unavailable_now',
     teamLiveState: row.team_live_state as TeamAttendanceLiveState,
     hasOvertime: Boolean(row.has_overtime),
   };
@@ -1528,21 +1578,41 @@ export function subscribeToAttendanceLogs(
   onEvent: (event: AttendanceChangeEvent) => void
 ): () => void {
   const channel = supabase
-    .channel('attendance_logs:all')
+    .channel('attendance_daily_summary:all')
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'attendance_logs' },
-      (payload) => onEvent({ eventType: 'INSERT', new: payload.new as AttendanceLog, old: {} })
+      { event: 'INSERT', schema: 'public', table: 'attendance_daily_summary' },
+      (payload) => {
+        const log = buildPseudoLog(
+          String((payload.new as { date?: string }).date ?? ''),
+          [],
+          payload.new as AttendanceDailySummary
+        );
+        if (!log) return;
+        onEvent({ eventType: 'INSERT', new: log, old: {} });
+      }
     )
     .on(
       'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'attendance_logs' },
-      (payload) =>
+      { event: 'UPDATE', schema: 'public', table: 'attendance_daily_summary' },
+      (payload) => {
+        const nextLog = buildPseudoLog(
+          String((payload.new as { date?: string }).date ?? ''),
+          [],
+          payload.new as AttendanceDailySummary
+        );
+        const prevLog = buildPseudoLog(
+          String((payload.old as { date?: string }).date ?? ''),
+          [],
+          payload.old as AttendanceDailySummary
+        );
+        if (!nextLog) return;
         onEvent({
           eventType: 'UPDATE',
-          new: payload.new as AttendanceLog,
-          old: payload.old as Partial<AttendanceLog>,
-        })
+          new: nextLog,
+          old: prevLog ?? {},
+        });
+      }
     )
     .subscribe();
 
@@ -1556,31 +1626,51 @@ export function subscribeToUserAttendance(
   onEvent: (event: AttendanceChangeEvent) => void
 ): () => void {
   const channel = supabase
-    .channel(`attendance_logs:user:${userId}`)
+    .channel(`attendance_daily_summary:user:${userId}`)
     .on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
-        table: 'attendance_logs',
+        table: 'attendance_daily_summary',
         filter: `user_id=eq.${userId}`,
       },
-      (payload) => onEvent({ eventType: 'INSERT', new: payload.new as AttendanceLog, old: {} })
+      (payload) => {
+        const log = buildPseudoLog(
+          String((payload.new as { date?: string }).date ?? ''),
+          [],
+          payload.new as AttendanceDailySummary
+        );
+        if (!log) return;
+        onEvent({ eventType: 'INSERT', new: log, old: {} });
+      }
     )
     .on(
       'postgres_changes',
       {
         event: 'UPDATE',
         schema: 'public',
-        table: 'attendance_logs',
+        table: 'attendance_daily_summary',
         filter: `user_id=eq.${userId}`,
       },
-      (payload) =>
+      (payload) => {
+        const nextLog = buildPseudoLog(
+          String((payload.new as { date?: string }).date ?? ''),
+          [],
+          payload.new as AttendanceDailySummary
+        );
+        const prevLog = buildPseudoLog(
+          String((payload.old as { date?: string }).date ?? ''),
+          [],
+          payload.old as AttendanceDailySummary
+        );
+        if (!nextLog) return;
         onEvent({
           eventType: 'UPDATE',
-          new: payload.new as AttendanceLog,
-          old: payload.old as Partial<AttendanceLog>,
-        })
+          new: nextLog,
+          old: prevLog ?? {},
+        });
+      }
     )
     .subscribe();
 

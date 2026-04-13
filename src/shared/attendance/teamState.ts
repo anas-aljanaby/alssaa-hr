@@ -8,9 +8,11 @@
 export const TEAM_ATTENDANCE_LIVE_STATES = [
   'available_now',
   'late',
+  'on_break',
   'not_entered_yet',
   'absent',
   'on_leave',
+  'incomplete_shift',
   'fulfilled_shift',
   'neutral',
 ] as const;
@@ -33,6 +35,7 @@ export const TEAM_ATTENDANCE_PRIMARY_STATES = [
   'fulfilled_shift',
   'incomplete_shift',
   'late',
+  'on_break',
   'not_entered_yet',
   'absent',
   'on_leave',
@@ -47,6 +50,7 @@ export type TeamAttendanceChipKey =
   | 'fulfilled_shift'
   | 'incomplete_shift'
   | 'late'
+  | 'on_break'
   | 'not_entered_yet'
   | 'absent'
   | 'on_leave'
@@ -89,6 +93,12 @@ export const TEAM_ATTENDANCE_STATE_DEFINITIONS: Record<
     chipVisible: true,
     liveMeaning: 'Currently checked in and late.',
     dateMeaning: 'Worked the day late and does not overlap with fulfilled shift.',
+  },
+  on_break: {
+    label: 'في استراحة',
+    labelEn: 'On break',
+    chipVisible: true,
+    liveMeaning: 'Arrived on time, has sessions today, is currently checked out, and the shift window is still open.',
   },
   not_entered_yet: {
     label: 'لم يسجل بعد',

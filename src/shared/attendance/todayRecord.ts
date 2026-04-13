@@ -19,6 +19,7 @@ interface TodayShiftLike {
 
 interface TodaySummaryLike {
   effective_status?: OvertimeAwareAttendanceStatus;
+  has_overtime?: boolean | null;
   total_overtime_minutes?: number | null;
 }
 
@@ -61,15 +62,14 @@ export function resolveTodayRecordDisplayStatus(
   const offDays = record.shift?.weeklyOffDays ?? [5, 6];
   const isOffDay = !!record.shift && offDays.includes(at.getDay());
   const hasOvertime =
-    record.summary?.effective_status === 'overtime_only' ||
+    record.summary?.has_overtime === true ||
     (record.summary?.total_overtime_minutes ?? 0) > 0 ||
     record.sessions?.some((session) => session.is_overtime) === true;
 
   const dayState = isOffDay
     ? { dayStatus: 'weekend' as const, hasOvertime }
     : {
-        ...resolveAttendanceDayState(record.summary?.effective_status),
-        hasOvertime,
+        ...resolveAttendanceDayState(record.summary?.effective_status, hasOvertime),
       };
 
   return resolveAttendanceDisplayStatus(

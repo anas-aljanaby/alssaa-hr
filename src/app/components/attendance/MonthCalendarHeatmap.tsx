@@ -34,7 +34,7 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const summaryMap = new Map(summaries.map((s) => [s.date, s]));
-  const overtimeMarkerColor = getStatusTheme('overtime_offday').color;
+  const overtimeMarkerColor = getStatusTheme('overtime').color;
 
   const cells: (number | null)[] = [
     ...Array(firstDayOfMonth).fill(null),
@@ -92,7 +92,7 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
             const isToday = isCurrentMonth && day === todayDate;
             const isFutureDay = summary?.status === 'future';
             const isWeekend = summary?.status === 'weekend';
-            const isOvertimeOffday = summary?.status === 'overtime_offday';
+            const hasOvertime = summary?.hasOvertime ?? false;
             const dot = summary ? getCalendarDotClass(summary.status) : null;
             const isTappable = !isFutureDay && summary?.status !== 'weekend' && summary?.status != null;
 
@@ -120,7 +120,7 @@ export function MonthCalendarHeatmap({ year, month, summaries, loading, onPrevMo
                 {isToday && dot && (
                   <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
                 )}
-                {isOvertimeOffday && !isToday && (
+                {hasOvertime && !isToday && (
                   <span
                     className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full border"
                     style={{
