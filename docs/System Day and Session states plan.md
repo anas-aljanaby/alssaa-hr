@@ -47,9 +47,9 @@ Day states are purely about punctuality/attendance (mutually exclusive). Seconda
 | Modifier | Definition |
 |---|---|
 | `has_overtime` | Employee worked overtime sessions this day. Can be true on any state — `present`, `absent` (overtime-only), `weekend`, etc. |
-| `is_short_day` | Employee worked but didn't meet shift minimum hours. Only meaningful when state is `present` or `late`. |
+| `is_incomplete_shift` | Employee worked but didn't meet shift minimum hours. Only meaningful when state is `present` or `late`. |
 
-This means `overtime_only` is not a day state — it's `absent` + `has_overtime=true`. And `incomplete_shift` is not a day state — it's `present` (or `late`) + `is_short_day=true`. Keeping these as modifiers preserves the ability to know punctuality and duration independently, same reasoning as the session overtime flag.
+This means `overtime_only` is not a day state — it's `absent` + `has_overtime=true`. And `incomplete_shift` is not a day state — it's `present` (or `late`) + `is_incomplete_shift=true`. Keeping these as modifiers preserves the ability to know punctuality and duration independently, same reasoning as the session overtime flag.
 
 ### Live Board States (Team Attendance — Live Mode)
 
@@ -63,10 +63,15 @@ These states are used exclusively on the team attendance page in live mode. They
 | `not_entered_yet` | لم يسجل بعد | It's a working day, shift hasn't ended yet, and the employee has no sessions. They might still show up. |
 | `absent` | غائب | It's a working day, shift has ended, and the employee has no qualifying sessions. They didn't show up. |
 | `on_leave` | في إجازة | Employee has approved leave for today. |
+| `incomplete_shift` | دوام غير مكتمل | The shift window has ended, the employee arrived on time and has at least one session, but did not meet the shift minimum hours. Only appears after the shift window closes — during the shift window, an on-time employee who hasn't met the minimum yet shows as `available_now` or `on_break` instead. |
 | `fulfilled_shift` | أكمل الدوام | Employee has checked out and met the shift minimum. Their work day is done. |
 | `neutral` | خارج التصنيف | Off-day per the employee's schedule (weekend/holiday), or no shift configured for this employee/day. Used only for "no shift was expected" situations — never for mid-shift ambiguity. |
 
 > **Sectioning vs. chips:** The "available now" / "not available now" split on the Live Board is driven purely by whether the employee currently has an open session, independent of which chip they carry. A `late` employee on break appears in "not available now" but still carries the `late` chip so the admin can follow up on the lateness. An on-time employee on break appears in "not available now" with the `on_break` chip, so the admin can distinguish them from employees who haven't shown up at all (who carry `not_entered_yet`).
+>
+> **Chip priority (post-shift-window):** When the shift window has ended and the employee's final state must be resolved, multiple conditions may overlap (e.g., an employee can be both late and have an incomplete shift). The live board shows a single chip per employee, resolved by this priority order: `on_leave` → `absent` → `late` → `incomplete_shift` → `fulfilled_shift`. Notably, `late` takes priority over `incomplete_shift` — a late employee who also didn't meet the minimum shows `late`, not `incomplete_shift`. This keeps the stronger admin signal visible; the shift completion detail is available in the drill-down (see requirement below).
+>
+> **Drill-down requirement:** Every consumer that shows a single chip (live board, date board, calendar) must also provide a drill-down view where the admin can see both punctuality and shift completion as separate tags. The drill-down is not constrained by the single-chip rule — it should show all applicable tags. For example, a late employee who didn't meet the minimum should show both `late` and `incomplete_shift` in the drill-down; a late employee who did meet the minimum should show `late` and `fulfilled_shift`. Each page owns its own drill-down UX — this plan only mandates that both dimensions are visible somewhere on every consumer.
 >
 > **Known gap:** An employee with no shift configured is indistinguishable from one who is legitimately on a weekend/holiday — both land in `neutral`. This hides config drift. Acceptable for now; see Future Work.
 
@@ -78,13 +83,15 @@ These states are used on the team attendance page when viewing a specific histor
 | State | Arabic Label | Definition |
 |---|---|---|
 | `fulfilled_shift` | أكمل الدوام | Employee was present (not late) and met the shift minimum hours. |
-| `incomplete_shift` | دوام غير مكتمل | Employee was present but didn't meet the shift minimum hours (`is_short_day=true`). |
+| `incomplete_shift` | دوام غير مكتمل | Employee was present but didn't meet the shift minimum hours (`is_incomplete_shift=true`). |
 | `late` | متأخر | Employee worked but arrived late. |
 | `absent` | غائب | No qualifying sessions on a working day. |
 | `on_leave` | في إجازة | Approved leave for this date. |
 | `neutral` | خارج التصنيف | Off-day, no shift, or other non-standard situation. |
 
 > **Note:** Date board states are derived from day states + shift config. They add shift-fulfillment context (`fulfilled_shift` vs `incomplete_shift`) that raw day states don't carry.
+>
+> **Chip priority and drill-down:** The same rules defined for the live board apply here. Single chip per employee, resolved by the same priority order: `on_leave` → `absent` → `late` → `incomplete_shift` → `fulfilled_shift`. A late employee who also didn't complete the shift shows `late`, not `incomplete_shift`. The drill-down shows all applicable tags (e.g., `late` + `incomplete_shift` together). Filters (e.g., "show me all incomplete shifts") operate on the underlying `is_incomplete_shift` flag, not the display chip — so late employees with incomplete shifts appear when filtering by incomplete shift.
 
 
 ## State Consumers
@@ -102,7 +109,8 @@ These are the places in the admin panel that consume attendance state. Each has 
 
 1. **Day/Session architecture:** Yes. Two-level hierarchy — `attendance_sessions` (raw punches) → `attendance_daily_summary` (daily verdict). Sessions feed into days, never the reverse.
 2. **Overtime is a flag, not a status:** Session `status` is always `present` or `late`. `is_overtime` is an orthogonal boolean. This allows `late` + `is_overtime` combinations.
-3. **Day modifiers over day states:** `has_overtime` and `is_short_day` are independent flags on days, not competing states. Day states stay purely about punctuality/attendance. `overtime_only` → `absent` + `has_overtime`. `incomplete_shift` → `present`/`late` + `is_short_day`.
+3. **Day modifiers over day states:** `has_overtime` and `is_incomplete_shift` are independent flags on days, not competing states. Day states stay purely about punctuality/attendance. `overtime_only` → `absent` + `has_overtime`. `incomplete_shift` → `present`/`late` + `is_incomplete_shift`.
+6. **Single chip, two-layer resolution for all boards:** Both the live board and date board show a single chip per employee, resolved by priority: `on_leave` → `absent` → `late` → `incomplete_shift` → `fulfilled_shift`. This is a display concern only. The underlying data always computes both punctuality (`present`/`late`) and shift completion (`is_incomplete_shift`) independently. Filters operate on the underlying flags, not the display chip — so filtering by "incomplete shift" returns all employees who didn't meet the minimum, including those whose chip shows `late`. Every consumer must provide a drill-down where both dimensions are visible.
 4. **Materialize `absent`, derive `weekend`/`future`/`not_joined`:** `absent` is written by an idempotent end-of-day job so historical verdicts are stable across schedule/join-date edits and admin overrides are simple row updates. The other three are pure functions of `(date, employee, schedule, join_date, today)` and don't need rows. Stored rows are authoritative for past dates — reads must not recompute them. Holiday is out of scope for now; it will slot in later as another sourced state without schema change.
 
    | State | Storage | How it gets set |
@@ -125,6 +133,7 @@ These are the places in the admin panel that consume attendance state. Each has 
 - **`mark-absent` only runs for today:** No way to backfill an arbitrary date range, so a missed run leaves gaps. The underlying SQL function is idempotent and range-safe; the edge function should expose that.
 - **Weekend stores a row with `effective_status = NULL`:** Conflicts with decision #4 (weekend is derived). Decide whether to stop writing these rows or treat weekend as a sourced state.
 - **`overtime_only` still exists as a status value:** Conflicts with decision #3 (overtime is a modifier). Migrate to `absent` + `has_overtime`.
+- **`is_short_day` exists in the codebase:** The current code uses a field called `is_short_day`. This needs to be renamed to `is_incomplete_shift` to match the plan, and its logic should be reviewed to ensure it matches the definition here (employee worked but didn't meet shift minimum hours). Whether the existing implementation fits as-is or needs adjustment, the rename is required either way.
 - **Recalc reads current schedule, not historical:** Re-running recalc for a past date uses today's `work_days`/policy, so a schedule edit retroactively flips old verdicts. Breaks historical stability under idempotent re-runs.
 
 
