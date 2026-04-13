@@ -1138,20 +1138,20 @@ These items are mentioned in the plan's Future Work / Open Concerns but are NOT 
 Track completion of every task here. **This section is the single source of truth for multi-run continuity.**
 
 ### Phase 1: Database Schema Migration
-- [ ] Task 1.1 — Add `has_overtime` column to `attendance_daily_summary`
-- [ ] Task 1.2 — Rename `is_short_day` to `is_incomplete_shift`
-- [ ] Task 1.3 — Remove `overtime_only` from check constraint (migrate existing rows first)
-- [ ] Task 1.4 — Verify unique constraints and indexes
-- [ ] Task 1.5 — Verify off-day row handling decision
+- [x] Task 1.1 — Add `has_overtime` column to `attendance_daily_summary`
+- [x] Task 1.2 — Rename `is_short_day` to `is_incomplete_shift`
+- [x] Task 1.3 — Remove `overtime_only` from check constraint (migrate existing rows first)
+- [x] Task 1.4 — Verify unique constraints and indexes
+- [x] Task 1.5 — Verify off-day row handling decision
 
 ### Phase 2: Backend SQL Functions
-- [ ] Task 2.1 — Update `recalculate_attendance_daily_summary()`
-- [ ] Task 2.2 — Update `resolve_team_attendance_date_state()`
-- [ ] Task 2.3 — Update `resolve_team_attendance_live_state()` (add `on_break`, `incomplete_shift`)
-- [ ] Task 2.4 — Update `get_team_attendance_day()`
-- [ ] Task 2.5 — Update `get_redacted_department_availability()`
-- [ ] Task 2.6 — Update `get_redacted_team_attendance_day()`
-- [ ] Task 2.7 — Verify leave recalc trigger still works
+- [x] Task 2.1 — Update `recalculate_attendance_daily_summary()`
+- [x] Task 2.2 — Update `resolve_team_attendance_date_state()`
+- [x] Task 2.3 — Update `resolve_team_attendance_live_state()` (add `on_break`, `incomplete_shift`)
+- [x] Task 2.4 — Update `get_team_attendance_day()`
+- [x] Task 2.5 — Update `get_redacted_department_availability()`
+- [x] Task 2.6 — Update `get_redacted_team_attendance_day()`
+- [x] Task 2.7 — Verify leave recalc trigger still works
 
 ### Phase 3: Edge Functions (Deno/TypeScript)
 - [ ] Task 3.1 — Update punch handler (remove `overtime_only`, rename fields, add `has_overtime`)
@@ -1194,7 +1194,23 @@ Track completion of every task here. **This section is the single source of trut
 - [ ] Grep codebase for `is_short_day` — only in historical migrations
 - [ ] Grep codebase for `attendance_logs` — no application code references
 
+### Run 1 log
+- [x] Task 1.1 — Added `attendance_daily_summary.has_overtime` in migration `023_state_system_alignment.sql` and backfilled historical overtime flags — 2026-04-13 / Run 1
+- [x] Task 1.2 — Renamed `is_short_day` to `is_incomplete_shift` and normalized legacy non-present rows to clear the renamed flag — 2026-04-13 / Run 1
+- [x] Task 1.3 — Migrated stored `overtime_only` rows to `absent + has_overtime=true` and replaced the summary status check constraint — 2026-04-13 / Run 1
+- [x] Task 1.4 — Verified the existing `(user_id, date)` uniqueness/indexing still fits; no additional index change needed in Phase 1 — 2026-04-13 / Run 1
+- [x] Task 1.5 — Implemented off-day cleanup by deleting empty neutral summary rows and making recalc skip persistence when there are no sessions and no sourced state — 2026-04-13 / Run 1
+- [x] Task 2.1 — Rewrote `recalculate_attendance_daily_summary()` for `has_overtime`, `is_incomplete_shift`, and `absent` overtime-only handling — 2026-04-13 / Run 1
+- [x] Task 2.2 — Updated `resolve_team_attendance_date_state()` to the renamed modifier while preserving the date-state priority rules — 2026-04-13 / Run 1
+- [x] Task 2.3 — Replaced `resolve_team_attendance_live_state()` with `on_break` and post-window `incomplete_shift` handling; kept off-day/no-shift rows `neutral` per the source-of-truth plan — 2026-04-13 / Run 1
+- [x] Task 2.4 — Updated `get_team_attendance_day()` to the new summary fields and live/date state resolvers — 2026-04-13 / Run 1
+- [x] Task 2.5 — Updated `get_redacted_department_availability()` so chip state and availability sectioning are derived independently (`team_live_state` vs open-session availability) — 2026-04-13 / Run 1
+- [x] Task 2.6 — Updated `get_redacted_team_attendance_day()` to use `is_incomplete_shift`, stored `has_overtime`, and the unified date-state resolver — 2026-04-13 / Run 1
+- [x] Task 2.7 — Verified `trigger_recalc_summary_on_leave_change()` still calls the unchanged `recalculate_attendance_daily_summary(uuid, date)` signature, so no trigger edit was needed — 2026-04-13 / Run 1
+
+--- Run 1 ended ---
+
 ---
 
 ### Next run should start with:
-Task 1.1 (Phase 1 — Database Schema Migration). No work has been done yet.
+Task 3.1 (Phase 3 — Edge Functions). Phases 1-2 are complete in `supabase/migrations/023_state_system_alignment.sql`; the TypeScript/service/frontend layers still expect legacy attendance fields and status values.
