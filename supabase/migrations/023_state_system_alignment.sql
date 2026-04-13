@@ -280,7 +280,9 @@ $$;
 grant execute on function public.recalculate_attendance_daily_summary(uuid, date) to authenticated;
 grant execute on function public.recalculate_attendance_daily_summary(uuid, date) to service_role;
 
-create or replace function public.resolve_team_attendance_date_state(
+drop function if exists public.resolve_team_attendance_date_state(text, boolean, boolean, boolean, boolean);
+
+create function public.resolve_team_attendance_date_state(
   p_effective_status text,
   p_is_incomplete_shift boolean,
   p_has_shift boolean,
