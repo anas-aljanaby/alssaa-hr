@@ -4,8 +4,11 @@ import { sendWebPushToUser } from '../_shared/web-push.ts';
 
 // deno-lint-ignore no-explicit-any
 type ServiceClient = any;
-// deno-lint-ignore no-explicit-any
-type UserClient = any;
+type UserClient = {
+  auth: {
+    getUser: () => Promise<{ data: { user: { id: string } | null }; error: unknown | null }>;
+  };
+};
 
 export type SendTestNotificationDeps = {
   createUserClient: (authHeader: string) => UserClient;
@@ -53,7 +56,7 @@ export async function handleSendTestNotification(
     const {
       data: { user },
       error: userError,
-    } = await userClient.auth.getUser(token);
+    } = await userClient.auth.getUser();
 
     if (userError || !user) {
       return jsonResponse({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401);
