@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.mark-absent]
 verify_jwt = false
+
+[functions.send-scheduled-notifications]
+verify_jwt = false
