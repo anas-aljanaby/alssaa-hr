@@ -130,6 +130,52 @@ registerRoute(
 // browser show its native network error page.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Web Push
+// ---------------------------------------------------------------------------
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload: { title?: string; body?: string; url?: string } = {};
+  try {
+    payload = event.data.json() as typeof payload;
+  } catch {
+    payload = { title: 'إشعار جديد', body: event.data.text() };
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title ?? 'إشعار جديد', {
+      body: payload.body ?? '',
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-192x192.png',
+      dir: 'rtl',
+      lang: 'ar',
+      data: { url: payload.url ?? '/notifications' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url: string = (event.notification.data as { url?: string })?.url ?? '/notifications';
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if ('focus' in client) return client.focus();
+        }
+        return self.clients.openWindow(url);
+      })
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Offline fallback
+// ---------------------------------------------------------------------------
+
 setCatchHandler(async ({ request }) => {
   if (request.mode === 'navigate' || request.destination === 'document') {
     const cached = await matchPrecache('/offline.html');

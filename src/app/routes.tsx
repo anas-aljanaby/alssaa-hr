@@ -25,6 +25,7 @@ const UserDetailsPage = React.lazy(() => import('./pages/admin/UserDetailsPage')
 const SecurityPrivacyPage = React.lazy(() => import('./pages/employee/SecurityPrivacyPage').then(m => ({ default: m.SecurityPrivacyPage })));
 const TermsPage = React.lazy(() => import('./pages/employee/TermsPage').then(m => ({ default: m.TermsPage })));
 const AttendancePolicyPage = React.lazy(() => import('./pages/employee/AttendancePolicyPage').then(m => ({ default: m.AttendancePolicyPage })));
+const NotificationSettingsPage = React.lazy(() => import('./pages/admin/NotificationSettingsPage').then(m => ({ default: m.NotificationSettingsPage })));
 
 function Lazy({ children }: { children: React.ReactNode }) {
   return (
@@ -75,6 +76,7 @@ export const router = createBrowserRouter([
           { path: 'departments/:deptId', element: <Lazy><DepartmentDetailsPage /></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
           { path: 'transfer-general-manager', element: <Lazy><RequireAdmin><TransferGeneralManagerPage /></RequireAdmin></Lazy> },
+          { path: 'notification-settings', element: <Lazy><RequireAdmin><NotificationSettingsPage /></RequireAdmin></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
         ],
       },
