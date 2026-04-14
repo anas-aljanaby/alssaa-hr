@@ -168,6 +168,28 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     }
 
     const dayOfWeek = toOrgLocalDate(effectiveNow).getUTCDay();
+    // Load notification settings keyed by org_id (lazy cache across sessions)
+    const notifSettingsCache: Record<string, {
+      title: string;
+      title_ar: string;
+      message: string;
+      message_ar: string;
+    } | null> = {};
+
+    async function getAutoPunchOutNotifSetting(orgId: string) {
+      if (orgId in notifSettingsCache) return notifSettingsCache[orgId];
+      const { data } = await admin
+        .from('notification_settings')
+        .select('title, title_ar, message, message_ar')
+        .eq('org_id', orgId)
+        .eq('type', 'auto_punch_out_alert')
+        .eq('enabled', true)
+        .maybeSingle();
+      const result = (data as { title: string; title_ar: string; message: string; message_ar: string } | null) ?? null;
+      notifSettingsCache[orgId] = result;
+      return result;
+    }
+
     let processed = 0;
 
     for (const session of openSessions) {
@@ -281,13 +303,18 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         }
       }
 
+      const notifSetting = await getAutoPunchOutNotifSetting(session.org_id);
       await admin.from('notifications').insert({
         org_id: session.org_id,
         user_id: session.user_id,
-        title: 'Forgot to punch out',
-        title_ar: 'نسيت تسجيل الانصراف',
-        message: `The system recorded your departure at ${actualCheckoutTime}. If this is incorrect, submit a correction request.`,
-        message_ar: `تم تسجيل انصرافك تلقائياً الساعة ${actualCheckoutTime}. إن كان ذلك غير صحيح، قدم طلب تصحيح.`,
+        title: notifSetting?.title ?? 'Forgot to punch out',
+        title_ar: notifSetting?.title_ar ?? 'نسيت تسجيل الانصراف',
+        message: notifSetting
+          ? `${notifSetting.message} (${actualCheckoutTime})`
+          : `The system recorded your departure at ${actualCheckoutTime}. If this is incorrect, submit a correction request.`,
+        message_ar: notifSetting
+          ? `${notifSetting.message_ar} (الساعة ${actualCheckoutTime})`
+          : `تم تسجيل انصرافك تلقائياً الساعة ${actualCheckoutTime}. إن كان ذلك غير صحيح، قدم طلب تصحيح.`,
         type: 'attendance',
       });
 

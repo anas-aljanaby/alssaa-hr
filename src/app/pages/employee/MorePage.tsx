@@ -20,6 +20,7 @@ import {
   Clock,
   LoaderCircle,
   WandSparkles,
+  Bell,
 } from 'lucide-react';
 
 export function MorePage() {
@@ -130,6 +131,13 @@ export function MorePage() {
                     bgColor: 'bg-purple-50',
                     onClick: () => navigate('/transfer-general-manager'),
                   },
+              {
+                icon: Bell,
+                label: 'إعدادات الإشعارات',
+                color: 'text-indigo-500',
+                bgColor: 'bg-indigo-50',
+                onClick: () => navigate('/notification-settings'),
+              },
               {
                 icon: Calendar,
                 label: 'تسجيل الحضور',

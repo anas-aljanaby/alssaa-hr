@@ -282,9 +282,10 @@ Deno.test('part 6.5 multiple open non-overtime sessions are handled consistently
   ];
   const q: QResult[] = [
     { data: logs, error: null },
-    // session 1 profile + policy + update + notification
+    // session 1 profile + policy + update + notif settings + notification
     { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
     { data: { work_end_time: '18:00', auto_punch_out_buffer_minutes: 5, weekly_off_days: [5, 6] }, error: null },
+    { data: null, error: null },
     { data: null, error: null },
     { data: null, error: null },
     // session 2 profile + policy + update + notification

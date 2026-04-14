@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
-FUNCTIONS=(invite-user delete-user punch auto-punch-out mark-absent)
+FUNCTIONS=(invite-user delete-user punch auto-punch-out mark-absent send-scheduled-notifications)
 
 echo "Deploying Edge Functions..."
 for fn in "${FUNCTIONS[@]}"; do
