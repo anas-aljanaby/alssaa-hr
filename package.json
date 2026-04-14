@@ -12,7 +12,7 @@
     "setup:auto-punch-out-schedule": "bash scripts/setup-auto-punch-out-schedule.sh",
     "setup:scheduled-notifications": "bash scripts/setup-scheduled-notifications.sh",
     "test": "vitest run",
-    "test:edge": "TZ=UTC deno test --allow-env supabase/functions",
+    "test:edge": "TZ=UTC deno test --allow-env --node-modules-dir=none supabase/functions",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky"
@@ -92,7 +92,8 @@
     "tailwindcss": "4.1.12",
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.1",
+    "web-push": "^3.6.7"
   },
   "peerDependencies": {
     "react": "18.3.1",

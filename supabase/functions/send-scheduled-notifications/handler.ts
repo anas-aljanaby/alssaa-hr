@@ -6,6 +6,7 @@
 //   • punch_out_reminder  – X minutes before work ends
 
 import { corsHeaders } from '../_shared/cors.ts';
+import { sendWebPushToUser } from '../_shared/web-push.ts';
 
 const UTC_OFFSET_HOURS = 3; // UTC+3
 
@@ -234,7 +235,7 @@ export async function handleSendScheduledNotifications(
 
           // Web push: send to all subscribed devices for this user
           // Requires VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT env vars.
-          await trySendWebPush(admin, profile.id, {
+          await sendWebPushToUser(admin, profile.id, {
             title: setting.title_ar,
             body: setting.message_ar,
             url: '/notifications',
@@ -254,48 +255,5 @@ export async function handleSendScheduledNotifications(
       JSON.stringify({ error: e instanceof Error ? e.message : 'Internal error', code: 'INTERNAL' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  }
-}
-
-/** Send a web push notification to all subscribed devices for a user.
- *  Silently skips if VAPID keys are not configured or the send fails. */
-async function trySendWebPush(
-  admin: ServiceClient,
-  userId: string,
-  payload: { title: string; body: string; url?: string }
-): Promise<void> {
-  const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
-  const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
-  const vapidSubject = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:admin@alssaa.com';
-
-  if (!vapidPublicKey || !vapidPrivateKey) return;
-
-  const { data: subscriptions } = await admin
-    .from('push_subscriptions')
-    .select('id, endpoint, subscription')
-    .eq('user_id', userId);
-
-  if (!subscriptions?.length) return;
-
-  // Lazy-import web-push (only when keys are configured)
-  const webpush = (await import('npm:web-push')).default;
-  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
-
-  const staleIds: string[] = [];
-
-  for (const row of subscriptions as { id: string; endpoint: string; subscription: object }[]) {
-    try {
-      await webpush.sendNotification(row.subscription, JSON.stringify(payload));
-    } catch (err) {
-      // 410 Gone or 404 → subscription is no longer valid, clean it up
-      const statusCode = (err as { statusCode?: number })?.statusCode;
-      if (statusCode === 410 || statusCode === 404) {
-        staleIds.push(row.id);
-      }
-    }
-  }
-
-  if (staleIds.length > 0) {
-    await admin.from('push_subscriptions').delete().in('id', staleIds);
   }
 }

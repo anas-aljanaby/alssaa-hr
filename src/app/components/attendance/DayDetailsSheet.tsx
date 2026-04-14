@@ -211,12 +211,15 @@ export function DayDetailsSheet({ userId, date, summary = null, onClose }: Props
 
   return (
     <Drawer open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }} direction="bottom">
-      <DrawerContent className="max-h-[88vh] overflow-y-auto">
-        <DrawerHeader className="pb-2">
+      <DrawerContent className="max-h-[88vh] flex flex-col overflow-hidden p-0">
+        <DrawerHeader className="shrink-0 pb-2 pt-2">
           <DrawerTitle className="text-right text-base">تفاصيل اليوم</DrawerTitle>
         </DrawerHeader>
 
-        <div className="px-4 pb-8">
+        <div
+          data-vaul-no-drag
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-4 pb-24 [-webkit-overflow-scrolling:touch]"
+        >
           {loading ? (
             <div className="space-y-3 animate-pulse">
               <div className="h-5 w-1/2 rounded bg-gray-100" />

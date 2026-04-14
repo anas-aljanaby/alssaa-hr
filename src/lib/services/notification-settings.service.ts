@@ -20,6 +20,11 @@ export type NotificationSetting = {
   updated_at: string;
 };
 
+type EdgeInvokeResult = {
+  data?: unknown;
+  error?: { message?: string } | null;
+};
+
 export async function getNotificationSettings(): Promise<NotificationSetting[]> {
   const { data, error } = await supabase
     .from('notification_settings')
@@ -41,4 +46,56 @@ export async function updateNotificationSetting(
     .single();
   if (error) throw error;
   return data as NotificationSetting;
+}
+
+export async function sendNotificationSettingTest(
+  settingId: string
+): Promise<{ totalUsers: number; pushedUsers: number; deliveredPushes: number }> {
+  const sessionResult = await supabase.auth.getSession();
+  const session = sessionResult?.data?.session;
+  const sessionError = sessionResult?.error;
+  if (sessionError || !session?.access_token) {
+    throw new Error('انتهت الجلسة أو أنك غير مسجل الدخول. يرجى تسجيل الدخول مرة أخرى.');
+  }
+
+  const invoked = await supabase.functions.invoke('send-test-notification', {
+    method: 'POST',
+    body: { settingId },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  }) as EdgeInvokeResult;
+
+  const edgeData = invoked.data as {
+    error?: string;
+    code?: string;
+    totalUsers?: number;
+    pushedUsers?: number;
+    deliveredPushes?: number;
+  } | null | undefined;
+  const edgeError = invoked.error;
+
+  if (edgeData?.error || edgeError?.message) {
+    const code = edgeData?.code;
+    if (code === 'UNAUTHORIZED') {
+      throw new Error('انتهت الجلسة أو أنك غير مسجل الدخول. يرجى تسجيل الدخول مرة أخرى.');
+    }
+    if (code === 'FORBIDDEN') {
+      throw new Error('هذه العملية متاحة للمدير العام فقط.');
+    }
+    if (code === 'SETTING_NOT_FOUND') {
+      throw new Error('تعذر العثور على نوع الإشعار المطلوب اختباره.');
+    }
+    if (code === 'NO_PUSH_CONFIG') {
+      throw new Error('إشعارات الجهاز غير مفعّلة على الخادم بعد.');
+    }
+
+    throw new Error(edgeData?.error || edgeError?.message || 'تعذر إرسال الإشعار التجريبي.');
+  }
+
+  return {
+    totalUsers: Number(edgeData?.totalUsers ?? 0),
+    pushedUsers: Number(edgeData?.pushedUsers ?? 0),
+    deliveredPushes: Number(edgeData?.deliveredPushes ?? 0),
+  };
 }
