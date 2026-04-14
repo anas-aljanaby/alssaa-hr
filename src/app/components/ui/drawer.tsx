@@ -49,8 +49,12 @@ const DrawerOverlay = React.forwardRef<
 function DrawerContent({
   className,
   children,
+  hideHandleBar = false,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Content>) {
+}: React.ComponentProps<typeof DrawerPrimitive.Content> & {
+  /** When true, omit the default pill; use with `Drawer` `handleOnly` and `<DrawerHandle />`. */
+  hideHandleBar?: boolean;
+}) {
   return (
     <DrawerPortal data-slot="drawer-portal">
       <DrawerOverlay />
@@ -66,12 +70,34 @@ function DrawerContent({
         )}
         {...props}
       >
-        <div className="bg-muted mx-auto mt-4 hidden h-2 w-[100px] shrink-0 rounded-full group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
+        {!hideHandleBar ? (
+          <div className="bg-muted mx-auto mt-4 hidden h-2 w-[100px] shrink-0 rounded-full group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
+        ) : null}
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>
   );
 }
+
+const DrawerHandle = React.forwardRef<
+  React.ComponentRef<typeof DrawerPrimitive.Handle>,
+  React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Handle>
+>(function DrawerHandle({ className, ...props }, ref) {
+  return (
+    <DrawerPrimitive.Handle
+      ref={ref}
+      data-slot="drawer-handle"
+      className={cn(
+        "mx-auto mt-3 hidden shrink-0 group-data-[vaul-drawer-direction=bottom]/drawer-content:block",
+        className,
+      )}
+      {...props}
+    >
+      <div className="bg-muted mx-auto h-2 w-[100px] rounded-full" />
+    </DrawerPrimitive.Handle>
+  );
+});
+DrawerHandle.displayName = "DrawerHandle";
 
 function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -126,6 +152,7 @@ export {
   DrawerTrigger,
   DrawerClose,
   DrawerContent,
+  DrawerHandle,
   DrawerHeader,
   DrawerFooter,
   DrawerTitle,

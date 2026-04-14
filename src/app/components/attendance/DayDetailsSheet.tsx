@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Drawer,
   DrawerContent,
+  DrawerHandle,
   DrawerHeader,
   DrawerTitle,
 } from '@/app/components/ui/drawer';
@@ -210,8 +211,14 @@ export function DayDetailsSheet({ userId, date, summary = null, onClose }: Props
   const overtimeMinutes = overtimeSessions.reduce((sum, session) => sum + (session.duration_minutes ?? 0), 0);
 
   return (
-    <Drawer open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }} direction="bottom">
-      <DrawerContent className="max-h-[88vh] flex flex-col overflow-hidden p-0">
+    <Drawer
+      open={open}
+      handleOnly
+      onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}
+      direction="bottom"
+    >
+      <DrawerContent hideHandleBar className="max-h-[88vh] flex flex-col overflow-hidden p-0">
+        <DrawerHandle className="cursor-grab active:cursor-grabbing" />
         <DrawerHeader className="shrink-0 pb-2 pt-2">
           <DrawerTitle className="text-right text-base">تفاصيل اليوم</DrawerTitle>
         </DrawerHeader>
