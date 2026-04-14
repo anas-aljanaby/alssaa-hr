@@ -5,7 +5,7 @@ import type { AttendanceLog, TodayRecord } from '@/lib/services/attendance.servi
 import { isOfflineError } from '@/lib/network';
 import { cachedFetch } from '@/lib/offlineCache';
 
-const EMPTY_TODAY: TodayRecord = { log: null, punches: [], shift: null };
+const EMPTY_TODAY: TodayRecord = { punches: [], shift: null };
 
 interface UseTodayPunchOptions {
   userId?: string;
@@ -34,7 +34,7 @@ export function useTodayPunch({ userId, onLogUpdated }: UseTodayPunchOptions) {
       setToday(result.data);
       setLastUpdatedAt(result.fetchedAt);
       setFromCache(result.fromCache);
-      onLogUpdated?.(result.data.log);
+      onLogUpdated?.(attendanceService.toAttendanceLog(result.data));
     } catch (error) {
       setToday(EMPTY_TODAY);
       setFromCache(false);
@@ -80,12 +80,11 @@ export function useTodayPunch({ userId, onLogUpdated }: UseTodayPunchOptions) {
     try {
       const result = await checkOut(userId);
       if (navigator.vibrate) navigator.vibrate(100);
-      setToday((prev) => ({ ...prev, log: result.log }));
       onLogUpdated?.(result.log);
       try {
         await refreshToday();
       } catch {
-        // Keep optimistic log if refresh fails.
+        // Keep the previous today snapshot if the refresh fails.
       }
     } finally {
       actionInFlightRef.current = false;

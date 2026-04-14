@@ -127,9 +127,10 @@ function deriveStatusMeta(record: DayRecord | null, summary: DayDetailsSheetSumm
     record?.summary?.has_overtime === true ||
     (record?.summary?.total_overtime_minutes ?? 0) > 0 ||
     record?.sessions?.some((session) => session.is_overtime) === true;
+  const firstSessionStatus = record?.sessions?.find((session) => !session.is_overtime)?.status ?? null;
   const displayStatus =
     record?.summary?.effective_status ??
-    (hasOvertime ? 'overtime' : record?.log?.status);
+    (hasOvertime ? 'overtime' : firstSessionStatus);
 
   if (
     displayStatus &&
@@ -162,7 +163,11 @@ function deriveStatusMeta(record: DayRecord | null, summary: DayDetailsSheetSumm
 
 function calculateLateMinutes(record: DayRecord | null): number | null {
   if (!record?.shift || record.summary?.effective_status !== 'late') return null;
-  const firstCheckIn = record.summary?.first_check_in ?? record.log?.check_in_time ?? null;
+  const firstCheckIn =
+    record.summary?.first_check_in ??
+    [...(record.sessions ?? [])].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time))[0]
+      ?.check_in_time ??
+    null;
   if (!firstCheckIn) return null;
 
   const lateMinutes =
@@ -190,6 +195,14 @@ export function DayDetailsSheet({ userId, date, summary = null, onClose }: Props
   const open = !!date;
   const statusMeta = useMemo(() => deriveStatusMeta(record, summary), [record, summary]);
   const sessionMap = new Map((record?.sessions ?? []).map((session) => [session.id, session]));
+  const orderedSessions = [...(record?.sessions ?? [])].sort((a, b) =>
+    a.check_in_time.localeCompare(b.check_in_time)
+  );
+  const firstCheckIn = record?.summary?.first_check_in ?? orderedSessions[0]?.check_in_time ?? null;
+  const lastCheckOut =
+    record?.summary?.last_check_out ??
+    [...orderedSessions].reverse().find((session) => !!session.check_out_time)?.check_out_time ??
+    null;
   const lateMinutes = useMemo(() => calculateLateMinutes(record), [record]);
   const regularSessions = (record?.sessions ?? []).filter((session) => !session.is_overtime);
   const overtimeSessions = (record?.sessions ?? []).filter((session) => session.is_overtime);
@@ -242,8 +255,8 @@ export function DayDetailsSheet({ userId, date, summary = null, onClose }: Props
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <MetricCard label="أول دخول" value={formatTime(record.summary?.first_check_in ?? record.log?.check_in_time)} />
-                <MetricCard label="آخر خروج" value={formatTime(record.summary?.last_check_out ?? record.log?.check_out_time)} />
+                <MetricCard label="أول دخول" value={formatTime(firstCheckIn)} />
+                <MetricCard label="آخر خروج" value={formatTime(lastCheckOut)} />
                 <MetricCard label="إجمالي العمل" value={formatMinutes(record.totalMinutesWorked)} />
                 <MetricCard label="جلسات عادية" value={regularSessions.length > 0 ? `${regularSessions.length} • ${formatMinutes(regularMinutes)}` : '—'} />
                 <MetricCard label="جلسات إضافية" value={overtimeSessions.length > 0 ? `${overtimeSessions.length} • ${formatMinutes(overtimeMinutes)}` : '—'} />

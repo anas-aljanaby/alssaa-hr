@@ -1168,7 +1168,7 @@ Track completion of every task here. **This section is the single source of trut
 - [x] Task 4.7 — Verify `resolveDisplayStatus.ts` needs no changes
 
 ### Phase 5: Service Layer
-- [~] Task 5.1 — Update `attendance.service.ts` (all sub-tasks A through J)
+- [x] Task 5.1 — Update `attendance.service.ts` (all sub-tasks A through J)
 - [x] Task 5.2 — Update `database.types.ts` (regenerate or manual edit)
 - [x] Task 5.3 — Update `ui-helpers.ts`
 
@@ -1184,11 +1184,11 @@ Track completion of every task here. **This section is the single source of trut
 
 ### Phase 7: Legacy Cleanup & Consolidation
 - [x] Task 7.1 — Remove `attendance_logs` from application code
-- [ ] Task 7.2 — Consolidate status enums (assessment + action)
-- [ ] Task 7.3 — Verify weekend row handling end-to-end
+- [x] Task 7.2 — Consolidate status enums (assessment + action)
+- [x] Task 7.3 — Verify weekend row handling end-to-end
 
 ### Final Verification
-- [ ] Run `npx tsc --noEmit` — zero errors
+- [~] Run `npx tsc --noEmit` — blocked: `typescript` is not installed locally and `npx` cannot fetch it without network access
 - [x] Run `npm test` — all tests pass
 - [x] Grep codebase for `overtime_only` — only in historical migrations
 - [x] Grep codebase for `is_short_day` — only in historical migrations
@@ -1243,3 +1243,16 @@ Track completion of every task here. **This section is the single source of trut
 
 ### Next run should start with:
 Task 5.1 follow-up / Task 7.2. The state-model migration is implemented through backend, service, UI, and tests; the main open decision is whether to remove the compatibility `log` field from `TodayRecord` / `DayRecord` or formalize it as a long-term adapter while consolidating the remaining overlapping enums.
+
+### Run 3 log
+- [x] Task 5.1 — Removed the synthetic `log` field from `TodayRecord` / `DayRecord`, kept `AttendanceLog` as an explicit compatibility adapter via `toAttendanceLog()`, and updated the affected hooks, admin UI, day details sheet, fixtures, and tests — 2026-04-14 / Run 3
+- [x] Task 7.2 — Consolidated remaining service-layer status aliases onto shared `DayStatus` / `TeamAttendanceDateState`-derived types and aligned working-day totals to exclude future holiday states — 2026-04-14 / Run 3
+- [x] Task 7.3 — Added end-to-end history coverage that keeps worked weekends while skipping empty off-days, then verified with `npm test`, `npm run test:edge`, and `npm run build` — 2026-04-14 / Run 3
+- [~] Final verification — `npm test`, `npm run test:edge`, and `npm run build` all pass. `npx tsc --noEmit` still cannot run because `typescript` is not installed in `node_modules` and sandboxed `npx` cannot reach the npm registry — 2026-04-14 / Run 3
+
+--- Run 3 ended ---
+
+---
+
+### Next run should start with:
+No implementation tasks remain in this plan. If strict `tsc` verification is required, install `typescript` as a project dependency (or provide an approved local compiler) and rerun `npx tsc --noEmit`.

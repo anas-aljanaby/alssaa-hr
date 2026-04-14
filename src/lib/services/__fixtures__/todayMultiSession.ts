@@ -11,26 +11,26 @@ export const multiSessionDefaultShift = {
   minimumRequiredMinutes: null as number | null,
 };
 
-/** §24.1a: S1 closed, S2 open; aggregate `log` still has S1’s check_out_time. */
+/** §24.1a: S1 closed, S2 open; summary keeps the aggregate first/last times. */
 export function todayRecord24_1a(): TodayRecord {
   return {
-    log: {
+    punches: [],
+    shift: { ...multiSessionDefaultShift },
+    summary: {
       id: 'pseudo-two',
       org_id: 'o1',
       user_id: 'u1',
       date: '2025-06-10',
-      check_in_time: '08:30',
-      check_out_time: '12:00',
-      check_in_lat: null,
-      check_in_lng: null,
-      check_out_lat: null,
-      check_out_lng: null,
-      status: 'present',
-      is_dev: false,
-      auto_punch_out: false,
+      first_check_in: '08:30',
+      last_check_out: '12:00',
+      total_work_minutes: 210,
+      total_overtime_minutes: 0,
+      effective_status: 'present',
+      has_overtime: false,
+      is_incomplete_shift: false,
+      session_count: 2,
+      updated_at: '2025-06-10T13:00:00Z',
     },
-    punches: [],
-    shift: { ...multiSessionDefaultShift },
     sessions: [
       {
         id: 's1',
@@ -72,26 +72,26 @@ export function todayRecord24_1a(): TodayRecord {
   };
 }
 
-/** §24.1: S1/S2 closed, S3 open; aggregate `log` check_out_time from S2. */
+/** §24.1: S1/S2 closed, S3 open; summary carries the aggregate first/last times from closed segments. */
 export function todayRecord24_1(): TodayRecord {
   return {
-    log: {
+    punches: [],
+    shift: { ...multiSessionDefaultShift },
+    summary: {
       id: 'pseudo-summary',
       org_id: 'o1',
       user_id: 'u1',
       date: '2025-06-10',
-      check_in_time: '08:30',
-      check_out_time: '14:00',
-      check_in_lat: null,
-      check_in_lng: null,
-      check_out_lat: null,
-      check_out_lng: null,
-      status: 'present',
-      is_dev: false,
-      auto_punch_out: false,
+      first_check_in: '08:30',
+      last_check_out: '14:00',
+      total_work_minutes: 270,
+      total_overtime_minutes: 0,
+      effective_status: 'present',
+      has_overtime: false,
+      is_incomplete_shift: false,
+      session_count: 3,
+      updated_at: '2025-06-10T14:30:00Z',
     },
-    punches: [],
-    shift: { ...multiSessionDefaultShift },
     sessions: [
       {
         id: 's1',

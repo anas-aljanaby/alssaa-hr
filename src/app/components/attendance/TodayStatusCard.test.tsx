@@ -16,7 +16,6 @@ const defaultShift = {
 
 function makeToday(weeklyOffDays: number[]): TodayRecord {
   return {
-    log: null,
     punches: [],
     shift: { ...defaultShift, weeklyOffDays },
   };
@@ -101,23 +100,28 @@ describe('TodayStatusCard overtime confirmation', () => {
     const onCheckOut = vi.fn();
 
     const today: TodayRecord = {
-      log: {
-        id: 'log-iso-in',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '2025-06-10T10:00:00Z',
-        check_out_time: null,
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'present',
-        is_dev: false,
-        auto_punch_out: false,
-      },
       punches: [],
       shift: { ...defaultShift },
+      sessions: [
+        {
+          id: 'log-iso-in',
+          org_id: 'o1',
+          user_id: 'u1',
+          date: '2025-06-10',
+          check_in_time: '2025-06-10T10:00:00Z',
+          check_out_time: null,
+          status: 'present',
+          is_overtime: false,
+          is_auto_punch_out: false,
+          is_early_departure: false,
+          needs_review: false,
+          duration_minutes: 0,
+          last_action_at: '2025-06-10T10:00:00Z',
+          is_dev: false,
+          created_at: '2025-06-10T10:00:00Z',
+          updated_at: '2025-06-10T10:00:00Z',
+        },
+      ],
     };
 
     render(
@@ -149,23 +153,28 @@ describe('TodayStatusCard overtime confirmation', () => {
     const onCheckOut = vi.fn();
 
     const today: TodayRecord = {
-      log: {
-        id: 'log-iso-20-2',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '2025-06-10T10:00:00.000Z',
-        check_out_time: null,
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'present',
-        is_dev: false,
-        auto_punch_out: false,
-      },
       punches: [],
       shift: { ...defaultShift },
+      sessions: [
+        {
+          id: 'log-iso-20-2',
+          org_id: 'o1',
+          user_id: 'u1',
+          date: '2025-06-10',
+          check_in_time: '2025-06-10T10:00:00.000Z',
+          check_out_time: null,
+          status: 'present',
+          is_overtime: false,
+          is_auto_punch_out: false,
+          is_early_departure: false,
+          needs_review: false,
+          duration_minutes: 0,
+          last_action_at: '2025-06-10T10:00:00.000Z',
+          is_dev: false,
+          created_at: '2025-06-10T10:00:00.000Z',
+          updated_at: '2025-06-10T10:00:00.000Z',
+        },
+      ],
     };
 
     render(
@@ -197,23 +206,23 @@ describe('TodayStatusCard overtime confirmation', () => {
     vi.setSystemTime(new Date('2025-06-10T13:20:00')); // Tuesday, before shift end
 
     const today: TodayRecord = {
-      log: {
+      punches: [],
+      shift: { ...defaultShift },
+      summary: {
         id: 'seg-1',
         org_id: 'o1',
         user_id: 'u1',
         date: '2025-06-10',
-        check_in_time: '13:15',
-        check_out_time: '13:16',
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'late',
-        is_dev: false,
-        auto_punch_out: false,
+        first_check_in: '13:15',
+        last_check_out: '13:16',
+        total_work_minutes: 1,
+        total_overtime_minutes: 0,
+        effective_status: 'late',
+        has_overtime: false,
+        is_incomplete_shift: true,
+        session_count: 1,
+        updated_at: '2025-06-10T13:16:00Z',
       },
-      punches: [],
-      shift: { ...defaultShift },
     };
 
     render(
@@ -239,23 +248,23 @@ describe('TodayStatusCard overtime confirmation', () => {
     vi.setSystemTime(new Date('2025-06-10T18:20:00')); // Tuesday, after shift end
 
     const today: TodayRecord = {
-      log: {
+      punches: [],
+      shift: { ...defaultShift },
+      summary: {
         id: 'seg-2',
         org_id: 'o1',
         user_id: 'u1',
         date: '2025-06-10',
-        check_in_time: '13:15',
-        check_out_time: '13:16',
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'late',
-        is_dev: false,
-        auto_punch_out: false,
+        first_check_in: '13:15',
+        last_check_out: '13:16',
+        total_work_minutes: 1,
+        total_overtime_minutes: 0,
+        effective_status: 'late',
+        has_overtime: false,
+        is_incomplete_shift: true,
+        session_count: 1,
+        updated_at: '2025-06-10T13:16:00Z',
       },
-      punches: [],
-      shift: { ...defaultShift },
     };
 
     render(
@@ -277,21 +286,6 @@ describe('TodayStatusCard overtime confirmation', () => {
     vi.setSystemTime(new Date('2025-06-10T18:10:00'));
 
     const today: TodayRecord = {
-      log: {
-        id: 'open-regular-pre-threshold',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '09:00',
-        check_out_time: null,
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'present',
-        is_dev: false,
-        auto_punch_out: false,
-      },
       punches: [],
       shift: { ...defaultShift },
       sessions: [
@@ -336,21 +330,6 @@ describe('TodayStatusCard overtime confirmation', () => {
     vi.setSystemTime(new Date('2025-06-10T18:30:00'));
 
     const today: TodayRecord = {
-      log: {
-        id: 'open-regular-post-threshold',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '09:00',
-        check_out_time: null,
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'present',
-        is_dev: false,
-        auto_punch_out: false,
-      },
       punches: [],
       shift: { ...defaultShift },
       sessions: [
@@ -395,21 +374,6 @@ describe('TodayStatusCard overtime confirmation', () => {
     vi.setSystemTime(new Date('2025-06-10T13:20:00'));
 
     const today: TodayRecord = {
-      log: {
-        id: 'seg-open',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '13:17',
-        check_out_time: null,
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'late',
-        is_dev: false,
-        auto_punch_out: false,
-      },
       punches: [],
       shift: { ...defaultShift },
       sessions: [
@@ -466,11 +430,11 @@ describe('TodayStatusCard overtime confirmation', () => {
   });
 
   /**
-   * Doc §24.1a: In → out → in again: second session open but pseudo `log` keeps first session’s
+   * Doc §24.1a: In → out → in again: second session open while the summary still exposes the last
 
    * `check_out_time` (same `buildPseudoLog` rule as multi-session). CTA must still be checkout.
    */
-  it('24.1a after second check-in bug-shaped aggregate log still shows checkout button', () => {
+  it('24.1a after second check-in aggregate summary still shows checkout button', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
     vi.setSystemTime(new Date('2025-06-10T13:20:00'));
@@ -491,11 +455,10 @@ describe('TodayStatusCard overtime confirmation', () => {
   });
 
   /**
-   * Doc §24.1: After two breaks, `getAttendanceToday` can expose a pseudo `log` whose `check_out_time`
-   * is the last *closed* session while a third session is still open. CTA must still be checkout.
-   * Fails until checked-in state considers open latest session (not only aggregate log).
+   * Doc §24.1: After two breaks, `getAttendanceToday` can expose summary timing from the last
+   * closed session while a third session is still open. CTA must still be checkout.
    */
-  it('24.1 open third session with bug-shaped aggregate log still shows checkout button', () => {
+  it('24.1 open third session with aggregate summary still shows checkout button', () => {
     const onCheckIn = vi.fn();
     const onCheckOut = vi.fn();
     vi.setSystemTime(new Date('2025-06-10T15:00:00'));

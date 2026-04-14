@@ -128,15 +128,6 @@ function setupSuccessfulDataLoad() {
   });
   mockListDepartments.mockResolvedValue([]);
   mockGetAttendanceToday.mockResolvedValue({
-    log: {
-      id: 'att-today',
-      user_id: 'user-2',
-      date: '2026-03-20',
-      check_in_time: '08:45',
-      check_out_time: '16:05',
-      status: 'present',
-      auto_punch_out: false,
-    },
     punches: [],
     shift: {
       workStartTime: '08:00',

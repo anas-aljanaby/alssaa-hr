@@ -121,7 +121,7 @@ describe('attendance.service', () => {
     expect(wallTimeToMinutes('10:05')).toBe(10 * 60 + 5);
   });
 
-  it('totalWorkedMinutesToday prefers summary then sessions then log span', async () => {
+  it('totalWorkedMinutesToday prefers summary then sessions', async () => {
     const { totalWorkedMinutesToday } = await import('./attendance.service');
     const shift = {
       workStartTime: '09:00',
@@ -134,7 +134,7 @@ describe('attendance.service', () => {
     };
     type TodayRecord = import('./attendance.service').TodayRecord;
     type ADS = import('./attendance.service').AttendanceDailySummary;
-    const base = { log: null, punches: [], shift } as TodayRecord;
+    const base = { punches: [], shift } as TodayRecord;
     expect(
       totalWorkedMinutesToday({
         ...base,
@@ -175,24 +175,11 @@ describe('attendance.service', () => {
     };
     const tuesday = new Date('2025-06-10T19:00:00');
     const fulfilled = {
-      log: {
-        id: '1',
-        org_id: 'o1',
-        user_id: 'u1',
-        date: '2025-06-10',
-        check_in_time: '09:00',
-        check_out_time: '18:00',
-        check_in_lat: null,
-        check_in_lng: null,
-        check_out_lat: null,
-        check_out_lng: null,
-        status: 'present' as const,
-        is_dev: false,
-        auto_punch_out: false,
-      },
       punches: [],
       shift,
       summary: {
+        first_check_in: '09:00',
+        last_check_out: '18:00',
         total_work_minutes: 540,
       } as import('./attendance.service').AttendanceDailySummary,
     };
@@ -203,8 +190,11 @@ describe('attendance.service', () => {
 
     const open = {
       ...fulfilled,
-      log: { ...fulfilled.log, check_out_time: null },
-      summary: { total_work_minutes: 540 } as import('./attendance.service').AttendanceDailySummary,
+      summary: {
+        first_check_in: '09:00',
+        last_check_out: null,
+        total_work_minutes: 540,
+      } as import('./attendance.service').AttendanceDailySummary,
     };
     expect(shouldShowShiftCongrats(open, tuesday)).toBe(false);
   });
@@ -399,14 +389,14 @@ describe('attendance.service', () => {
     ]);
   });
 
-  it('getAttendanceToday combines log and shift', async () => {
+  it('getAttendanceToday combines summary, sessions, and shift', async () => {
     sb.queueResult({ data: [sessionRow], error: null });
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: policyRow, error: null });
     sb.queueResult({ data: summaryRow, error: null });
-    const { getAttendanceToday } = await import('./attendance.service');
+    const { getAttendanceToday, toAttendanceLog } = await import('./attendance.service');
     const rec = await getAttendanceToday('u1');
-    expect(rec.log?.id).toBe('sum1');
+    expect(toAttendanceLog(rec)?.id).toBe('sum1');
     expect(rec.shift?.workStartTime).toBe('08:00');
     expect(rec.shift?.minimumRequiredMinutes).toBeNull();
     expect(rec.punches.length).toBeGreaterThan(0);
@@ -418,15 +408,15 @@ describe('attendance.service', () => {
     expect(await getEffectiveShiftForUser('u1')).toBeNull();
   });
 
-  it('getAttendanceDay loads log for date', async () => {
+  it('getAttendanceDay loads the day record for a date', async () => {
     // Promise.all kicks off the shift lookup alongside sessions and summary reads.
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: [sessionRow], error: null });
     sb.queueResult({ data: summaryRow, error: null });
     sb.queueResult({ data: policyRow, error: null });
-    const { getAttendanceDay } = await import('./attendance.service');
+    const { getAttendanceDay, toAttendanceLog } = await import('./attendance.service');
     const day = await getAttendanceDay('u1', '2025-06-11');
-    expect(day.log?.date).toBe('2025-06-11');
+    expect(toAttendanceLog({ ...day, date: '2025-06-11' })?.date).toBe('2025-06-11');
   });
 
   it('getMonthlyLogs returns rows', async () => {
@@ -565,6 +555,59 @@ describe('attendance.service', () => {
     const day = month.find((d) => d.date === '2025-06-06');
     expect(day?.status).toBe('weekend');
     expect(day?.hasOvertime).toBe(true);
+  });
+
+  it('attendance history keeps worked weekends and skips empty off-days', async () => {
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
+    sb.queueResult({
+      data: [{
+        id: 'sum-history-weekend',
+        org_id: 'o1',
+        user_id: 'u1',
+        date: '2025-06-06', // Friday
+        first_check_in: '10:00',
+        last_check_out: '12:00',
+        total_work_minutes: 120,
+        total_overtime_minutes: 120,
+        effective_status: null,
+        has_overtime: true,
+        is_incomplete_shift: false,
+        session_count: 1,
+        updated_at: '2025-06-06T12:00:00Z',
+      }],
+      error: null,
+    });
+    sb.queueResult({
+      data: [
+        {
+          ...sessionRow,
+          id: 'sess-history-weekend',
+          date: '2025-06-06',
+          check_in_time: '10:00',
+          check_out_time: '12:00',
+          is_overtime: true,
+          duration_minutes: 120,
+        },
+      ],
+      error: null,
+    });
+    sb.queueResult({ data: policyRow, error: null });
+
+    const { getAttendanceHistoryMonth } = await import('./attendance.service');
+    const days = await getAttendanceHistoryMonth('u1', 2025, 5); // June
+
+    expect(days).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          date: '2025-06-06',
+          primaryState: 'weekend',
+          hasOvertime: true,
+          sessionCount: 1,
+        }),
+      ])
+    );
+    expect(days.some((day) => day.date === '2025-06-07')).toBe(false);
   });
 
   it('calendar does not mark pre-join working days as absent', async () => {

@@ -33,7 +33,7 @@ export type AttendanceSession = Tables<'attendance_sessions'>;
 export type AttendanceDailySummary = Tables<'attendance_daily_summary'>;
 export type AttendanceEffectiveStatus = AttendanceDailySummary['effective_status'];
 export type ProfileRole = Tables<'profiles'>['role'];
-export type CalendarStatus = 'present' | 'late' | 'absent' | 'on_leave' | 'weekend' | 'future' | null;
+export type CalendarStatus = Exclude<DayStatus, 'not_joined'> | null;
 
 export type PunchType = 'clock_in' | 'clock_out';
 
@@ -59,7 +59,6 @@ export interface ShiftInfo {
 }
 
 export interface TodayRecord {
-  log: AttendanceLog | null;
   punches: PunchEntry[];
   shift: ShiftInfo | null;
   sessions?: AttendanceSession[];
@@ -67,7 +66,6 @@ export interface TodayRecord {
 }
 
 export interface DayRecord {
-  log: AttendanceLog | null;
   punches: PunchEntry[];
   shift: ShiftInfo | null;
   totalMinutesWorked: number;
@@ -82,7 +80,9 @@ export interface MonthDaySummary {
   totalMinutesWorked: number;
 }
 
-export type AttendanceHistoryPrimaryState = TeamAttendanceDateState | 'weekend' | 'holiday';
+export type AttendanceHistoryPrimaryState =
+  | TeamAttendanceDateState
+  | Extract<DayStatus, 'weekend' | 'holiday'>;
 
 export type AttendanceHistorySessionClassification = 'regular' | 'late' | 'overtime';
 
@@ -264,10 +264,6 @@ export function shiftDurationMinutes(shift: ShiftInfo): number {
 export function totalWorkedMinutesToday(today: TodayRecord): number {
   if (today.summary?.total_work_minutes != null) return today.summary.total_work_minutes;
   if (today.sessions?.length) return computeTotalMinutesFromSessions(today.sessions);
-  const log = today.log;
-  if (log?.check_in_time && log?.check_out_time) {
-    return Math.max(0, wallTimeToMinutes(log.check_out_time) - wallTimeToMinutes(log.check_in_time));
-  }
   return 0;
 }
 
@@ -281,23 +277,14 @@ export function getOpenSessionCheckInTime(today: TodayRecord): string | null {
   return sorted[sorted.length - 1]!.check_in_time;
 }
 
-/** True if the user has an open session, or (legacy) a single open log row with no sessions list. */
+/** True if the user has an open attendance session. */
 export function isCheckedInToday(today: TodayRecord): boolean {
-  const openIn = getOpenSessionCheckInTime(today);
-  if (openIn) return true;
-  const sessions = today.sessions;
-  if (sessions && sessions.length > 0) return false;
-  const log = today.log;
-  return !!(log?.check_in_time && !log?.check_out_time);
+  return getOpenSessionCheckInTime(today) !== null;
 }
 
-/** Wall time for the current punch-in (open session or legacy open log). */
+/** Wall time for the current open session punch-in. */
 export function getActiveCheckInWallTime(today: TodayRecord): string | null {
-  const fromSession = getOpenSessionCheckInTime(today);
-  if (fromSession) return fromSession;
-  const log = today.log;
-  if (log?.check_in_time && !log?.check_out_time) return log.check_in_time;
-  return null;
+  return getOpenSessionCheckInTime(today);
 }
 
 /** Shared punch CTAs / badges for today status UIs (same inputs → same behavior). */
@@ -333,7 +320,7 @@ export function isShiftRequirementMet(shift: ShiftInfo, totalWorkedMinutes: numb
 }
 
 export function shouldShowShiftCongrats(today: TodayRecord, at: Date = new Date()): boolean {
-  const { log, shift } = today;
+  const { shift } = today;
   if (!shift) return false;
   const dayOfWeek = at.getDay();
   const isWorkingDay = !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek);
@@ -342,7 +329,7 @@ export function shouldShowShiftCongrats(today: TodayRecord, at: Date = new Date(
   const worked = totalWorkedMinutesToday(today);
   if (worked <= 0) return false;
   const hasClosedSession =
-    !!log?.check_out_time || (today.sessions?.some((s) => !!s.check_out_time) ?? false);
+    !!today.summary?.last_check_out || (today.sessions?.some((s) => !!s.check_out_time) ?? false);
   if (!hasClosedSession) return false;
   return isShiftRequirementMet(shift, worked);
 }
@@ -582,6 +569,18 @@ function buildPseudoLog(
   };
 }
 
+export function toAttendanceLog(record: {
+  summary?: AttendanceDailySummary | null;
+  sessions?: AttendanceSession[] | null;
+  date?: string | null;
+}): AttendanceLog | null {
+  const sessions = record.sessions ?? [];
+  const summary = record.summary ?? null;
+  const date = summary?.date ?? sessions[0]?.date ?? record.date ?? '';
+  if (!date) return null;
+  return buildPseudoLog(date, sessions, summary);
+}
+
 /** Returns effective shift for a user: per-user schedule if set, else org policy. */
 export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInfo | null> {
   const { data: profile, error: profileError } = await supabase
@@ -665,9 +664,8 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
   const sessions = Array.isArray(sessionsRes.data) ? (sessionsRes.data as AttendanceSession[]) : [];
   const summary = normalizeSummary(summaryRes.data);
   const punches = buildPunchesFromSessions(sessions);
-  const log = buildPseudoLog(today, sessions, summary);
 
-  return { log, punches, shift, sessions, summary };
+  return { punches, shift, sessions, summary };
 }
 
 export async function getAttendanceDay(userId: string, date: string): Promise<DayRecord> {
@@ -694,9 +692,8 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
   const summary = normalizeSummary(summaryRes.data);
   const punches = buildPunchesFromSessions(sessions);
   const totalMinutesWorked = summary?.total_work_minutes ?? computeTotalMinutesFromSessions(sessions);
-  const log = buildPseudoLog(date, sessions, summary);
 
-  return { log, punches, shift, totalMinutesWorked, sessions, summary };
+  return { punches, shift, totalMinutesWorked, sessions, summary };
 }
 
 function toDateOnly(value: string | null | undefined): string | null {
@@ -981,7 +978,7 @@ export async function checkIn(userId: string): Promise<CheckInResult> {
 
     const session = data as AttendanceSession;
     const today = await getAttendanceToday(userId);
-    const log = today.log ?? buildPseudoLog(todayStr(), [session], null);
+    const log = toAttendanceLog(today) ?? buildPseudoLog(todayStr(), [session], null);
     if (!log) {
       throw new Error('Unable to build check-in result');
     }
@@ -1104,10 +1101,11 @@ export async function checkOut(userId: string): Promise<CheckOutResult> {
     }
 
     const today = await getAttendanceToday(userId);
-    if (!today.log && !checkoutPayload.discardedOvertimeSessionId) {
+    const log = toAttendanceLog(today);
+    if (!log && !checkoutPayload.discardedOvertimeSessionId) {
       throw new Error('Unable to load updated attendance log');
     }
-    return { log: today.log, overtimeRequest };
+    return { log, overtimeRequest };
   }
 
   const log = await checkOutLegacy(userId);
@@ -1241,7 +1239,13 @@ export async function getMonthlyStats(
     lateDays: summaries.filter((d) => d.status === 'late').length,
     absentDays: summaries.filter((d) => d.status === 'absent').length,
     leaveDays: summaries.filter((d) => d.status === 'on_leave').length,
-    totalWorkingDays: summaries.filter((d) => d.status != null && d.status !== 'future' && d.status !== 'weekend').length,
+    totalWorkingDays: summaries.filter(
+      (d) =>
+        d.status != null &&
+        d.status !== 'future' &&
+        d.status !== 'weekend' &&
+        d.status !== 'holiday'
+    ).length,
   };
 }
 
@@ -1279,7 +1283,12 @@ export async function getAllTimeStats(userId: string): Promise<MonthlyStats> {
       else if (d.status === 'late') totals.lateDays++;
       else if (d.status === 'absent') totals.absentDays++;
       else if (d.status === 'on_leave') totals.leaveDays++;
-      if (d.status != null && d.status !== 'future' && d.status !== 'weekend') {
+      if (
+        d.status != null &&
+        d.status !== 'future' &&
+        d.status !== 'weekend' &&
+        d.status !== 'holiday'
+      ) {
         totals.totalWorkingDays++;
       }
     }

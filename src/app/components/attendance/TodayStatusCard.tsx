@@ -66,7 +66,7 @@ function todayArabicDate(): string {
 }
 
 export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, isOffline = false }: Props) {
-  const { log, shift } = today;
+  const { shift } = today;
   const overtimeColor = getStatusTheme('overtime').color;
   const overtimeClockColor = '#D97706';
 
@@ -140,6 +140,14 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
   const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
   const totalWorkedMin = totalWorkedMinutesToday(today);
   const activeSession = today.sessions?.find((session) => !session.check_out_time) ?? null;
+  const orderedSessions = [...(today.sessions ?? [])].sort((a, b) =>
+    a.check_in_time.localeCompare(b.check_in_time)
+  );
+  const firstCheckInTime = today.summary?.first_check_in ?? orderedSessions[0]?.check_in_time ?? null;
+  const lastCheckOutTime =
+    today.summary?.last_check_out ??
+    [...orderedSessions].reverse().find((session) => !!session.check_out_time)?.check_out_time ??
+    null;
 
   // Progress bar: 0-100%, caps at shift end
   const progressPercent = shiftDuration != null && shiftDuration > 0
@@ -179,12 +187,12 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
 
   // Badge logic for first punch: check overtime first (matches service logic), then late
   const firstPunchIsOvertime =
-    log?.check_in_time && shift
-      ? isOvertimeTime(wallTimeToMinutes(log.check_in_time), shift, dayOfWeek)
+    firstCheckInTime && shift
+      ? isOvertimeTime(wallTimeToMinutes(firstCheckInTime), shift, dayOfWeek)
       : false;
   const firstPunchIsLate =
-    log?.check_in_time && shift && !firstPunchIsOvertime
-      ? wallTimeToMinutes(log.check_in_time) > shiftStartMinutes! + shift.gracePeriodMinutes
+    firstCheckInTime && shift && !firstPunchIsOvertime
+      ? wallTimeToMinutes(firstCheckInTime) > shiftStartMinutes! + shift.gracePeriodMinutes
       : false;
 
   const handleCheckInClick = () => {
@@ -270,12 +278,12 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
         </div>
 
         {/* Status badge for first punch */}
-        {log?.check_in_time && (
+        {firstCheckInTime && (
           <div className="flex items-center justify-center gap-2 mb-4 text-sm">
             <div className="text-center">
               <p className="text-xs text-gray-400">الحضور</p>
               <div className="flex items-center gap-1.5">
-                <p className="text-gray-800 font-medium">{formatTime(log.check_in_time)}</p>
+                <p className="text-gray-800 font-medium">{formatTime(firstCheckInTime)}</p>
                 {firstPunchIsOvertime ? (
                   <span
                     className="px-1.5 py-0.5 text-xs rounded-full border"
@@ -294,10 +302,10 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
                 )}
               </div>
             </div>
-            {log.check_out_time && (
+            {lastCheckOutTime && (
               <div className="text-center mr-4">
                 <p className="text-xs text-gray-400">الانصراف</p>
-                <p className="text-gray-800 font-medium">{formatTime(log.check_out_time)}</p>
+                <p className="text-gray-800 font-medium">{formatTime(lastCheckOutTime)}</p>
               </div>
             )}
           </div>
@@ -371,7 +379,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
             <span>سيتم احتساب هذا كعمل إضافي وإنشاء طلب تلقائياً</span>
           </div>
         )}
-        {!isCheckedIn && log?.check_in_time && firstPunchIsOvertime && (
+        {!isCheckedIn && firstCheckInTime && firstPunchIsOvertime && (
           <div className="flex items-center gap-1.5 justify-center mb-3 text-xs" style={{ color: overtimeColor }}>
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>تم إنشاء طلب عمل إضافي تلقائياً بانتظار الموافقة</span>

@@ -140,6 +140,16 @@ function resolveTodayDisplayStatus(todayRecord: TodayRecord, at: Date): DisplayS
   );
 }
 
+function getTodayFirstCheckIn(todayRecord: TodayRecord | null): string | null {
+  if (!todayRecord) return null;
+  return (
+    todayRecord.summary?.first_check_in ??
+    [...(todayRecord.sessions ?? [])].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time))[0]
+      ?.check_in_time ??
+    null
+  );
+}
+
 export function UserDetailsPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -211,6 +221,8 @@ export function UserDetailsPage() {
   const handleBack = useCallback(() => {
     navigate(backPath);
   }, [backPath, navigate]);
+
+  const todayFirstCheckIn = useMemo(() => getTodayFirstCheckIn(todayRecord), [todayRecord]);
 
   const canAccess = useMemo(() => {
     if (!currentUser || !userId) return false;
@@ -732,9 +744,9 @@ export function UserDetailsPage() {
               >
                 <div className="flex items-center justify-between">
                   <StatusBadge status={todayDisplayStatus} />
-                  {todayRecord?.log?.check_in_time && (
+                  {todayFirstCheckIn && (
                     <span className="text-xs text-gray-600" dir="ltr">
-                      دخول: {todayRecord.log.check_in_time}
+                      دخول: {todayFirstCheckIn}
                     </span>
                   )}
                 </div>
