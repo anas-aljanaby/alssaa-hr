@@ -5,6 +5,7 @@ import { usePwa } from '../../contexts/PwaContext';
 import { AppTopBarProvider, useAppTopBarState } from '../../contexts/AppTopBarContext';
 import * as notificationsService from '@/lib/services/notifications.service';
 import * as requestsService from '@/lib/services/requests.service';
+import { DeviceNotificationsBanner } from '@/app/components/notifications/DeviceNotificationsBanner';
 import { NotificationsDropdown } from '@/app/components/notifications/NotificationsDropdown';
 import {
   ChevronRight,
@@ -289,6 +290,8 @@ function MobileLayoutContent() {
 
       <div className="flex-1 pb-20" style={{ paddingTop: 'var(--mobile-top-bar-offset, 3.5rem)' }}>
         <div className="sticky top-0 z-30 px-4 pt-2 space-y-2">
+          <DeviceNotificationsBanner />
+
           {isOffline && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
               <div>

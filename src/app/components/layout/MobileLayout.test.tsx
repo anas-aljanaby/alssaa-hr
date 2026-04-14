@@ -48,6 +48,10 @@ vi.mock('@/app/components/notifications/NotificationsDropdown', () => ({
   ),
 }));
 
+vi.mock('@/app/components/notifications/DeviceNotificationsBanner', () => ({
+  DeviceNotificationsBanner: () => null,
+}));
+
 describe('MobileLayout', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'scrollTo', {
