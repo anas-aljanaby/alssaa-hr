@@ -11,6 +11,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { cn } from '@/app/components/ui/utils';
+import { getDepartmentColorTokens } from '@/lib/departmentColors';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Department } from '@/lib/services/departments.service';
@@ -75,6 +76,7 @@ interface AttendanceBoardRow {
 interface BoardSection {
   id: string;
   name: string;
+  departmentColor: string | null;
   subtitle: string;
   healthStatus: VisualStatus;
   metrics: Array<{
@@ -554,6 +556,7 @@ function buildSections(params: {
   mode: TeamAttendanceMode;
 }): BoardSection[] {
   const departmentOrder = new Map(params.departments.map((department, index) => [department.id, index]));
+  const departmentById = new Map(params.departments.map((department) => [department.id, department]));
   const allRowsByDepartment = new Map<string, AttendanceBoardRow[]>();
   const visibleRowsByDepartment = new Map<string, AttendanceBoardRow[]>();
 
@@ -607,6 +610,7 @@ function buildSections(params: {
       return {
         id: key,
         name: allRows[0]?.departmentNameAr ?? 'بدون قسم',
+        departmentColor: key === NO_DEPARTMENT_KEY ? null : (departmentById.get(key)?.color ?? null),
         subtitle: summary.subtitle,
         healthStatus: summary.healthStatus,
         metrics: summary.metrics,
@@ -765,18 +769,14 @@ function DepartmentAttendanceSection({
   onToggle: () => void;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
-  const healthConfig = getStatusConfig(section.healthStatus);
   const presentHeading = boardMode === 'live' ? 'موجودون الآن' : 'حضروا في هذا اليوم';
   const notPresentHeading = boardMode === 'live' ? 'غير موجودون' : 'غير حاضرين في هذا اليوم';
+  const departmentIconStyle = section.departmentColor
+    ? getDepartmentColorTokens(section.departmentColor).iconStyle
+    : undefined;
 
   return (
-    <section
-      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.07)]"
-      style={{
-        borderRightWidth: '4px',
-        borderRightColor: healthConfig.hexColor,
-      }}
-    >
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.07)]">
       <button
         type="button"
         onClick={onToggle}
@@ -786,9 +786,21 @@ function DepartmentAttendanceSection({
           expanded ? 'border-b border-slate-200/80 bg-slate-50/80' : ''
         )}
       >
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-slate-950">{section.name}</p>
-          <p className="mt-1 truncate text-[11px] font-medium text-slate-600">{section.subtitle}</p>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div
+            className={cn(
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+              section.departmentColor ? '' : 'bg-slate-100 text-slate-500'
+            )}
+            style={departmentIconStyle}
+            aria-hidden="true"
+          >
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-950">{section.name}</p>
+            <p className="mt-1 truncate text-[11px] font-medium text-slate-600">{section.subtitle}</p>
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 self-center">
