@@ -13,7 +13,6 @@ const DashboardRouter = React.lazy(() => import('./pages/DashboardRouter').then(
 const AttendancePage = React.lazy(() => import('./pages/employee/AttendancePage').then(m => ({ default: m.AttendancePage })));
 const TeamAttendancePage = React.lazy(() => import('./pages/team/TeamAttendancePage').then(m => ({ default: m.TeamAttendancePage })));
 const RequestsPage = React.lazy(() => import('./pages/employee/RequestsPage').then(m => ({ default: m.RequestsPage })));
-const NotificationsPage = React.lazy(() => import('./pages/employee/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
 const MorePage = React.lazy(() => import('./pages/employee/MorePage').then(m => ({ default: m.MorePage })));
 const ApprovalsPage = React.lazy(() => import('./pages/manager/ApprovalsPage').then(m => ({ default: m.ApprovalsPage })));
 const UsersPage = React.lazy(() => import('./pages/admin/UsersPage').then(m => ({ default: m.UsersPage })));
@@ -65,7 +64,6 @@ export const router = createBrowserRouter([
           { path: 'attendance', element: <Lazy><AttendancePage /></Lazy> },
           { path: 'team-attendance', element: <Lazy><TeamAttendancePage /></Lazy> },
           { path: 'requests', element: <Lazy><RequestsPage /></Lazy> },
-          { path: 'notifications', element: <Lazy><NotificationsPage /></Lazy> },
           { path: 'more', element: <Lazy><MorePage /></Lazy> },
           { path: 'attendance-policy', element: <Lazy><AttendancePolicyPage /></Lazy> },
           { path: 'security-privacy', element: <Lazy><SecurityPrivacyPage /></Lazy> },

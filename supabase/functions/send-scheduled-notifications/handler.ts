@@ -222,23 +222,29 @@ export async function handleSendScheduledNotifications(
 
           if (!dedupRows || dedupRows.length === 0) continue; // already sent today
 
-          // Insert in-app notification (shown in the notification bell / page)
-          await admin.from('notifications').insert({
-            org_id: org.id,
-            user_id: profile.id,
-            title: setting.title,
-            title_ar: setting.title_ar,
-            message: setting.message,
-            message_ar: setting.message_ar,
-            type: 'attendance',
-          });
+          // Insert in-app notification and capture the ID to include in the push payload
+          // so the app can mark it as read when the user taps the notification banner.
+          const { data: insertedNotif } = await admin
+            .from('notifications')
+            .insert({
+              org_id: org.id,
+              user_id: profile.id,
+              title: setting.title,
+              title_ar: setting.title_ar,
+              message: setting.message,
+              message_ar: setting.message_ar,
+              type: 'attendance',
+            })
+            .select('id')
+            .maybeSingle();
 
           // Web push: send to all subscribed devices for this user
           // Requires VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT env vars.
           await sendWebPushToUser(admin, profile.id, {
             title: setting.title_ar,
             body: setting.message_ar,
-            url: '/notifications',
+            url: '/',
+            notificationId: (insertedNotif as { id?: string } | null)?.id,
           });
 
           totalSent++;

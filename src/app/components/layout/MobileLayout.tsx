@@ -66,7 +66,7 @@ function MobileLayoutContent() {
   }, [currentUser?.uid, isOffline]);
 
   useEffect(() => {
-    if (!currentUser || location.pathname === '/notifications') return;
+    if (!currentUser) return;
     if (isOffline) return;
     notificationsService
       .getUnreadCount(currentUser.uid)
@@ -77,6 +77,34 @@ function MobileLayoutContent() {
   useEffect(() => {
     setNotificationsOpen(false);
   }, [location.pathname]);
+
+  // Listen for messages from the service worker (e.g. when the user taps a push notification).
+  // The SW sends { type: 'MARK_NOTIFICATION_READ', notificationId } so we can silently mark
+  // the notification as read without navigating anywhere.
+  useEffect(() => {
+    if (!currentUser || !('serviceWorker' in navigator)) return;
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (
+        event.data?.type === 'MARK_NOTIFICATION_READ' &&
+        typeof event.data.notificationId === 'string'
+      ) {
+        notificationsService
+          .markAsRead(event.data.notificationId)
+          .then(() => {
+            // Refresh the unread badge count after marking as read
+            return notificationsService.getUnreadCount(currentUser.uid);
+          })
+          .then(setUnreadCount)
+          .catch((e) => console.warn('[push] Failed to mark notification as read from SW message', e));
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    };
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -163,7 +191,6 @@ function MobileLayoutContent() {
     if (currentPath.startsWith('/team-attendance')) return { title: 'حضور الفريق' };
     if (currentPath.startsWith('/attendance')) return { title: 'الحضور والانصراف' };
     if (currentPath.startsWith('/requests')) return { title: 'الطلبات' };
-    if (currentPath.startsWith('/notifications')) return { title: 'الإشعارات' };
     if (currentPath.startsWith('/more')) return { title: 'المزيد' };
     if (currentPath.startsWith('/security-privacy')) {
       return { title: 'الأمان والخصوصية', backPath: '/more' as const };

@@ -82,6 +82,9 @@ export function DeviceNotificationsBanner() {
 
     setIsSubmitting(true);
     try {
+      // requestAndSubscribe requests permission AND calls subscribeToPush internally.
+      // We call subscribeToPush once more after to get the success/fail status,
+      // since requestAndSubscribe only returns the permission state.
       const nextPermission = await requestAndSubscribe(currentUser.uid);
       setPermission(nextPermission);
 
@@ -91,15 +94,17 @@ export function DeviceNotificationsBanner() {
         return;
       }
 
+      // Verify the subscription was actually saved (and retry if the first attempt failed)
       const synced = await subscribeToPush(currentUser.uid);
       setSyncFailed(!synced);
 
       if (synced) {
         toast.success('تم تفعيل إشعارات الجهاز لهذا الهاتف.');
       } else {
-        toast.error('تم السماح بالإشعارات، لكن تسجيل هذا الجهاز لم يكتمل.');
+        toast.error('تم السماح بالإشعارات، لكن تسجيل هذا الجهاز لم يكتمل. تحقق من وحدة تحكم المتصفح للمزيد.');
       }
-    } catch {
+    } catch (err) {
+      console.error('[push] handleAction error:', err);
       setSyncFailed(true);
       toast.error('تعذر تفعيل إشعارات الجهاز حالياً.');
     } finally {

@@ -13,7 +13,7 @@ export type WebPushResult = {
 export async function sendWebPushToUser(
   admin: ServiceClient,
   userId: string,
-  payload: { title: string; body: string; url?: string }
+  payload: { title: string; body: string; url?: string; notificationId?: string }
 ): Promise<WebPushResult> {
   const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
   const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');

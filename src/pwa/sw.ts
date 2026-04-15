@@ -137,7 +137,7 @@ registerRoute(
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
-  let payload: { title?: string; body?: string; url?: string } = {};
+  let payload: { title?: string; body?: string; url?: string; notificationId?: string } = {};
   try {
     payload = event.data.json() as typeof payload;
   } catch {
@@ -151,23 +151,44 @@ self.addEventListener('push', (event) => {
       badge: '/icons/icon-192x192.png',
       dir: 'rtl',
       lang: 'ar',
-      data: { url: payload.url ?? '/notifications' },
+      // Store notificationId so we can mark it as read when the user taps the banner
+      data: { notificationId: payload.notificationId ?? null },
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url: string = (event.notification.data as { url?: string })?.url ?? '/notifications';
+  const notificationId: string | null =
+    (event.notification.data as { notificationId?: string | null })?.notificationId ?? null;
 
   event.waitUntil(
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        for (const client of clientList) {
-          if ('focus' in client) return client.focus();
+        // Tell the app to mark this notification as read (if we have the ID)
+        const markRead = (client: WindowClient) => {
+          if (notificationId) {
+            client.postMessage({ type: 'MARK_NOTIFICATION_READ', notificationId });
+          }
+        };
+
+        if (clientList.length > 0) {
+          // App is already open — just bring it to the front, don't navigate away
+          const client = clientList[0] as WindowClient;
+          markRead(client);
+          return client.focus();
         }
-        return self.clients.openWindow(url);
+
+        // App is closed — open it at home, then mark the notification as read
+        return self.clients.openWindow('/').then((newClient) => {
+          if (newClient && notificationId) {
+            // Wait briefly for the app to initialise before posting the message
+            setTimeout(() => {
+              newClient.postMessage({ type: 'MARK_NOTIFICATION_READ', notificationId });
+            }, 2000);
+          }
+        });
       })
   );
 });

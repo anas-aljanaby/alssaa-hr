@@ -134,21 +134,29 @@ export async function handleSendTestNotification(
     const message = `${setting.message} (Test notification sent by your administrator.)`;
     const messageAr = `${setting.message_ar} هذا إشعار تجريبي مرسل من إدارة النظام.`;
 
-    const { error: insertError } = await admin.from('notifications').insert(
-      userRows.map((row) => ({
-        org_id: profile.org_id,
-        user_id: row.id,
-        title,
-        title_ar: titleAr,
-        message,
-        message_ar: messageAr,
-        type: 'attendance',
-      }))
-    );
+    const { data: insertedNotifications, error: insertError } = await admin
+      .from('notifications')
+      .insert(
+        userRows.map((row) => ({
+          org_id: profile.org_id,
+          user_id: row.id,
+          title,
+          title_ar: titleAr,
+          message,
+          message_ar: messageAr,
+          type: 'attendance',
+        }))
+      )
+      .select('id, user_id');
 
     if (insertError) {
       return jsonResponse({ error: 'Failed to save notification', code: 'INSERT_FAILED' }, 500);
     }
+
+    const notifIdByUser = Object.fromEntries(
+      ((insertedNotifications ?? []) as Array<{ id: string; user_id: string }>)
+        .map((n) => [n.user_id, n.id])
+    );
 
     let pushedUsers = 0;
     let deliveredPushes = 0;
@@ -158,7 +166,8 @@ export async function handleSendTestNotification(
       const pushResult = await sendWebPushToUser(admin, row.id, {
         title: titleAr,
         body: messageAr,
-        url: '/notifications',
+        url: '/',
+        notificationId: notifIdByUser[row.id],
       });
 
       subscriptionTargets += pushResult.subscriptionCount;
