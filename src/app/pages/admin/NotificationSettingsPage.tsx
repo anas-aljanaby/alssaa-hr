@@ -67,12 +67,13 @@ export function NotificationSettingsPage() {
   const [settings, setSettings] = useState<NotificationSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<NotificationSetting | null>(null);
-  const [confirmingTest, setConfirmingTest] = useState<NotificationSetting | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [countingDownId, setCountingDownId] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(3);
 
-  useBodyScrollLock(!!editing || !!confirmingTest);
+  useBodyScrollLock(!!editing);
 
   useEffect(() => {
     notifSettingsService
@@ -81,6 +82,34 @@ export function NotificationSettingsPage() {
       .catch(() => toast.error('فشل تحميل إعدادات الإشعارات'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!countingDownId) return;
+    if (countdown <= 0) {
+      // Fire the actual API call
+      const settingId = countingDownId;
+      setCountingDownId(null);
+      setCountdown(3);
+      setTestingId(settingId);
+      notifSettingsService
+        .sendNotificationSettingTest(settingId)
+        .then((result) => {
+          toast.success(
+            result.deliveredPushes > 0
+              ? 'تم إرسال الإشعار إلى جهازك'
+              : 'تم إنشاء الإشعار، لكن لم يصل push إلى أي جهاز مسجَّل'
+          );
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'تعذر إرسال الإشعار التجريبي';
+          toast.error(message);
+        })
+        .finally(() => setTestingId(null));
+      return;
+    }
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countingDownId, countdown]);
 
   const settingsByType = Object.fromEntries(
     settings.map((s) => [s.type, s])
@@ -120,23 +149,10 @@ export function NotificationSettingsPage() {
     }
   }
 
-  async function handleConfirmTest() {
-    if (!confirmingTest || testingId) return;
-    setTestingId(confirmingTest.id);
-    try {
-      const result = await notifSettingsService.sendNotificationSettingTest(confirmingTest.id);
-      toast.success(
-        result.deliveredPushes > 0
-          ? `تم إرسال الاختبار إلى ${result.totalUsers} مستخدم ووصل إلى ${result.deliveredPushes} جهاز`
-          : `تم إنشاء الإشعار التجريبي لجميع المستخدمين، لكن لم يصل push فعلياً لأي جهاز`
-      );
-      setConfirmingTest(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'تعذر إرسال الإشعار التجريبي';
-      toast.error(message);
-    } finally {
-      setTestingId(null);
-    }
+  function handleTestClick(setting: NotificationSetting) {
+    if (testingId || countingDownId) return;
+    setCountdown(3);
+    setCountingDownId(setting.id);
   }
 
   if (loading) {
@@ -163,6 +179,7 @@ export function NotificationSettingsPage() {
           const Icon = meta.icon;
           const isToggling = togglingId === setting.id;
           const isTesting = testingId === setting.id;
+          const isCountingDown = countingDownId === setting.id;
 
           return (
             <div
@@ -199,15 +216,22 @@ export function NotificationSettingsPage() {
                   {setting.message_ar}
                 </p>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingTest(setting)}
-                    disabled={!!testingId}
-                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50"
-                  >
-                    <BellRing className="w-3.5 h-3.5" />
-                    {isTesting ? 'جاري الإرسال...' : 'إرسال اختبار'}
-                  </button>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleTestClick(setting)}
+                      disabled={!!testingId || !!countingDownId}
+                      className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                    >
+                      <BellRing className="w-3.5 h-3.5" />
+                      {isTesting
+                        ? 'جاري الإرسال...'
+                        : isCountingDown
+                        ? `سيصل خلال ${countdown}...`
+                        : 'إرسال اختبار'}
+                    </button>
+                    <span className="text-[10px] text-gray-400 px-2">يُرسَل إليك أنت فقط</span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setEditing({ ...setting })}
@@ -322,64 +346,6 @@ export function NotificationSettingsPage() {
         </div>
       )}
 
-      {confirmingTest && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => { if (!testingId) setConfirmingTest(null); }}
-        >
-          <div
-            className="bg-white rounded-2xl w-full max-w-md p-6"
-            dir="rtl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-gray-800">تأكيد إرسال الاختبار</h2>
-              <button
-                type="button"
-                onClick={() => { if (!testingId) setConfirmingTest(null); }}
-                className="p-2 hover:bg-gray-100 rounded-full"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                <p className="text-sm text-amber-900">
-                  سيتم إرسال هذا الإشعار التجريبي إلى جميع مستخدمي المؤسسة.
-                </p>
-                <p className="mt-1 text-xs leading-5 text-amber-900/75">
-                  هل أنت متأكد أنك تريد المتابعة؟
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
-                <p className="text-sm text-gray-800">{confirmingTest.title_ar}</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">{confirmingTest.message_ar}</p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmingTest(null)}
-                  disabled={!!testingId}
-                  className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 disabled:opacity-50"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleConfirmTest()}
-                  disabled={!!testingId}
-                  className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm text-white disabled:opacity-50"
-                >
-                  {testingId ? 'جاري الإرسال...' : 'نعم، أرسل الاختبار'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </PageLayout>
   );
 }

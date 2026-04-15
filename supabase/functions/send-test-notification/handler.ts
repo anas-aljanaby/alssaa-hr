@@ -110,76 +110,40 @@ export async function handleSendTestNotification(
       return jsonResponse({ error: 'Setting not found', code: 'SETTING_NOT_FOUND' }, 404);
     }
 
-    const { data: profiles, error: usersError } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('org_id', profile.org_id);
-
-    if (usersError) {
-      return jsonResponse({ error: 'Users lookup failed', code: 'USERS_LOOKUP_FAILED' }, 500);
-    }
-
-    const userRows = ((profiles ?? []) as Array<{ id: string }>).filter((row) => !!row.id);
-    if (userRows.length === 0) {
-      return jsonResponse({
-        totalUsers: 0,
-        pushedUsers: 0,
-        deliveredPushes: 0,
-        subscriptionTargets: 0,
-      });
-    }
-
-    const title = `[TEST] ${setting.title}`;
-    const titleAr = `اختبار: ${setting.title_ar}`;
-    const message = `${setting.message} (Test notification sent by your administrator.)`;
-    const messageAr = `${setting.message_ar} هذا إشعار تجريبي مرسل من إدارة النظام.`;
-
+    // Test notifications are sent only to the requesting admin — not org-wide.
+    // The payload is identical to the real notification so the admin sees exactly
+    // what employees will receive.
     const { data: insertedNotifications, error: insertError } = await admin
       .from('notifications')
-      .insert(
-        userRows.map((row) => ({
-          org_id: profile.org_id,
-          user_id: row.id,
-          title,
-          title_ar: titleAr,
-          message,
-          message_ar: messageAr,
-          type: 'attendance',
-        }))
-      )
+      .insert([{
+        org_id: profile.org_id,
+        user_id: user.id,
+        title: setting.title,
+        title_ar: setting.title_ar,
+        message: setting.message,
+        message_ar: setting.message_ar,
+        type: 'attendance',
+      }])
       .select('id, user_id');
 
     if (insertError) {
       return jsonResponse({ error: 'Failed to save notification', code: 'INSERT_FAILED' }, 500);
     }
 
-    const notifIdByUser = Object.fromEntries(
-      ((insertedNotifications ?? []) as Array<{ id: string; user_id: string }>)
-        .map((n) => [n.user_id, n.id])
-    );
+    const notifId = ((insertedNotifications ?? []) as Array<{ id: string; user_id: string }>)[0]?.id;
 
-    let pushedUsers = 0;
-    let deliveredPushes = 0;
-    let subscriptionTargets = 0;
-
-    for (const row of userRows) {
-      const pushResult = await sendWebPushToUser(admin, row.id, {
-        title: titleAr,
-        body: messageAr,
-        url: '/',
-        notificationId: notifIdByUser[row.id],
-      });
-
-      subscriptionTargets += pushResult.subscriptionCount;
-      deliveredPushes += pushResult.sent;
-      if (pushResult.sent > 0) pushedUsers += 1;
-    }
+    const pushResult = await sendWebPushToUser(admin, user.id, {
+      title: setting.title_ar,
+      body: setting.message_ar,
+      url: '/',
+      notificationId: notifId,
+    });
 
     return jsonResponse({
-      totalUsers: userRows.length,
-      pushedUsers,
-      deliveredPushes,
-      subscriptionTargets,
+      totalUsers: 1,
+      pushedUsers: pushResult.sent > 0 ? 1 : 0,
+      deliveredPushes: pushResult.sent,
+      subscriptionTargets: pushResult.subscriptionCount,
     });
   } catch (error) {
     return jsonResponse(

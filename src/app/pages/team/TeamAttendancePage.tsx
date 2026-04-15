@@ -10,7 +10,6 @@ import {
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { cn } from '@/app/components/ui/utils';
-import { getDepartmentColorTokens } from '@/lib/departmentColors';
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import type { Department } from '@/lib/services/departments.service';
@@ -29,12 +28,9 @@ import {
   type TeamAttendancePrimaryState,
   type TeamAttendanceChipKey,
   type UserRole,
+  type VisualStatus,
 } from '@/shared/attendance';
-import { Badge } from '@/app/components/ui/badge';
-import {
-  StatusBadge,
-  StatusCountChips,
-} from '@/shared/components';
+import { StatusCountChips } from '@/shared/components';
 import {
   Building2,
   CalendarDays,
@@ -54,6 +50,7 @@ type TeamAttendanceMode = 'live' | 'date';
 type BoardScope = 'full' | 'generic';
 type BoardGroup = 'present' | 'not_present';
 type AttendanceStatusFilter = TeamAttendanceChipKey;
+type SectionMetricKey = 'present' | 'late' | 'absent' | 'on_leave' | 'on_break';
 
 interface AttendanceBoardRow {
   userId: string;
@@ -77,11 +74,17 @@ interface AttendanceBoardRow {
 interface BoardSection {
   id: string;
   name: string;
-  summaryText: string;
+  subtitle: string;
+  healthStatus: VisualStatus;
+  metrics: Array<{
+    key: SectionMetricKey;
+    count: number;
+    label: string;
+    status: VisualStatus;
+  }>;
   presentRows: AttendanceBoardRow[];
   notPresentRows: AttendanceBoardRow[];
   defaultExpanded: boolean;
-  color: string | null;
 }
 
 interface BoardDataState {
@@ -402,52 +405,144 @@ function buildBoardRows(params: {
   return Array.from(rowsByUser.values());
 }
 
-function compareRows(a: AttendanceBoardRow, b: AttendanceBoardRow): number {
-  if (a.sortRank !== b.sortRank) return a.sortRank - b.sortRank;
+function compareRowsWithinGroup(
+  a: AttendanceBoardRow,
+  b: AttendanceBoardRow,
+  mode: TeamAttendanceMode
+): number {
+  function getGroupSortRank(row: AttendanceBoardRow): number {
+    if (mode === 'live') {
+      if (row.group === 'present') {
+        switch (row.primaryState) {
+          case 'late':
+            return 0;
+          case 'available_now':
+            return 1;
+          default:
+            return 2;
+        }
+      }
+
+      switch (row.primaryState) {
+        case 'not_entered_yet':
+          return 0;
+        case 'on_leave':
+          return 1;
+        case 'on_break':
+          return 2;
+        case 'absent':
+          return 3;
+        case 'incomplete_shift':
+          return 4;
+        case 'fulfilled_shift':
+          return 5;
+        case 'neutral':
+        default:
+          return 6;
+      }
+    }
+
+    if (row.group === 'present') {
+      switch (row.primaryState) {
+        case 'late':
+          return 0;
+        case 'incomplete_shift':
+          return 1;
+        case 'fulfilled_shift':
+          return 2;
+        default:
+          return 3;
+      }
+    }
+
+    switch (row.primaryState) {
+      case 'absent':
+        return 0;
+      case 'on_leave':
+        return 1;
+      case 'neutral':
+      default:
+        return 2;
+    }
+  }
+
+  const aRank = getGroupSortRank(a);
+  const bRank = getGroupSortRank(b);
+  if (aRank !== bRank) return aRank - bRank;
   return a.nameAr.localeCompare(b.nameAr, 'ar');
 }
 
 function buildSectionSummary(
   rows: AttendanceBoardRow[],
   mode: TeamAttendanceMode
-): string {
-  const liveChips = countByChip(TEAM_ATTENDANCE_LIVE_CHIPS, rows);
-  const dateChips = countByChip(TEAM_ATTENDANCE_DATE_CHIPS, rows);
+): Pick<BoardSection, 'subtitle' | 'healthStatus' | 'metrics'> {
+  const presentCount = rows.filter((row) => row.group === 'present').length;
+  const lateCount = rows.filter((row) => row.primaryState === 'late').length;
+  const absentCount = rows.filter(
+    (row) => row.primaryState === 'absent' || row.primaryState === 'not_entered_yet'
+  ).length;
+  const onLeaveCount = rows.filter((row) => row.primaryState === 'on_leave').length;
+  const onBreakCount = rows.filter((row) => row.primaryState === 'on_break').length;
+  const totalCount = rows.length;
+  const presentStatus: VisualStatus = mode === 'live' ? 'available_now' : 'fulfilled_shift';
+  const everyoneUnavailableByDesign =
+    totalCount === 0 ||
+    rows.every((row) => row.primaryState === 'on_leave' || row.primaryState === 'neutral');
 
-  const segments: string[] = [];
-  if (mode === 'live') {
-    const availableCount = liveChips.available_now ?? 0;
-    const lateCount = liveChips.late ?? 0;
-    const onBreakCount = liveChips.on_break ?? 0;
-    const pendingCount = liveChips.not_entered_yet ?? 0;
-    const absentCount = liveChips.absent ?? 0;
-    const overtimeCount = liveChips.overtime ?? 0;
-    const leaveCount = liveChips.on_leave ?? 0;
-
-    segments.push(`${availableCount} موجودون الآن`);
-    if (lateCount > 0) segments.push(`${lateCount} متأخر`);
-    if (onBreakCount > 0) segments.push(`${onBreakCount} في استراحة`);
-    if (pendingCount > 0) segments.push(`${pendingCount} لم يسجلوا بعد`);
-    if (absentCount > 0) segments.push(`${absentCount} غائب`);
-    if (overtimeCount > 0) segments.push(`${overtimeCount} إضافي`);
-    if (leaveCount > 0) segments.push(`${leaveCount} إجازة`);
-  } else {
-    const fulfilledCount = dateChips.fulfilled_shift ?? 0;
-    const incompleteCount = dateChips.incomplete_shift ?? 0;
-    const lateCount = dateChips.late ?? 0;
-    const absentCount = dateChips.absent ?? 0;
-    const overtimeCount = dateChips.overtime ?? 0;
-    const leaveCount = dateChips.on_leave ?? 0;
-
-    segments.push(`${fulfilledCount} أكملوا الدوام`);
-    if (incompleteCount > 0) segments.push(`${incompleteCount} غير مكتمل`);
-    if (lateCount > 0) segments.push(`${lateCount} متأخر`);
-    if (absentCount > 0) segments.push(`${absentCount} غائب`);
-    if (overtimeCount > 0) segments.push(`${overtimeCount} إضافي`);
-    if (leaveCount > 0) segments.push(`${leaveCount} إجازة`);
+  let healthStatus: VisualStatus = 'neutral';
+  if (everyoneUnavailableByDesign) {
+    healthStatus = 'neutral';
+  } else if (absentCount > 0) {
+    healthStatus = 'absent';
+  } else if (lateCount > 0) {
+    healthStatus = 'late';
+  } else if (
+    presentCount > 0 ||
+    onBreakCount > 0 ||
+    rows.some(
+      (row) =>
+        row.primaryState === 'fulfilled_shift' || row.primaryState === 'incomplete_shift'
+    )
+  ) {
+    healthStatus = presentStatus;
   }
 
-  return segments.join(' • ');
+  return {
+    subtitle: `${presentCount} من ${totalCount} موجودون`,
+    healthStatus,
+    metrics: [
+      {
+        key: 'present',
+        count: presentCount,
+        label: 'موجودون',
+        status: presentStatus,
+      },
+      {
+        key: 'late',
+        count: lateCount,
+        label: 'متأخر',
+        status: 'late',
+      },
+      {
+        key: 'absent',
+        count: absentCount,
+        label: 'غائب أو لم يسجل',
+        status: 'absent',
+      },
+      {
+        key: 'on_leave',
+        count: onLeaveCount,
+        label: 'إجازة',
+        status: 'on_leave',
+      },
+      {
+        key: 'on_break',
+        count: onBreakCount,
+        label: 'استراحة',
+        status: 'on_break',
+      },
+    ].filter((metric) => metric.count > 0),
+  };
 }
 
 function buildSections(params: {
@@ -496,30 +591,54 @@ function buildSections(params: {
 
   return orderedKeys
     .map((key) => {
-      const allRows = (allRowsByDepartment.get(key) ?? []).sort(compareRows);
-      const visibleRows = (visibleRowsByDepartment.get(key) ?? []).sort(compareRows);
+      const allRows = allRowsByDepartment.get(key) ?? [];
+      const visibleRows = visibleRowsByDepartment.get(key) ?? [];
       if (visibleRows.length === 0) return null;
 
-      const presentRows = visibleRows.filter((row) => row.group === 'present');
-      const notPresentRows = visibleRows.filter((row) => row.group === 'not_present');
+      const presentRows = visibleRows
+        .filter((row) => row.group === 'present')
+        .sort((a, b) => compareRowsWithinGroup(a, b, params.mode));
+      const notPresentRows = visibleRows
+        .filter((row) => row.group === 'not_present')
+        .sort((a, b) => compareRowsWithinGroup(a, b, params.mode));
+      const summary = buildSectionSummary(allRows, params.mode);
 
       return {
         id: key,
         name: allRows[0]?.departmentNameAr ?? 'بدون قسم',
-        summaryText: buildSectionSummary(allRows, params.mode),
+        subtitle: summary.subtitle,
+        healthStatus: summary.healthStatus,
+        metrics: summary.metrics,
         presentRows,
         notPresentRows,
-        defaultExpanded:
-          params.selectedDepartmentId != null ||
-          params.mode === 'date' ||
-          allRows.some((row) => row.group === 'present'),
-        color:
-          key === NO_DEPARTMENT_KEY
-            ? null
-            : params.departments.find((department) => department.id === key)?.color ?? null,
+        defaultExpanded: false,
       } satisfies BoardSection;
     })
     .filter((section): section is BoardSection => section != null);
+}
+
+function EmployeeStatusTag({
+  status,
+  label,
+  icon: Icon,
+}: {
+  status: VisualStatus;
+  label?: string;
+  icon?: typeof Clock3;
+}) {
+  const config = getStatusConfig(status);
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border border-transparent px-2 py-0.5 text-xs font-medium text-white',
+        config.dotColor
+      )}
+    >
+      {Icon ? <Icon className="h-3 w-3" /> : null}
+      {label ?? config.label}
+    </span>
+  );
 }
 
 function ContentSkeleton() {
@@ -598,12 +717,9 @@ function EmployeeAttendanceRow({
 
       <div className="flex shrink-0 items-center gap-2">
         {showOvertimeIndicator ? (
-          <Badge className="border-violet-200 bg-violet-50 text-violet-700">
-            <Clock3 className="h-3 w-3" />
-            عمل إضافي
-          </Badge>
+          <EmployeeStatusTag status="fulfilled_shift" label="عمل إضافي" icon={Clock3} />
         ) : null}
-        {showPrimaryBadge ? <StatusBadge status={row.primaryState} size="sm" /> : null}
+        {showPrimaryBadge ? <EmployeeStatusTag status={row.primaryState} /> : null}
         {row.canOpenDetailsSheet ? (
           <ChevronLeft className="h-4 w-4 text-gray-400" />
         ) : null}
@@ -639,37 +755,67 @@ function DepartmentAttendanceSection({
   onToggle: () => void;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
-  const colorTokens = getDepartmentColorTokens(section.color);
+  const healthConfig = getStatusConfig(section.healthStatus);
   const presentHeading = boardMode === 'live' ? 'موجودون الآن' : 'حضروا في هذا اليوم';
-  const notPresentHeading = boardMode === 'live' ? 'غير موجودون الآن' : 'غير حاضرين في هذا اليوم';
+  const notPresentHeading = boardMode === 'live' ? 'غير موجودون' : 'غير حاضرين في هذا اليوم';
 
   return (
     <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-3 border-b px-4 py-3 text-right"
-        style={colorTokens.headerStyle}
+        aria-expanded={expanded}
+        className={cn(
+          'flex w-full items-center gap-3 px-4 py-3 text-right transition-colors hover:bg-gray-50',
+          expanded ? 'border-b border-gray-100' : ''
+        )}
       >
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-gray-900">{section.name}</p>
-          <p className="mt-0.5 truncate text-[11px] text-gray-500">{section.summaryText}</p>
+          <p className="mt-0.5 truncate text-[11px] text-gray-500">{section.subtitle}</p>
         </div>
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: colorTokens.value }}
-          aria-hidden="true"
-        />
-        <ChevronDown
-          className={cn('h-4 w-4 shrink-0 text-gray-400 transition-transform', expanded ? 'rotate-180' : '')}
-        />
+
+        {!expanded && section.metrics.length > 0 ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {section.metrics.map((metric) => {
+              const metricConfig = getStatusConfig(metric.status);
+              return (
+                <span
+                  key={metric.key}
+                  className={cn(
+                    'inline-flex h-6 min-w-6 items-center justify-center rounded-full border px-2 text-[11px] font-semibold tabular-nums',
+                    metricConfig.bgColor,
+                    metricConfig.color,
+                    metricConfig.borderColor
+                  )}
+                  aria-label={`${metric.label} (${metric.count})`}
+                  title={`${metric.label} (${metric.count})`}
+                >
+                  {metric.count}
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className={cn('h-2.5 w-2.5 rounded-full', healthConfig.dotColor)}
+            aria-hidden="true"
+          />
+          <ChevronDown
+            className={cn('h-4 w-4 text-gray-400 transition-transform', expanded ? 'rotate-180' : '')}
+          />
+        </div>
       </button>
 
       {expanded ? (
-        <div className="px-4 py-2" style={colorTokens.sectionAccentStyle}>
+        <div className="px-4 py-2">
           {section.presentRows.length > 0 ? (
             <div className="pb-1">
-              <p className="pb-2 pt-1 text-[11px] font-medium text-gray-500">{presentHeading}</p>
+              <p className="pb-2 pt-1 text-[11px] font-medium text-gray-500">
+                {`${presentHeading} (${section.presentRows.length})`}
+              </p>
               <div className="divide-y divide-gray-100">
                 {section.presentRows.map((row) => (
                   <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
@@ -680,7 +826,9 @@ function DepartmentAttendanceSection({
 
           {section.notPresentRows.length > 0 ? (
             <div className={cn(section.presentRows.length > 0 ? 'border-t border-gray-100 pt-3' : '')}>
-              <p className="pb-2 text-[11px] font-medium text-gray-500">{notPresentHeading}</p>
+              <p className="pb-2 text-[11px] font-medium text-gray-500">
+                {`${notPresentHeading} (${section.notPresentRows.length})`}
+              </p>
               <div className="divide-y divide-gray-100">
                 {section.notPresentRows.map((row) => (
                   <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
@@ -1190,8 +1338,7 @@ export function TeamAttendancePage() {
           !showBoardEmptyState &&
           !showFilterEmptyState &&
           sections.map((section) => {
-            const forceExpanded = selectedDepartmentDbId != null;
-            const isExpanded = forceExpanded || (expandedSections[section.id] ?? section.defaultExpanded);
+            const isExpanded = expandedSections[section.id] ?? section.defaultExpanded;
 
             return (
               <DepartmentAttendanceSection
@@ -1199,14 +1346,11 @@ export function TeamAttendancePage() {
                 section={section}
                 boardMode={mode}
                 expanded={isExpanded}
-                onToggle={
-                  forceExpanded
-                    ? () => {}
-                    : () =>
-                        setExpandedSections((current) => ({
-                          ...current,
-                          [section.id]: !isExpanded,
-                        }))
+                onToggle={() =>
+                  setExpandedSections((current) => ({
+                    ...current,
+                    [section.id]: !isExpanded,
+                  }))
                 }
                 onOpenDetails={setSelectedDetailRow}
               />

@@ -311,6 +311,12 @@ function filterByDepartment<T extends { departmentId: string | null }>(
   return rows.filter((row) => row.departmentId === departmentId);
 }
 
+async function expandDepartment(name: string) {
+  const headerButton = await screen.findByRole('button', { name: new RegExp(name, 'i') });
+  fireEvent.click(headerButton);
+  return headerButton;
+}
+
 describe('TeamAttendancePage', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -367,7 +373,7 @@ describe('TeamAttendancePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('سارة')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /الأخبار/i })).toBeInTheDocument();
     });
 
     const stickyFilters = screen.getByTestId('team-attendance-sticky-filters');
@@ -384,10 +390,17 @@ describe('TeamAttendancePage', () => {
     });
     expect(screen.getAllByText('الأخبار').length).toBeGreaterThan(0);
     expect(screen.getAllByText('التحرير').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('موجود الآن').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('غائب').length).toBeGreaterThan(0);
+    expect(screen.queryByText('سارة')).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('2026-04-06')).not.toBeInTheDocument();
     expect(screen.queryByText('08:10')).not.toBeInTheDocument();
+
+    await expandDepartment('التحرير');
+
+    await waitFor(() => {
+      expect(screen.getByText('سارة')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('موجودون الآن (1)')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('سارة'));
     expect(screen.queryByTestId('day-details-sheet')).not.toBeInTheDocument();
@@ -407,7 +420,7 @@ describe('TeamAttendancePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('علي')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /الأخبار/i })).toBeInTheDocument();
     });
 
     expect(attendanceService.getRedactedDepartmentAvailability).toHaveBeenCalledWith({
@@ -425,6 +438,14 @@ describe('TeamAttendancePage', () => {
     expect(within(filterBar).getByRole('button', { name: /^إجازة/ })).toBeInTheDocument();
     expect(within(filterBar).getByRole('button', { name: /^عمل إضافي/ })).toBeInTheDocument();
     expect(within(filterBar).queryByRole('button', { name: /^غير موجودين الآن/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('علي')).not.toBeInTheDocument();
+
+    await expandDepartment('الأخبار');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /علي/i })).toBeInTheDocument();
+    });
+
     expect(screen.getByRole('button', { name: /علي/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /سارة/i })).not.toBeInTheDocument();
 
@@ -454,9 +475,16 @@ describe('TeamAttendancePage', () => {
     expect(stickyFilters).not.toContainElement(datePicker);
     expect(stickyFilters).not.toContainElement(departmentSelect);
     expect(screen.getByDisplayValue('2026-04-05')).toBeInTheDocument();
-    expect(screen.getAllByText(/غير حاضر/).length).toBeGreaterThan(0);
     expect(within(stickyFilters).getByRole('button', { name: /^أكملوا الدوام/ })).toBeInTheDocument();
     expect(within(stickyFilters).getByRole('button', { name: /^دوام غير مكتمل/ })).toBeInTheDocument();
+
+    await expandDepartment('الأخبار');
+
+    await waitFor(() => {
+      expect(screen.getByText('حضروا في هذا اليوم (2)')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('غير حاضرين في هذا اليوم (1)')).toBeInTheDocument();
   });
 
   it('gives admins full live visibility across departments and keeps department filtering intact', async () => {
@@ -472,7 +500,15 @@ describe('TeamAttendancePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('علي')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /الأخبار/i })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('علي')).not.toBeInTheDocument();
+
+    await expandDepartment('الأخبار');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /ريم/i })).toBeInTheDocument();
     });
 
     const overtimeAbsentRow = screen.getByRole('button', { name: /ريم/i });
@@ -500,6 +536,14 @@ describe('TeamAttendancePage', () => {
         includeAllProfiles: true,
       });
     });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /التحرير/i })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('هدى')).not.toBeInTheDocument();
+
+    await expandDepartment('التحرير');
 
     await waitFor(() => {
       expect(screen.getByText('هدى')).toBeInTheDocument();
@@ -535,7 +579,14 @@ describe('TeamAttendancePage', () => {
     });
 
     expect(screen.getByDisplayValue('2026-04-05')).toBeInTheDocument();
-    expect(screen.getByText('مها')).toBeInTheDocument();
+    expect(screen.queryByText('مها')).not.toBeInTheDocument();
+
+    await expandDepartment('التحرير');
+
+    await waitFor(() => {
+      expect(screen.getByText('مها')).toBeInTheDocument();
+    });
+
     expect(screen.queryByText('علي')).not.toBeInTheDocument();
     expect(screen.queryByText('ريم')).not.toBeInTheDocument();
     expect(screen.queryByText('هدى')).not.toBeInTheDocument();
