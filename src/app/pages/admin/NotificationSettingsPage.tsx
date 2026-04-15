@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Bell, Clock, Timer, AlertTriangle, X, Pencil, BellRing } from 'lucide-react';
 import { PageLayout } from '../../components/layout/PageLayout';
+import { Switch } from '@/app/components/ui/switch';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import * as notifSettingsService from '@/lib/services/notification-settings.service';
 import type { NotificationSetting, NotificationSettingType } from '@/lib/services/notification-settings.service';
@@ -183,21 +184,13 @@ export function NotificationSettingsPage() {
                   )}
                 </div>
                 {/* Toggle */}
-                <button
-                  type="button"
-                  onClick={() => handleToggle(setting)}
+                <Switch
+                  checked={setting.enabled}
+                  onCheckedChange={() => handleToggle(setting)}
                   disabled={isToggling}
                   aria-label={setting.enabled ? 'تعطيل' : 'تفعيل'}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
-                    setting.enabled ? 'bg-blue-500' : 'bg-gray-200'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
-                      setting.enabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
+                  className="data-[state=checked]:bg-blue-500 data-[state=unchecked]:bg-gray-200"
+                />
               </div>
 
               {/* Message preview + edit button */}
