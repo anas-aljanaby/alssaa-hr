@@ -17,6 +17,11 @@ function post(body: Record<string, unknown> = { settingId: 'setting-1' }) {
 
 function makeDeps(queue: QResult[], userId = 'u1'): SendTestNotificationDeps {
   const admin = createQueuedFromClient(queue);
+  // Attach auth.getUser to the service client mock since the handler now uses
+  // admin.auth.getUser(token) instead of a separate user client.
+  (admin as Record<string, unknown>).auth = {
+    getUser: async () => ({ data: { user: { id: userId } }, error: null }),
+  };
   return {
     createUserClient: () =>
       ({

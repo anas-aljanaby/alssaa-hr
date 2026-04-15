@@ -66,19 +66,37 @@ export async function sendNotificationSettingTest(
     },
   }) as EdgeInvokeResult;
 
-  const edgeData = invoked.data as {
+  // supabase.functions.invoke puts non-2xx response bodies in `error`, not `data`.
+  // We need to extract the structured JSON from either location.
+  let edgeData: {
     error?: string;
     code?: string;
+    detail?: string;
     totalUsers?: number;
     pushedUsers?: number;
     deliveredPushes?: number;
-  } | null | undefined;
-  const edgeError = invoked.error;
+  } | null = null;
 
-  if (edgeData?.error || edgeError?.message) {
+  if (invoked.data && typeof invoked.data === 'object') {
+    edgeData = invoked.data as typeof edgeData;
+  } else if (invoked.error) {
+    // FunctionsHttpError — try to parse the context (the raw JSON body)
+    try {
+      const errObj = invoked.error as { context?: { json?: () => Promise<unknown> }; message?: string };
+      if (typeof errObj.context?.json === 'function') {
+        edgeData = (await errObj.context.json()) as typeof edgeData;
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  const errorMessage = edgeData?.error ?? (invoked.error as { message?: string })?.message;
+  if (errorMessage) {
     const code = edgeData?.code;
+    const detail = edgeData?.detail ? ` (${edgeData.detail})` : '';
     if (code === 'UNAUTHORIZED') {
-      throw new Error('انتهت الجلسة أو أنك غير مسجل الدخول. يرجى تسجيل الدخول مرة أخرى.');
+      throw new Error(`انتهت الجلسة أو أنك غير مسجل الدخول. يرجى تسجيل الدخول مرة أخرى.${detail}`);
     }
     if (code === 'FORBIDDEN') {
       throw new Error('هذه العملية متاحة للمدير العام فقط.');
@@ -90,7 +108,7 @@ export async function sendNotificationSettingTest(
       throw new Error('إشعارات الجهاز غير مفعّلة على الخادم بعد.');
     }
 
-    throw new Error(edgeData?.error || edgeError?.message || 'تعذر إرسال الإشعار التجريبي.');
+    throw new Error(errorMessage + detail || 'تعذر إرسال الإشعار التجريبي.');
   }
 
   return {

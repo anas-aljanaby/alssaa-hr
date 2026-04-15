@@ -52,17 +52,28 @@ export async function handleSendTestNotification(
       return jsonResponse({ error: 'Setting id is required', code: 'INVALID_SETTING_ID' }, 400);
     }
 
-    const userClient = deps.createUserClient(authHeader);
-    const {
-      data: { user },
-      error: userError,
-    } = await userClient.auth.getUser();
+    const admin = deps.createServiceClient();
+    const userResult = await admin.auth.getUser(token);
+    const user = (userResult as { data?: { user?: { id: string } | null } })?.data?.user ?? null;
+    const userError = (userResult as { error?: unknown })?.error ?? null;
 
     if (userError || !user) {
-      return jsonResponse({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401);
+      console.error('[send-test-notification] getUser failed:', JSON.stringify({ userError, hasUser: !!user }));
+      return jsonResponse(
+        {
+          error: 'Unauthorized',
+          code: 'UNAUTHORIZED',
+          // Include auth detail so the caller can see WHY it failed
+          detail: userError
+            ? typeof userError === 'object' && 'message' in (userError as Record<string, unknown>)
+              ? (userError as { message: string }).message
+              : String(userError)
+            : 'No user returned from token',
+        },
+        401
+      );
     }
 
-    const admin = deps.createServiceClient();
     const { data: profile, error: profileError } = await admin
       .from('profiles')
       .select('org_id, role')
