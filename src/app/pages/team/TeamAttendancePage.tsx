@@ -777,17 +777,6 @@ function DepartmentAttendanceSection({
           expanded ? 'border-b border-slate-200/80 bg-white/35' : ''
         )}
       >
-        <div className="flex shrink-0 self-stretch py-0.5">
-          <span
-            className={cn(
-              'mt-1 block h-3.5 w-3.5 rounded-full shadow-[0_4px_10px_rgba(15,23,42,0.12)]',
-              healthConfig.dotColor
-            )}
-            aria-label={`حالة القسم: ${healthConfig.label}`}
-            title={healthConfig.label}
-          />
-        </div>
-
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-950">{section.name}</p>
           <p className="mt-1 truncate text-[11px] font-medium text-slate-500">{section.subtitle}</p>
