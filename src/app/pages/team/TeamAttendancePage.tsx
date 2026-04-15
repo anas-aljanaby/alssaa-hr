@@ -7,6 +7,7 @@ import {
   DayDetailsSheet,
   type DayDetailsSheetSummary,
 } from '@/app/components/attendance/DayDetailsSheet';
+import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { cn } from '@/app/components/ui/utils';
@@ -645,7 +646,7 @@ function ContentSkeleton() {
   return (
     <div className="space-y-3">
       {Array.from({ length: 2 }).map((_, sectionIndex) => (
-        <div key={sectionIndex} className="rounded-3xl border border-gray-200 bg-white px-3 py-3">
+        <div key={sectionIndex} className="rounded-3xl border border-slate-200 bg-[#F7F8FA] px-3 py-3">
           <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
             <Skeleton className="h-4 w-28" />
             <Skeleton className="h-4 w-24" />
@@ -705,23 +706,29 @@ function EmployeeAttendanceRow({
   const content = (
     <div className="flex items-start justify-between gap-3 py-3">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-gray-900">{row.nameAr}</p>
+        <p className="truncate text-sm font-medium text-slate-900">{row.nameAr}</p>
         {(row.metaText || row.factText) ? (
-          <p className="mt-0.5 truncate text-[11px] text-gray-500">
-            {row.metaText}
-            {row.metaText && row.factText ? ' • ' : ''}
-            {row.factText}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-right">
+            {row.metaText ? (
+              <span className="truncate text-[11px] font-medium text-slate-500">{row.metaText}</span>
+            ) : null}
+            {row.factText ? (
+              <span className="truncate text-[10px] text-slate-400">{row.factText}</span>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
         {showOvertimeIndicator ? (
-          <EmployeeStatusTag status="fulfilled_shift" label="عمل إضافي" icon={Clock3} />
+          <Badge className="border-violet-200 bg-violet-50 text-violet-700">
+            <Clock3 className="h-3 w-3" />
+            عمل إضافي
+          </Badge>
         ) : null}
         {showPrimaryBadge ? <EmployeeStatusTag status={row.primaryState} /> : null}
         {row.canOpenDetailsSheet ? (
-          <ChevronLeft className="h-4 w-4 text-gray-400" />
+          <ChevronLeft className="h-4 w-4 text-slate-400" />
         ) : null}
       </div>
     </div>
@@ -735,7 +742,7 @@ function EmployeeAttendanceRow({
     <button
       type="button"
       onClick={() => onOpenDetails(row)}
-      className="w-full text-right transition-colors hover:bg-gray-50"
+      className="w-full text-right transition-colors hover:bg-white/70"
     >
       {content}
     </button>
@@ -760,63 +767,69 @@ function DepartmentAttendanceSection({
   const notPresentHeading = boardMode === 'live' ? 'غير موجودون' : 'غير حاضرين في هذا اليوم';
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-[#F7F8FA] shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
         className={cn(
-          'flex w-full items-center gap-3 px-4 py-3 text-right transition-colors hover:bg-gray-50',
-          expanded ? 'border-b border-gray-100' : ''
+          'flex w-full items-center gap-3 px-4 py-3.5 text-right transition-colors hover:bg-white/45',
+          expanded ? 'border-b border-slate-200/80 bg-white/35' : ''
         )}
       >
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-gray-900">{section.name}</p>
-          <p className="mt-0.5 truncate text-[11px] text-gray-500">{section.subtitle}</p>
+        <div className="flex shrink-0 self-stretch py-0.5">
+          <span
+            className={cn(
+              'mt-1 block h-3.5 w-3.5 rounded-full shadow-[0_4px_10px_rgba(15,23,42,0.12)]',
+              healthConfig.dotColor
+            )}
+            aria-label={`حالة القسم: ${healthConfig.label}`}
+            title={healthConfig.label}
+          />
         </div>
 
-        {!expanded && section.metrics.length > 0 ? (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {section.metrics.map((metric) => {
-              const metricConfig = getStatusConfig(metric.status);
-              return (
-                <span
-                  key={metric.key}
-                  className={cn(
-                    'inline-flex h-6 min-w-6 items-center justify-center rounded-full border px-2 text-[11px] font-semibold tabular-nums',
-                    metricConfig.bgColor,
-                    metricConfig.color,
-                    metricConfig.borderColor
-                  )}
-                  aria-label={`${metric.label} (${metric.count})`}
-                  title={`${metric.label} (${metric.count})`}
-                >
-                  {metric.count}
-                </span>
-              );
-            })}
-          </div>
-        ) : null}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-slate-950">{section.name}</p>
+          <p className="mt-1 truncate text-[11px] font-medium text-slate-500">{section.subtitle}</p>
+        </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <span
-            className={cn('h-2.5 w-2.5 rounded-full', healthConfig.dotColor)}
-            aria-hidden="true"
-          />
+        <div className="flex shrink-0 items-center justify-end gap-2 self-center">
+          {section.metrics.length > 0 ? (
+            <div className="flex max-w-[11rem] flex-wrap items-center justify-end gap-1.5">
+              {section.metrics.map((metric) => {
+                const metricConfig = getStatusConfig(metric.status);
+                return (
+                  <span
+                    key={metric.key}
+                    className={cn(
+                      'inline-flex h-6 min-w-6 items-center justify-center rounded-full border px-2 text-[11px] font-semibold tabular-nums shadow-[0_1px_2px_rgba(15,23,42,0.08)]',
+                      metricConfig.bgColor,
+                      metricConfig.color,
+                      metricConfig.borderColor
+                    )}
+                    aria-label={`${metric.label} (${metric.count})`}
+                    title={`${metric.label} (${metric.count})`}
+                  >
+                    {metric.count}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
           <ChevronDown
-            className={cn('h-4 w-4 text-gray-400 transition-transform', expanded ? 'rotate-180' : '')}
+            className={cn('h-4 w-4 text-slate-400 transition-transform', expanded ? 'rotate-180' : '')}
           />
         </div>
       </button>
 
       {expanded ? (
-        <div className="px-4 py-2">
+        <div className="px-4 py-3">
           {section.presentRows.length > 0 ? (
             <div className="pb-1">
-              <p className="pb-2 pt-1 text-[11px] font-medium text-gray-500">
+              <p className="pb-2 pt-1 text-[11px] font-semibold text-emerald-700">
                 {`${presentHeading} (${section.presentRows.length})`}
               </p>
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-slate-200/80">
                 {section.presentRows.map((row) => (
                   <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
                 ))}
@@ -825,11 +838,11 @@ function DepartmentAttendanceSection({
           ) : null}
 
           {section.notPresentRows.length > 0 ? (
-            <div className={cn(section.presentRows.length > 0 ? 'border-t border-gray-100 pt-3' : '')}>
-              <p className="pb-2 text-[11px] font-medium text-gray-500">
+            <div className={cn(section.presentRows.length > 0 ? 'border-t border-slate-200/80 pt-3' : '')}>
+              <p className="pb-2 text-[11px] font-semibold text-slate-600">
                 {`${notPresentHeading} (${section.notPresentRows.length})`}
               </p>
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-slate-200/80">
                 {section.notPresentRows.map((row) => (
                   <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
                 ))}

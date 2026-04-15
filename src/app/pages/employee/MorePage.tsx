@@ -21,13 +21,29 @@ import {
   LoaderCircle,
   WandSparkles,
   Bell,
+  BellOff,
+  BellRing,
+  Info,
 } from 'lucide-react';
+import {
+  isPushSupported,
+  getPushPermission,
+  requestAndSubscribe,
+  unsubscribeFromPush,
+} from '@/lib/push/push-manager';
 
 export function MorePage() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [department, setDepartment] = useState<Department | null>(null);
   const [isRunningAutoPunchOut, setIsRunningAutoPunchOut] = useState(false);
+
+  // ── push notification state ──────────────────────────────────────────────
+  const pushSupported = isPushSupported();
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [showDeniedHint, setShowDeniedHint] = useState(false);
 
   useEffect(() => {
     if (!currentUser?.departmentId) return;
@@ -37,9 +53,60 @@ export function MorePage() {
       .catch(() => toast.error('فشل تحميل بيانات القسم'));
   }, [currentUser?.departmentId]);
 
+  useEffect(() => {
+    if (!pushSupported) return;
+    const permission = getPushPermission();
+    setPushPermission(permission);
+    if (permission === 'granted') {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.pushManager.getSubscription())
+        .then((sub) => setIsSubscribed(!!sub))
+        .catch(() => {});
+    }
+  }, [pushSupported]);
+
   useAppTopBar(currentUser ? { title: 'المزيد' } : null);
 
   if (!currentUser) return null;
+
+  async function handleNotificationToggle() {
+    if (!pushSupported || pushLoading) return;
+
+    if (pushPermission === 'denied') {
+      setShowDeniedHint((v) => !v);
+      return;
+    }
+
+    if (pushPermission === 'granted' && isSubscribed) {
+      setPushLoading(true);
+      try {
+        await unsubscribeFromPush();
+        setIsSubscribed(false);
+        toast.success('تم إيقاف إشعارات الجهاز');
+      } catch {
+        toast.error('تعذر إيقاف الإشعارات');
+      } finally {
+        setPushLoading(false);
+      }
+      return;
+    }
+
+    setPushLoading(true);
+    try {
+      const result = await requestAndSubscribe(currentUser.uid);
+      setPushPermission(result);
+      if (result === 'granted') {
+        setIsSubscribed(true);
+        toast.success('تم تفعيل إشعارات الجهاز');
+      } else if (result === 'denied') {
+        setShowDeniedHint(true);
+      }
+    } catch {
+      toast.error('تعذر تفعيل الإشعارات');
+    } finally {
+      setPushLoading(false);
+    }
+  }
 
   const handleLogout = async () => {
     await logout();
@@ -254,6 +321,79 @@ export function MorePage() {
           </div>
         </div>
       </div>
+
+      {/* Device Notifications Row */}
+      {pushSupported && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+            <span className="text-xs text-gray-500">الجهاز</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleNotificationToggle()}
+            disabled={pushLoading}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                  pushPermission === 'granted' && isSubscribed
+                    ? 'bg-emerald-50'
+                    : pushPermission === 'denied'
+                    ? 'bg-red-50'
+                    : 'bg-gray-100'
+                }`}
+              >
+                {pushLoading ? (
+                  <LoaderCircle className="w-4.5 h-4.5 text-gray-400 animate-spin" />
+                ) : pushPermission === 'granted' && isSubscribed ? (
+                  <BellRing className="w-4.5 h-4.5 text-emerald-500" />
+                ) : pushPermission === 'denied' ? (
+                  <BellOff className="w-4.5 h-4.5 text-red-400" />
+                ) : (
+                  <Bell className="w-4.5 h-4.5 text-gray-400" />
+                )}
+              </div>
+              <div className="text-right">
+                <span className="text-sm text-gray-800">إشعارات الجهاز</span>
+                <p className={`text-xs mt-0.5 ${
+                  pushPermission === 'granted' && isSubscribed
+                    ? 'text-emerald-600'
+                    : pushPermission === 'denied'
+                    ? 'text-red-400'
+                    : 'text-gray-400'
+                }`}>
+                  {pushPermission === 'granted' && isSubscribed
+                    ? 'مفعّلة'
+                    : pushPermission === 'denied'
+                    ? 'محظورة — اضغط لمعرفة كيفية التفعيل'
+                    : 'غير مفعّلة — اضغط للتفعيل'}
+                </p>
+              </div>
+            </div>
+            {pushPermission === 'denied' ? (
+              <Info className="w-4 h-4 text-red-300" />
+            ) : (
+              <ChevronLeft className="w-4 h-4 text-gray-300" />
+            )}
+          </button>
+
+          {/* Denied state hint */}
+          {showDeniedHint && pushPermission === 'denied' && (
+            <div className="px-4 pb-4 pt-1 border-t border-gray-50">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                لقد رفضت الإذن سابقاً. لإعادة تفعيل الإشعارات:
+              </p>
+              <ol className="mt-2 space-y-1 text-xs text-gray-500 list-decimal list-inside leading-relaxed">
+                <li>افتح إعدادات المتصفح أو الجهاز</li>
+                <li>ابحث عن هذا الموقع ضمن إعدادات الإشعارات</li>
+                <li>غيّر الإذن إلى "السماح"</li>
+                <li>أعد تحميل الصفحة</li>
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Menu Sections */}
       {menuSections.map((section) => (
