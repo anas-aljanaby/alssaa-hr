@@ -29,7 +29,6 @@ import {
   isPushSupported,
   getPushPermission,
   requestAndSubscribe,
-  unsubscribeFromPush,
 } from '@/lib/push/push-manager';
 
 export function MorePage() {
@@ -77,19 +76,8 @@ export function MorePage() {
       return;
     }
 
-    if (pushPermission === 'granted' && isSubscribed) {
-      setPushLoading(true);
-      try {
-        await unsubscribeFromPush();
-        setIsSubscribed(false);
-        toast.success('تم إيقاف إشعارات الجهاز');
-      } catch {
-        toast.error('تعذر إيقاف الإشعارات');
-      } finally {
-        setPushLoading(false);
-      }
-      return;
-    }
+    // Already active — nothing to do
+    if (pushPermission === 'granted' && isSubscribed) return;
 
     setPushLoading(true);
     try {
@@ -331,8 +319,8 @@ export function MorePage() {
           <button
             type="button"
             onClick={() => void handleNotificationToggle()}
-            disabled={pushLoading}
-            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors disabled:opacity-60"
+            disabled={pushLoading || (pushPermission === 'granted' && isSubscribed)}
+            className="w-full flex items-center justify-between px-4 py-3.5 transition-colors disabled:cursor-default enabled:hover:bg-gray-50"
           >
             <div className="flex items-center gap-3">
               <div
@@ -371,7 +359,7 @@ export function MorePage() {
                 </p>
               </div>
             </div>
-            {pushPermission === 'denied' ? (
+            {pushPermission === 'granted' && isSubscribed ? null : pushPermission === 'denied' ? (
               <Info className="w-4 h-4 text-red-300" />
             ) : (
               <ChevronLeft className="w-4 h-4 text-gray-300" />
