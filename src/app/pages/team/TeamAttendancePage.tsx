@@ -646,7 +646,10 @@ function ContentSkeleton() {
   return (
     <div className="space-y-3">
       {Array.from({ length: 2 }).map((_, sectionIndex) => (
-        <div key={sectionIndex} className="rounded-3xl border border-slate-200 bg-[#F7F8FA] px-3 py-3">
+        <div
+          key={sectionIndex}
+          className="rounded-3xl border border-slate-200 bg-white px-3 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.07)]"
+        >
           <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
             <Skeleton className="h-4 w-28" />
             <Skeleton className="h-4 w-24" />
@@ -767,19 +770,25 @@ function DepartmentAttendanceSection({
   const notPresentHeading = boardMode === 'live' ? 'غير موجودون' : 'غير حاضرين في هذا اليوم';
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-[#F7F8FA] shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+    <section
+      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.07)]"
+      style={{
+        borderRightWidth: '4px',
+        borderRightColor: healthConfig.hexColor,
+      }}
+    >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
         className={cn(
-          'flex w-full items-center gap-3 px-4 py-3.5 text-right transition-colors hover:bg-white/45',
-          expanded ? 'border-b border-slate-200/80 bg-white/35' : ''
+          'flex w-full items-center gap-3 px-4 py-3.5 text-right transition-colors hover:bg-slate-50',
+          expanded ? 'border-b border-slate-200/80 bg-slate-50/80' : ''
         )}
       >
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-950">{section.name}</p>
-          <p className="mt-1 truncate text-[11px] font-medium text-slate-500">{section.subtitle}</p>
+          <p className="mt-1 truncate text-[11px] font-medium text-slate-600">{section.subtitle}</p>
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 self-center">
