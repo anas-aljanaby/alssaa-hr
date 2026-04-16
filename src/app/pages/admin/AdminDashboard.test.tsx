@@ -235,7 +235,8 @@ describe('AdminDashboard', () => {
     );
 
     await screen.findByText('ملخص اليوم');
-    expect(screen.getByRole('button', { name: /موجودون الآن/i })).toHaveTextContent('2');
+    expect(screen.getByRole('button', { name: /موجودون الآن/i })).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: /متأخر/i })).toHaveTextContent('1');
     expect(screen.getByRole('button', { name: /لم يسجلوا بعد/i })).toHaveTextContent('1');
 
     fireEvent.click(screen.getByRole('button', { name: /غائب/i }));

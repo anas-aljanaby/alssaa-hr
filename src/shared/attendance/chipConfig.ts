@@ -36,7 +36,7 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'موجودون الآن',
     themeStatus: 'available_now',
     visibleToRoles: ALL_ROLES,
-    matchesRow: (row) => row.primaryState === 'available_now' || row.primaryState === 'late',
+    matchesRow: (row) => row.primaryState === 'available_now',
   },
   {
     key: 'late',
