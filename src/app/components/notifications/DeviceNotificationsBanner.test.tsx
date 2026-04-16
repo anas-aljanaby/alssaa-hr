@@ -90,4 +90,12 @@ describe('DeviceNotificationsBanner', () => {
       expect(screen.getByText('تعذر ربط هذا الجهاز بإشعارات الدوام')).toBeInTheDocument();
     });
   });
+
+  it('allows dismissing the banner with the close button', () => {
+    render(<DeviceNotificationsBanner />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'إغلاق تنبيه الإشعارات' }));
+
+    expect(screen.queryByText('فعّل إشعارات الجهاز')).not.toBeInTheDocument();
+  });
 });
