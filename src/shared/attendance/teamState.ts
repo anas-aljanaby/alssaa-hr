@@ -6,7 +6,6 @@
  */
 
 export const TEAM_ATTENDANCE_LIVE_STATES = [
-  'available_now',
   'late',
   'on_break',
   'not_entered_yet',
@@ -31,7 +30,6 @@ export const TEAM_ATTENDANCE_DATE_STATES = [
 export type TeamAttendanceDateState = (typeof TEAM_ATTENDANCE_DATE_STATES)[number];
 
 export const TEAM_ATTENDANCE_PRIMARY_STATES = [
-  'available_now',
   'fulfilled_shift',
   'incomplete_shift',
   'late',
@@ -46,7 +44,7 @@ export type TeamAttendancePrimaryState = (typeof TEAM_ATTENDANCE_PRIMARY_STATES)
 
 export type TeamAttendanceChipKey =
   | 'all'
-  | 'available_now'
+  | 'checked_in'
   | 'fulfilled_shift'
   | 'incomplete_shift'
   | 'late'
@@ -68,12 +66,6 @@ export const TEAM_ATTENDANCE_STATE_DEFINITIONS: Record<
   TeamAttendancePrimaryState,
   TeamAttendanceStateDefinition
 > = {
-  available_now: {
-    label: 'موجود الآن',
-    labelEn: 'Available now',
-    chipVisible: true,
-    liveMeaning: 'Currently checked in, not late, and available to take work now.',
-  },
   fulfilled_shift: {
     label: 'أكمل الدوام',
     labelEn: 'Fulfilled shift',
@@ -91,7 +83,7 @@ export const TEAM_ATTENDANCE_STATE_DEFINITIONS: Record<
     label: 'متأخر',
     labelEn: 'Late',
     chipVisible: true,
-    liveMeaning: 'Currently checked in and late.',
+    liveMeaning: 'Arrived late today. Applies whether the employee is currently checked in or not — lateness persists through breaks and sign-outs.',
     dateMeaning: 'Worked the day late and does not overlap with fulfilled shift.',
   },
   on_break: {

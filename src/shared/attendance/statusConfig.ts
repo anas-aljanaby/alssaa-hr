@@ -173,10 +173,10 @@ export const STATUS_DISPLAY: Record<DisplayStatus, StatusDisplayConfig> = {
   }),
 };
 
-export const TEAM_STATUS_DISPLAY: Record<TeamAttendancePrimaryState, StatusDisplayConfig> = {
-  available_now: makeStatusDisplayConfig({
+export const TEAM_STATUS_DISPLAY: Record<TeamAttendancePrimaryState | 'checked_in', StatusDisplayConfig> = {
+  checked_in: makeStatusDisplayConfig({
     label: 'موجود الآن',
-    labelEn: 'Available now',
+    labelEn: 'Checked in',
     color: 'text-emerald-700',
     bgColor: 'bg-emerald-50',
     borderColor: 'border-emerald-500',
@@ -266,7 +266,7 @@ export const TEAM_STATUS_DISPLAY: Record<TeamAttendancePrimaryState, StatusDispl
   }),
 };
 
-export type VisualStatus = DisplayStatus | TeamAttendancePrimaryState;
+export type VisualStatus = DisplayStatus | TeamAttendancePrimaryState | 'checked_in';
 
 export function getStatusConfig(status: VisualStatus): StatusDisplayConfig;
 export function getStatusConfig(status: string): StatusDisplayConfig;
@@ -277,6 +277,10 @@ export function getStatusConfig(status: VisualStatus | string): StatusDisplayCon
 
   if (isTeamAttendancePrimaryState(status)) {
     return TEAM_STATUS_DISPLAY[status];
+  }
+
+  if (status === 'checked_in') {
+    return TEAM_STATUS_DISPLAY['checked_in'];
   }
 
   return NEUTRAL_STATUS_CONFIG;

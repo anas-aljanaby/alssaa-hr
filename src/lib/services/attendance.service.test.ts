@@ -228,7 +228,7 @@ describe('attendance.service', () => {
           department_id: 'd1',
           department_name_ar: 'التحرير',
           availability_state: 'available_now',
-          team_live_state: 'available_now',
+          team_live_state: null,
           has_overtime: false,
         },
       ],
@@ -246,7 +246,7 @@ describe('attendance.service', () => {
         userId: 'u1',
         nameAr: 'علي',
         departmentNameAr: 'التحرير',
-        teamLiveState: 'available_now',
+        teamLiveState: null,
         hasOvertime: false,
       }),
     ]);

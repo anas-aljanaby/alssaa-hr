@@ -21,7 +21,7 @@ const liveAvailabilityRows = [
     departmentId: 'dept-news',
     departmentNameAr: 'الأخبار',
     availabilityState: 'available_now' as const,
-    teamLiveState: 'available_now' as const,
+    teamLiveState: null,
     hasOvertime: false,
   },
   {
@@ -45,7 +45,7 @@ const liveAvailabilityRows = [
     departmentId: 'dept-editing',
     departmentNameAr: 'التحرير',
     availabilityState: 'available_now' as const,
-    teamLiveState: 'available_now' as const,
+    teamLiveState: null,
     hasOvertime: false,
   },
 ];

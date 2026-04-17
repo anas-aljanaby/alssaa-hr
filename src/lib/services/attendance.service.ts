@@ -135,7 +135,7 @@ export interface TeamAttendanceDayRow {
   date: string;
   effectiveStatus: AttendanceEffectiveStatus | null;
   displayStatus: TeamAttendanceDisplayStatus;
-  teamLiveState: TeamAttendanceLiveState;
+  teamLiveState: TeamAttendanceLiveState | null; // null = baseline (on time, checked in, no chip)
   teamDateState: TeamAttendanceDateState;
   firstCheckIn: string | null;
   lastCheckOut: string | null;
@@ -158,7 +158,7 @@ export interface SafeAvailabilityRow {
   departmentId: string | null;
   departmentNameAr: string | null;
   availabilityState: 'available_now' | 'unavailable_now';
-  teamLiveState: TeamAttendanceLiveState;
+  teamLiveState: TeamAttendanceLiveState | null; // null = baseline (on time, checked in, no chip)
   hasOvertime: boolean;
 }
 
@@ -1493,7 +1493,7 @@ function mapTeamAttendanceDayRow(row: TeamAttendanceDayRpcRow): TeamAttendanceDa
     date: row.date,
     effectiveStatus: row.effective_status as AttendanceEffectiveStatus | null,
     displayStatus: row.display_status as TeamAttendanceDisplayStatus,
-    teamLiveState: row.team_live_state as TeamAttendanceLiveState,
+    teamLiveState: row.team_live_state as TeamAttendanceLiveState | null,
     teamDateState: row.team_date_state as TeamAttendanceDateState,
     firstCheckIn: row.first_check_in,
     lastCheckOut: row.last_check_out,
@@ -1518,7 +1518,7 @@ function mapSafeAvailabilityRow(row: RedactedAvailabilityRpcRow): SafeAvailabili
     departmentId: row.department_id,
     departmentNameAr: row.department_name_ar,
     availabilityState: row.availability_state as 'available_now' | 'unavailable_now',
-    teamLiveState: row.team_live_state as TeamAttendanceLiveState,
+    teamLiveState: row.team_live_state as TeamAttendanceLiveState | null,
     hasOvertime: Boolean(row.has_overtime),
   };
 }

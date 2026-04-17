@@ -133,7 +133,7 @@ describe('AdminDashboard', () => {
         date: '2026-04-04',
         effectiveStatus: 'present',
         displayStatus: 'present',
-        teamLiveState: 'available_now',
+        teamLiveState: null,
         teamDateState: 'fulfilled_shift',
         firstCheckIn: '08:05',
         lastCheckOut: null,
@@ -235,7 +235,7 @@ describe('AdminDashboard', () => {
     );
 
     await screen.findByText('ملخص اليوم');
-    expect(screen.getByRole('button', { name: /موجودون الآن/i })).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: /موجودون الآن/i })).toHaveTextContent('2'); // emp-1 (null/baseline) + emp-2 (late, isCheckedInNow=true)
     expect(screen.getByRole('button', { name: /متأخر/i })).toHaveTextContent('1');
     expect(screen.getByRole('button', { name: /لم يسجلوا بعد/i })).toHaveTextContent('1');
 

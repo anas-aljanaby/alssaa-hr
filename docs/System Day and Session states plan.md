@@ -1,13 +1,13 @@
-# Attendance State System Plan
+# Attendance State System
 
-This document defines a consistent state system for attendance days and sessions. The goal is to identify every consumer of attendance state, determine exactly what states each consumer needs, verify our system provides those states, and ensure the implementation is clean and intentional. Scope is limited to docs and backend — any frontend changes will be noted here for later implementation. The system contains legacy code and artifacts that cause errors and unexpected behavior; we will identify these and plan their removal. Every design decision and piece of code should be questioned — nothing is taken for granted.
+This document is the canonical reference for the attendance state system. It defines all states, fields, and design decisions. Any code that conflicts with this document is wrong.
 
 We design from the admin's point of view, since everything else can be derived from it. For example, the employee attendance page should present the same data as the admin's user details page.
 
 
 ## Core Model
 
-The system is built around two orthogonal dimensions. Understanding the distinction between them is essential — conflating them is the root cause of past bugs.
+The system is built around two orthogonal dimensions. Understanding the distinction between them is essential — conflating them is the source of most attendance-related bugs.
 
 **Attendance verdict** — the states defined in this document. They answer: *what kind of attendance day is this employee having?* Was it on time? Late? Did they complete their shift? Did they not show up? These are verdicts about the quality and completeness of attendance. A verdict does not change because an employee steps out for a break — it reflects what happened, not what is happening right now.
 
@@ -83,7 +83,7 @@ An employee with none of the above chips who is also `is_checked_in_now = true` 
 
 > **Sectioning vs. chips:** The "available now" / "not available now" split on the Live Board is driven purely by `is_checked_in_now`, independent of which chip the employee carries. A `late` employee with `is_checked_in_now = true` appears in "available now" and still carries the `late` chip so the admin can follow up on the lateness. A `late` employee on break (`is_checked_in_now = false`) appears in "not available now" and still carries the `late` chip. An on-time employee on break appears in "not available now" with the `on_break` chip, so the admin can distinguish them from employees who haven't shown up at all (who carry `not_entered_yet`).
 >
-> **Chip priority (post-shift-window):** When the shift window has ended and the employee's final state must be resolved, multiple conditions may overlap (e.g., an employee can be both late and have an incomplete shift). The live board shows a single chip per employee, resolved by this priority order: `on_leave` → `absent` → `late` → `incomplete_shift` → `fulfilled_shift`. Notably, `late` takes priority over `incomplete_shift` — a late employee who also didn't meet the minimum shows `late`, not `incomplete_shift`. This keeps the stronger admin signal visible; the shift completion detail is available in the drill-down (see requirement below).
+> **Chip priority (post-shift-window):** When the shift window has ended and the employee's final state must be resolved, multiple conditions may overlap (e.g., an employee can be both late and have an incomplete shift). The live board shows a single chip per employee, resolved by this priority order: `on_leave` → `absent` → `late` → `incomplete_shift` → `fulfilled_shift`. Notably, `late` takes priority over `incomplete_shift` — a late employee who also didn't meet the minimum shows `late`, not `incomplete_shift`. This keeps the stronger admin signal visible; the shift completion detail is available in the drill-down.
 >
 > **Drill-down requirement:** Every consumer that shows a single chip (live board, date board, calendar) must also provide a drill-down view where the admin can see both punctuality and shift completion as separate tags. The drill-down is not constrained by the single-chip rule — it should show all applicable tags. For example, a late employee who didn't meet the minimum should show both `late` and `incomplete_shift` in the drill-down; a late employee who did meet the minimum should show `late` and `fulfilled_shift`. Each page owns its own drill-down UX — this plan only mandates that both dimensions are visible somewhere on every consumer.
 >
@@ -121,11 +121,13 @@ These are the places in the admin panel that consume attendance state. Each has 
 
 ## Decisions
 
-1. **Day/Session architecture:** Yes. Two-level hierarchy — `attendance_sessions` (raw punches) → `attendance_daily_summary` (daily verdict). Sessions feed into days, never the reverse.
-2. **Overtime is a flag, not a status:** Session `status` is always `present` or `late`. `is_overtime` is an orthogonal boolean. This allows `late` + `is_overtime` combinations.
-3. **Day modifiers over day states:** `has_overtime` and `is_incomplete_shift` are independent flags on days, not competing states. Day states stay purely about punctuality/attendance. `overtime_only` → `absent` + `has_overtime`. `incomplete_shift` → `present`/`late` + `is_incomplete_shift`.
-6. **Single chip, two-layer resolution for all boards:** Both the live board and date board show a single chip per employee, resolved by priority: `on_leave` → `absent` → `late` → `incomplete_shift` → `fulfilled_shift`. This is a display concern only. The underlying data always computes both punctuality (`present`/`late`) and shift completion (`is_incomplete_shift`) independently. Filters operate on the underlying flags, not the display chip — so filtering by "incomplete shift" returns all employees who didn't meet the minimum, including those whose chip shows `late`. Every consumer must provide a drill-down where both dimensions are visible.
-4. **Materialize `absent`, derive `weekend`/`future`/`not_joined`:** `absent` is written by an idempotent end-of-day job so historical verdicts are stable across schedule/join-date edits and admin overrides are simple row updates. The other three are pure functions of `(date, employee, schedule, join_date, today)` and don't need rows. Stored rows are authoritative for past dates — reads must not recompute them. Holiday is out of scope for now; it will slot in later as another sourced state without schema change.
+1. **Day/Session architecture.** Two-level hierarchy — `attendance_sessions` (raw punches) → `attendance_daily_summary` (daily verdict). Sessions feed into days, never the reverse.
+
+2. **Overtime is a flag, not a status.** Session `status` is always `present` or `late`. `is_overtime` is an orthogonal boolean. This allows `late` + `is_overtime` combinations.
+
+3. **Day modifiers over day states.** `has_overtime` and `is_incomplete_shift` are independent flags on days, not competing states. Day states stay purely about punctuality/attendance. `overtime_only` → `absent` + `has_overtime`. `incomplete_shift` → `present`/`late` + `is_incomplete_shift`.
+
+4. **Materialize `absent`, derive `weekend`/`future`/`not_joined`.** `absent` is written by an idempotent end-of-day job so historical verdicts are stable across schedule/join-date edits and admin overrides are simple row updates. The other three are pure functions of `(date, employee, schedule, join_date, today)` and don't need rows. Stored rows are authoritative for past dates — reads must not recompute them.
 
    | State | Storage | How it gets set |
    |---|---|---|
@@ -136,53 +138,23 @@ These are the places in the admin panel that consume attendance state. Each has 
    | `future` | derived | Resolver returns this when `date > today` |
    | `not_joined` | derived | Resolver returns this when `date < employee.join_date` |
 
-5. **Breaks are an availability dimension, not a status change.** When an employee checks out mid-shift for a break, their underlying session status (`present` or `late`) does not change. On the Live Board, this is reflected two ways: (a) the `late` chip persists through breaks so lateness stays visible to the admin, and (b) an on-time employee on break shows the dedicated `on_break` chip instead of falling into `neutral`. The Live Board sections ("available now" vs "not available now") are driven purely by `is_checked_in_now`, independent of which chip the row carries. This keeps `neutral` meaning "no shift was expected" and prevents mid-shift activity from ever landing there.
+5. **Single chip, two-layer resolution for all boards.** Both the live board and date board show a single chip per employee, resolved by priority: `on_leave` → `absent` → `late` → `incomplete_shift` → `fulfilled_shift`. This is a display concern only. The underlying data always computes both punctuality (`present`/`late`) and shift completion (`is_incomplete_shift`) independently. Filters operate on the underlying flags, not the display chip — so filtering by "incomplete shift" returns all employees who didn't meet the minimum, including those whose chip shows `late`. Every consumer must provide a drill-down where both dimensions are visible.
 
-7. **Presence and attendance verdict are two orthogonal dimensions.** States answer "what kind of attendance day is this employee having?" — they are verdicts about punctuality and shift completion. `is_checked_in_now` answers "does this employee have an open session right now?" — it is a snapshot of the current moment. These two dimensions are always independent. Any consumer that needs to surface who is currently available must read `is_checked_in_now` directly; inferring availability from a state name is incorrect and was the source of the available-count bug.
+6. **Breaks are an availability dimension, not a status change.** When an employee checks out mid-shift for a break, their underlying session status (`present` or `late`) does not change. On the Live Board: the `late` chip persists through breaks so lateness stays visible to the admin, and an on-time employee on break shows the dedicated `on_break` chip instead of falling into `neutral`. Section placement is determined by `is_checked_in_now`, independent of which chip the row carries. This keeps `neutral` meaning "no shift was expected" and prevents mid-shift activity from ever landing there.
 
-8. **`available_now` is dropped as a live state.** The old `available_now` state encoded two facts at once (on time + currently checked in), making it redundant with `is_checked_in_now` for the presence dimension and ambiguous for the verdict dimension. Under the new model, the "on time, regular session, nothing notable" case is the baseline — it carries no chip. Presence is determined by `is_checked_in_now` alone. See the Legacy Reference section for the old definition and migration mapping.
+7. **Presence and attendance verdict are two orthogonal dimensions.** States answer "what kind of attendance day is this employee having?" — they are verdicts about punctuality and shift completion. `is_checked_in_now` answers "does this employee have an open session right now?" — it is a snapshot of the current moment. These two dimensions are always independent. Any consumer that needs to surface who is currently available must read `is_checked_in_now` directly. Never infer availability from a state name.
 
-
-## Open Concerns
-
-- **Legacy `attendance_logs` table:** Predates the session/day split. Needs to be phased out.
-- **State naming inconsistency:** Too many overlapping enums (`DayStatus`, `EffectiveStatus`, `TeamAttendanceLiveState`, `TeamAttendanceDateState`, `DisplayStatus`). Assess which can be consolidated.
-- **`neutral` collapses off-day and missing-shift-config:** After narrowing `neutral`, it still covers two distinct situations: legitimate off-day (weekend/holiday) and a missing shift configuration. The second case silently hides config drift. See Future Work for a planned split.
-- **`mark-absent` only runs for today:** No way to backfill an arbitrary date range, so a missed run leaves gaps. The underlying SQL function is idempotent and range-safe; the edge function should expose that.
-- **Weekend stores a row with `effective_status = NULL`:** Conflicts with decision #4 (weekend is derived). Decide whether to stop writing these rows or treat weekend as a sourced state.
-- **`overtime_only` still exists as a status value:** Conflicts with decision #3 (overtime is a modifier). Migrate to `absent` + `has_overtime`.
-- **`is_short_day` exists in the codebase:** The current code uses a field called `is_short_day`. This needs to be renamed to `is_incomplete_shift` to match the plan, and its logic should be reviewed to ensure it matches the definition here (employee worked but didn't meet shift minimum hours). Whether the existing implementation fits as-is or needs adjustment, the rename is required either way.
-- **Recalc reads current schedule, not historical:** Re-running recalc for a past date uses today's `work_days`/policy, so a schedule edit retroactively flips old verdicts. Breaks historical stability under idempotent re-runs.
+8. **Chips signal exceptions; the baseline has no chip.** The "on time, regular session, currently working" case is the normal baseline and carries no live state chip. Every live state chip signals something that warrants admin attention. This means there is no `available_now` live state — the baseline is represented by the absence of exception chips combined with `is_checked_in_now = true`.
 
 
 ## Future Work
 
 ### Splitting `neutral` further
 
-Even after narrowing, `neutral` still covers two distinct situations: a legitimate off-day (weekend/holiday) and a missing shift configuration. The cleaner model would split these into `off_day` and `unscheduled`, keeping `neutral` only as a safety-net fallback. Deferred because it adds new frontend chips, colors, and labels without fixing an immediately painful bug — the current single `neutral` label is workable while admins learn the system.
+Even after narrowing, `neutral` still covers two distinct situations: a legitimate off-day (weekend/holiday) and a missing shift configuration. The cleaner model would split these into `off_day` and `unscheduled`, keeping `neutral` only as a safety-net fallback. Deferred because it adds new frontend chips, colors, and labels without fixing an immediately painful problem.
 
-When we revisit this, one UX direction worth exploring: instead of piling on more chips, visually distinguish off-day employees at the row level (e.g., subtle background tint or not greyed out) so "this person isn't expected today" is communicated without a dedicated chip. That would let `unscheduled` stand alone as a chip for the real problem case (config drift) while off-days become purely a visual treatment.
+When we revisit this, one UX direction worth exploring: instead of adding more chips, visually distinguish off-day employees at the row level (e.g., subtle background tint) so "this person isn't expected today" is communicated without a dedicated chip. That would let `unscheduled` stand alone as a chip for the real problem case (config drift) while off-days become purely a visual treatment.
 
-**Known gap under the current approach:** an employee with no shift configured is indistinguishable from one who is legitimately on a weekend/holiday. Both land in `neutral`. This hides config drift from the admin. Acceptable for now; worth fixing when we do the split.
+### Holiday support
 
-
-## Legacy Reference
-
-This section preserves old state definitions that have been superseded by decisions in this document. It exists solely as a migration aid — when renaming or removing these from the codebase, this is the record of what they meant and what they map to.
-
-### Dropped: `available_now` (Live Board State)
-
-**Old definition:** Employee is currently checked in (open session), arrived on time, and it's a working day during shift hours.
-
-**Why it was dropped:** The state encoded two independent facts — punctuality (on time) and presence (open session) — under a single name. This caused the "available count" bug: consumers that wanted to know who was currently present used the state name as a proxy, which silently broke whenever a late-but-checked-in employee appeared. See Decision #7 and #8.
-
-**Migration mapping:**
-- The presence half (`is_checked_in_now = true`) → read `is_checked_in_now` directly on every row. This is now the canonical field for any availability display or count.
-- The verdict half (on time, regular session, nothing notable) → represented by the *absence* of any exception chip. No code change needed for the verdict itself; remove any logic that sets or matches the `available_now` state value.
-
-**Codebase artifacts to remove or rename:**
-- `TeamAttendanceLiveState` / `TeamAttendancePrimaryState` enum value `'available_now'`
-- `TEAM_ATTENDANCE_STATE_DEFINITIONS['available_now']`
-- `resolve_team_attendance_live_state` SQL function — the branch that returns `'available_now'` should be updated
-- `chipConfig.ts` — the `available_now` chip entry and its `matchesRow` predicate
-- `teamState.ts` — `liveMeaning` for `late` currently incorrectly says "Currently checked in and late" — it should be corrected to reflect that `late` persists regardless of `is_checked_in_now`
+Holiday is out of scope for the current state system; it will slot in as another sourced day state without schema change.

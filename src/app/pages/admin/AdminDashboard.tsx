@@ -69,8 +69,9 @@ function resolveTeamRowDisplayStatus(row: TeamAttendanceDayRow, liveMode: boolea
 type AdminTab = 'overview' | 'analytics';
 
 interface DashboardSummaryRow {
-  primaryState: TeamAttendancePrimaryState;
+  primaryState: TeamAttendancePrimaryState | null;
   hasOvertime: boolean;
+  isCheckedInNow: boolean;
 }
 
 export function AdminDashboard() {
@@ -208,6 +209,7 @@ export function AdminDashboard() {
       eligibleTodayRows.rows.map((row) => ({
         primaryState: summaryMode === 'live' ? row.teamLiveState : row.teamDateState,
         hasOvertime: row.hasOvertime,
+        isCheckedInNow: row.isCheckedInNow,
       })),
     [eligibleTodayRows.rows, summaryMode]
   );
@@ -229,6 +231,7 @@ export function AdminDashboard() {
         eligibleTodayRows.rows.map((row) => ({
           primaryState: row.teamLiveState,
           hasOvertime: row.hasOvertime,
+          isCheckedInNow: row.isCheckedInNow,
         }))
       ),
     [eligibleTodayRows.rows]
@@ -264,7 +267,7 @@ export function AdminDashboard() {
       [
         {
           name: 'حاضر',
-          value: liveSummaryCounts.available_now ?? 0,
+          value: liveSummaryCounts.checked_in ?? 0,
           color: '#059669',
         },
         {
@@ -408,7 +411,7 @@ export function AdminDashboard() {
                 <StatCard
                   key={card.key}
                   icon={
-                    card.key === 'available_now' || card.key === 'fulfilled_shift' ? (
+                    card.key === 'checked_in' || card.key === 'fulfilled_shift' ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                     ) : card.key === 'late' ? (
                       <Timer className="w-5 h-5 text-amber-500" />

@@ -26,6 +26,7 @@ import {
   countByChip,
   getChipsForRole,
   getStatusConfig,
+  isTeamAttendancePrimaryState,
   rowMatchesChip,
   type TeamAttendancePrimaryState,
   type TeamAttendanceChipKey,
@@ -62,8 +63,9 @@ interface AttendanceBoardRow {
   departmentNameAr: string;
   scope: BoardScope;
   group: BoardGroup;
-  primaryState: TeamAttendancePrimaryState;
+  primaryState: TeamAttendancePrimaryState | null; // null = baseline (on time, checked in, no chip)
   hasOvertime: boolean;
+  isCheckedInNow: boolean; // true = employee has an open session right now
   metaText: string | null;
   factText: string | null;
   canViewDetailedStatus: boolean;
@@ -162,7 +164,7 @@ function parseStatusFilterParam(raw: string | null): AttendanceStatusFilter {
   if (
     [
       'all',
-      'available_now',
+      'checked_in',
       'on_break',
       'fulfilled_shift',
       'incomplete_shift',
@@ -189,9 +191,11 @@ function rowMetaText(role: AttendanceBoardRow['role']): string | null {
   return meta;
 }
 
-function isPresentGroup(primaryState: TeamAttendancePrimaryState, mode: TeamAttendanceMode): boolean {
+function isPresentGroup(primaryState: TeamAttendancePrimaryState | null, mode: TeamAttendanceMode): boolean {
   if (mode === 'live') {
-    return primaryState === 'available_now';
+    // Live section split is driven by is_checked_in_now on the row, not primaryState.
+    // This branch is here for completeness but build functions use isCheckedInNow directly.
+    return primaryState === null; // null = baseline (on time, checked in)
   }
 
   return (
@@ -201,12 +205,12 @@ function isPresentGroup(primaryState: TeamAttendancePrimaryState, mode: TeamAtte
   );
 }
 
-function sortRankForState(primaryState: TeamAttendancePrimaryState, mode: TeamAttendanceMode): number {
+function sortRankForState(primaryState: TeamAttendancePrimaryState | null, mode: TeamAttendanceMode): number {
   if (mode === 'live') {
     switch (primaryState) {
       case 'late':
         return 0;
-      case 'available_now':
+      case null: // baseline: on time, checked in
         return 1;
       case 'on_break':
         return 2;
@@ -245,16 +249,16 @@ function sortRankForState(primaryState: TeamAttendancePrimaryState, mode: TeamAt
 
 function buildDetailSummary(
   row: TeamAttendanceDayRow,
-  primaryState: TeamAttendancePrimaryState
+  primaryState: TeamAttendancePrimaryState | null
 ): DayDetailsSheetSummary {
-  const config = getStatusConfig(primaryState);
+  const config = primaryState ? getStatusConfig(primaryState) : getStatusConfig('checked_in');
   return {
     employeeName: row.nameAr,
     departmentName: row.departmentNameAr ?? 'بدون قسم',
     statusLabel: config.label,
     statusTone:
-      primaryState === 'available_now' || primaryState === 'fulfilled_shift'
-        ? 'green'
+      primaryState === null || primaryState === 'fulfilled_shift'
+        ? 'green' // null = baseline (on time, checked in) = green
         : primaryState === 'incomplete_shift'
           ? 'blue'
           : primaryState === 'late'
@@ -272,7 +276,7 @@ function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
   const group: BoardGroup = row.isCheckedInNow ? 'present' : 'not_present';
 
   let factText: string | null = null;
-  if (row.isCheckedInNow && (primaryState === 'available_now' || primaryState === 'late') && row.firstCheckIn) {
+  if (row.isCheckedInNow && (primaryState === null || primaryState === 'late') && row.firstCheckIn) {
     factText = `دخل ${formatWallTime(row.firstCheckIn)}`;
   } else if ((primaryState === 'on_break' || primaryState === 'late') && row.lastCheckOut) {
     factText = `غادر ${formatWallTime(row.lastCheckOut)}`;
@@ -292,6 +296,7 @@ function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
     group,
     primaryState,
     hasOvertime: row.hasOvertime,
+    isCheckedInNow: row.isCheckedInNow,
     metaText: rowMetaText(row.role),
     factText,
     canViewDetailedStatus: true,
@@ -323,6 +328,7 @@ function buildDetailedDayRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
     group,
     primaryState,
     hasOvertime: row.hasOvertime,
+    isCheckedInNow: false, // date mode: presence state not applicable
     metaText: rowMetaText(row.role),
     factText,
     canViewDetailedStatus: true,
@@ -346,6 +352,7 @@ function buildGenericLiveRow(row: SafeAvailabilityRow): AttendanceBoardRow {
     group: row.availabilityState === 'available_now' ? 'present' : 'not_present',
     primaryState,
     hasOvertime: row.hasOvertime,
+    isCheckedInNow: row.availabilityState === 'available_now',
     metaText: rowMetaText(row.role),
     factText: null,
     canViewDetailedStatus: false,
@@ -369,6 +376,7 @@ function buildGenericDayRow(row: SafeAttendanceDayRow): AttendanceBoardRow {
     group: isPresentGroup(primaryState, 'date') ? 'present' : 'not_present',
     primaryState,
     hasOvertime: row.hasOvertime,
+    isCheckedInNow: false, // date mode: presence state not applicable
     metaText: rowMetaText(row.role),
     factText: null,
     canViewDetailedStatus: false,
@@ -419,7 +427,7 @@ function compareRowsWithinGroup(
         switch (row.primaryState) {
           case 'late':
             return 0;
-          case 'available_now':
+          case null: // baseline: on time, checked in
             return 1;
           default:
             return 2;
@@ -487,7 +495,7 @@ function buildSectionSummary(
   const onLeaveCount = rows.filter((row) => row.primaryState === 'on_leave').length;
   const onBreakCount = rows.filter((row) => row.primaryState === 'on_break').length;
   const totalCount = rows.length;
-  const presentStatus: VisualStatus = mode === 'live' ? 'available_now' : 'fulfilled_shift';
+  const presentStatus: VisualStatus = mode === 'live' ? 'checked_in' : 'fulfilled_shift';
   const everyoneUnavailableByDesign =
     totalCount === 0 ||
     rows.every((row) => row.primaryState === 'on_leave' || row.primaryState === 'neutral');
@@ -708,7 +716,10 @@ function EmployeeAttendanceRow({
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
   const showOvertimeIndicator = row.hasOvertime;
-  const showPrimaryBadge = row.primaryState !== 'neutral';
+  const showPrimaryBadge =
+    row.primaryState !== null &&
+    row.primaryState !== 'neutral' &&
+    isTeamAttendancePrimaryState(row.primaryState); // guard against stale/unknown DB values
 
   const content = (
     <div className="flex items-start justify-between gap-3 py-3">
@@ -733,7 +744,7 @@ function EmployeeAttendanceRow({
             عمل إضافي
           </Badge>
         ) : null}
-        {showPrimaryBadge ? <EmployeeStatusTag status={row.primaryState} /> : null}
+        {showPrimaryBadge && row.primaryState ? <EmployeeStatusTag status={row.primaryState} /> : null}
         {row.canOpenDetailsSheet ? (
           <ChevronLeft className="h-4 w-4 text-slate-400" />
         ) : null}

@@ -12,14 +12,15 @@ export interface ChipConfig<Row = { displayStatus: DisplayStatus }> {
   key: string;
   label: string;
   visibleToRoles: UserRole[];
-  themeStatus?: DisplayStatus | TeamAttendancePrimaryState;
+  themeStatus?: DisplayStatus | TeamAttendancePrimaryState | 'checked_in';
   matchStatuses?: DisplayStatus[];
   matchesRow?: (row: Row) => boolean;
 }
 
 export interface TeamAttendanceChipRow {
-  primaryState: TeamAttendancePrimaryState;
+  primaryState: TeamAttendancePrimaryState | null; // null = baseline (on time, checked in, no chip)
   hasOvertime: boolean;
+  isCheckedInNow: boolean;
 }
 
 const ALL_ROLES: UserRole[] = ['admin', 'manager', 'employee'];
@@ -32,11 +33,11 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     visibleToRoles: ALL_ROLES,
   },
   {
-    key: 'available_now',
+    key: 'checked_in',
     label: 'موجودون الآن',
-    themeStatus: 'available_now',
+    themeStatus: 'checked_in',
     visibleToRoles: ALL_ROLES,
-    matchesRow: (row) => row.primaryState === 'available_now',
+    matchesRow: (row) => row.isCheckedInNow,
   },
   {
     key: 'late',
@@ -133,7 +134,7 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
 ];
 
 const DASHBOARD_LIVE_CHIP_KEYS = [
-  'available_now',
+  'checked_in',
   'late',
   'not_entered_yet',
   'absent',
@@ -205,7 +206,7 @@ export function rowMatchesChip<Row>(chip: ChipConfig<Row>, row: Row): boolean {
 export function isTeamAttendanceChipKey(value: string): value is TeamAttendanceChipKey {
   return [
     'all',
-    'available_now',
+    'checked_in',
     'fulfilled_shift',
     'incomplete_shift',
     'late',
