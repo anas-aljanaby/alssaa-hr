@@ -38,8 +38,8 @@ import {
   Building2,
   CalendarDays,
   ChevronDown,
-  ChevronLeft,
   Clock3,
+  Info,
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react';
@@ -48,6 +48,10 @@ const ALL_DEPARTMENTS = '__all_departments__';
 const NO_DEPARTMENT_KEY = '__no_department__';
 const LIVE_REFRESH_INTERVAL_MS = 45_000;
 const MOBILE_TOP_BAR_OFFSET = 'var(--mobile-top-bar-offset, 3.5rem)';
+const GROUP_EXPANSION_DEFAULT: Record<BoardGroup, boolean> = {
+  present: true,
+  not_present: true,
+};
 
 type TeamAttendanceMode = 'live' | 'date';
 type BoardScope = 'full' | 'generic';
@@ -68,6 +72,7 @@ interface AttendanceBoardRow {
   isCheckedInNow: boolean; // true = employee has an open session right now
   metaText: string | null;
   factText: string | null;
+  canViewHrStatus: boolean;
   canViewDetailedStatus: boolean;
   canViewTimes: boolean;
   canOpenDetailsSheet: boolean;
@@ -80,6 +85,7 @@ interface BoardSection {
   name: string;
   departmentColor: string | null;
   subtitle: string;
+  showHrMetrics: boolean;
   healthStatus: VisualStatus;
   metrics: Array<{
     key: SectionMetricKey;
@@ -191,6 +197,21 @@ function rowMetaText(role: AttendanceBoardRow['role']): string | null {
   return meta;
 }
 
+function rowHasHrVisibility(row: AttendanceBoardRow): boolean {
+  return row.canViewHrStatus;
+}
+
+function canAccessTeamHistory(
+  role: UserRole,
+  managerDepartmentId: string | null,
+  allowPendingManagerAccess = false
+): boolean {
+  return (
+    role === 'admin' ||
+    (role === 'manager' && (managerDepartmentId != null || allowPendingManagerAccess))
+  );
+}
+
 function isPresentGroup(primaryState: TeamAttendancePrimaryState | null, mode: TeamAttendanceMode): boolean {
   if (mode === 'live') {
     // Live section split is driven by is_checked_in_now on the row, not primaryState.
@@ -299,6 +320,7 @@ function buildDetailedLiveRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
     isCheckedInNow: row.isCheckedInNow,
     metaText: rowMetaText(row.role),
     factText,
+    canViewHrStatus: true,
     canViewDetailedStatus: true,
     canViewTimes: true,
     canOpenDetailsSheet: true,
@@ -331,6 +353,7 @@ function buildDetailedDayRow(row: TeamAttendanceDayRow): AttendanceBoardRow {
     isCheckedInNow: false, // date mode: presence state not applicable
     metaText: rowMetaText(row.role),
     factText,
+    canViewHrStatus: true,
     canViewDetailedStatus: true,
     canViewTimes: true,
     canOpenDetailsSheet: true,
@@ -355,6 +378,7 @@ function buildGenericLiveRow(row: SafeAvailabilityRow): AttendanceBoardRow {
     isCheckedInNow: row.availabilityState === 'available_now',
     metaText: rowMetaText(row.role),
     factText: null,
+    canViewHrStatus: false,
     canViewDetailedStatus: false,
     canViewTimes: false,
     canOpenDetailsSheet: false,
@@ -379,6 +403,7 @@ function buildGenericDayRow(row: SafeAttendanceDayRow): AttendanceBoardRow {
     isCheckedInNow: false, // date mode: presence state not applicable
     metaText: rowMetaText(row.role),
     factText: null,
+    canViewHrStatus: false,
     canViewDetailedStatus: false,
     canViewTimes: false,
     canOpenDetailsSheet: false,
@@ -421,6 +446,10 @@ function compareRowsWithinGroup(
   b: AttendanceBoardRow,
   mode: TeamAttendanceMode
 ): number {
+  if (!a.canViewHrStatus && !b.canViewHrStatus) {
+    return a.nameAr.localeCompare(b.nameAr, 'ar');
+  }
+
   function getGroupSortRank(row: AttendanceBoardRow): number {
     if (mode === 'live') {
       if (row.group === 'present') {
@@ -485,7 +514,8 @@ function compareRowsWithinGroup(
 
 function buildSectionSummary(
   rows: AttendanceBoardRow[],
-  mode: TeamAttendanceMode
+  mode: TeamAttendanceMode,
+  showHrMetrics: boolean
 ): Pick<BoardSection, 'subtitle' | 'healthStatus' | 'metrics'> {
   const presentCount = rows.filter((row) => row.group === 'present').length;
   const lateCount = rows.filter((row) => row.primaryState === 'late').length;
@@ -518,41 +548,48 @@ function buildSectionSummary(
     healthStatus = presentStatus;
   }
 
+  const subtitle =
+    mode === 'live'
+      ? `${presentCount} من ${totalCount} ${showHrMetrics ? 'موجودون الآن' : 'متاحون الآن'}`
+      : `${presentCount} من ${totalCount} حضروا في هذا اليوم`;
+
   return {
-    subtitle: `${presentCount} من ${totalCount} موجودون`,
+    subtitle,
     healthStatus,
-    metrics: [
-      {
-        key: 'present',
-        count: presentCount,
-        label: 'موجودون',
-        status: presentStatus,
-      },
-      {
-        key: 'late',
-        count: lateCount,
-        label: 'متأخر',
-        status: 'late',
-      },
-      {
-        key: 'absent',
-        count: absentCount,
-        label: 'غائب أو لم يسجل',
-        status: 'absent',
-      },
-      {
-        key: 'on_leave',
-        count: onLeaveCount,
-        label: 'إجازة',
-        status: 'on_leave',
-      },
-      {
-        key: 'on_break',
-        count: onBreakCount,
-        label: 'استراحة',
-        status: 'on_break',
-      },
-    ].filter((metric) => metric.count > 0),
+    metrics: showHrMetrics
+      ? [
+          {
+            key: 'present',
+            count: presentCount,
+            label: 'موجودون',
+            status: presentStatus,
+          },
+          {
+            key: 'late',
+            count: lateCount,
+            label: 'متأخر',
+            status: 'late',
+          },
+          {
+            key: 'absent',
+            count: absentCount,
+            label: 'غائب أو لم يسجل',
+            status: 'absent',
+          },
+          {
+            key: 'on_leave',
+            count: onLeaveCount,
+            label: 'إجازة',
+            status: 'on_leave',
+          },
+          {
+            key: 'on_break',
+            count: onBreakCount,
+            label: 'استراحة',
+            status: 'on_break',
+          },
+        ].filter((metric) => metric.count > 0)
+      : [],
   };
 }
 
@@ -613,13 +650,15 @@ function buildSections(params: {
       const notPresentRows = visibleRows
         .filter((row) => row.group === 'not_present')
         .sort((a, b) => compareRowsWithinGroup(a, b, params.mode));
-      const summary = buildSectionSummary(allRows, params.mode);
+      const showHrMetrics = allRows.some(rowHasHrVisibility);
+      const summary = buildSectionSummary(allRows, params.mode, showHrMetrics);
 
       return {
         id: key,
         name: allRows[0]?.departmentNameAr ?? 'بدون قسم',
         departmentColor: key === NO_DEPARTMENT_KEY ? null : (departmentById.get(key)?.color ?? null),
         subtitle: summary.subtitle,
+        showHrMetrics,
         healthStatus: summary.healthStatus,
         metrics: summary.metrics,
         presentRows,
@@ -715,14 +754,33 @@ function EmployeeAttendanceRow({
   row: AttendanceBoardRow;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
-  const showOvertimeIndicator = row.hasOvertime;
+  const showOvertimeIndicator = row.canViewHrStatus && row.hasOvertime;
   const showPrimaryBadge =
+    row.canViewHrStatus &&
     row.primaryState !== null &&
     row.primaryState !== 'neutral' &&
     isTeamAttendancePrimaryState(row.primaryState); // guard against stale/unknown DB values
 
+  const rowStateClass =
+    row.primaryState === 'on_break' || row.primaryState === 'late'
+      ? 'border-r-2 border-r-amber-400 bg-amber-50/30'
+      : row.isCheckedInNow
+        ? 'bg-white animate-live-row'
+        : row.group === 'present' &&
+            (row.primaryState === null ||
+              row.primaryState === 'fulfilled_shift' ||
+              row.primaryState === 'incomplete_shift')
+          ? 'border-r-2 border-r-emerald-300 bg-white'
+          : row.primaryState === 'on_leave'
+            ? 'border-r-2 border-r-sky-300 bg-sky-50/35'
+            : 'border-r-2 border-r-slate-200 bg-white';
+  const rowCardClass = cn(
+    'w-full rounded-2xl border border-slate-100 px-4 py-3 text-right shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[box-shadow,background-color,border-color] duration-200 hover:shadow-[0_6px_18px_rgba(15,23,42,0.06)]',
+    rowStateClass
+  );
+
   const content = (
-    <div className="flex items-start justify-between gap-3 py-3">
+    <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-slate-900">{row.nameAr}</p>
         {(row.metaText || row.factText) ? (
@@ -738,6 +796,12 @@ function EmployeeAttendanceRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        {row.isCheckedInNow ? (
+          <span className="relative flex h-2 w-2" aria-hidden="true">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+          </span>
+        ) : null}
         {showOvertimeIndicator ? (
           <Badge className="border-violet-200 bg-violet-50 text-violet-700">
             <Clock3 className="h-3 w-3" />
@@ -746,23 +810,98 @@ function EmployeeAttendanceRow({
         ) : null}
         {showPrimaryBadge && row.primaryState ? <EmployeeStatusTag status={row.primaryState} /> : null}
         {row.canOpenDetailsSheet ? (
-          <ChevronLeft className="h-4 w-4 text-slate-400" />
+          <Info className="h-4 w-4 text-slate-400" />
         ) : null}
       </div>
     </div>
   );
 
   if (!row.canOpenDetailsSheet) {
-    return <div>{content}</div>;
+    return <div className={rowCardClass}>{content}</div>;
   }
 
   return (
     <button
       type="button"
       onClick={() => onOpenDetails(row)}
-      className="w-full text-right transition-colors hover:bg-white/70"
+      className={rowCardClass}
     >
       {content}
+    </button>
+  );
+}
+
+type AttendanceGroupHeaderTone = 'present' | 'not_present';
+
+const ATTENDANCE_GROUP_HEADER_STYLES: Record<
+  AttendanceGroupHeaderTone,
+  {
+    container: string;
+    text: string;
+    count: string;
+    dot: string;
+    icon: string;
+  }
+> = {
+  present: {
+    container:
+      'border-l-4 border-l-emerald-500 bg-emerald-50/60',
+    text: 'text-emerald-700',
+    count: 'text-emerald-700/70',
+    dot: 'bg-emerald-500',
+    icon: 'text-emerald-600',
+  },
+  not_present: {
+    container:
+      'border-l-4 border-l-slate-300 bg-slate-100/90',
+    text: 'text-slate-700',
+    count: 'text-slate-500',
+    dot: 'bg-slate-400',
+    icon: 'text-slate-400',
+  },
+};
+
+function AttendanceGroupHeader({
+  tone,
+  title,
+  count,
+  expanded,
+  onToggle,
+  className,
+}: {
+  tone: AttendanceGroupHeaderTone;
+  title: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
+  const styles = ATTENDANCE_GROUP_HEADER_STYLES[tone];
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      className={cn(
+        'mb-2 flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-right transition-colors hover:brightness-[0.99]',
+        styles.container,
+        className
+      )}
+    >
+      <span className="flex min-w-0 flex-1 items-center justify-start gap-2">
+        <span className={cn('text-sm font-medium', styles.text)}>{title}</span>
+        <span className={cn('text-xs font-medium tabular-nums', styles.count)}>{`(${count})`}</span>
+        <span aria-hidden="true" className={cn('h-1.5 w-1.5 shrink-0 rounded-full', styles.dot)} />
+      </span>
+      <ChevronDown
+        aria-hidden="true"
+        className={cn(
+          'h-4 w-4 shrink-0 transition-transform',
+          styles.icon,
+          expanded ? 'rotate-180' : ''
+        )}
+      />
     </button>
   );
 }
@@ -772,16 +911,30 @@ function DepartmentAttendanceSection({
   boardMode,
   expanded,
   onToggle,
+  expandedGroups,
+  onToggleGroup,
   onOpenDetails,
 }: {
   section: BoardSection;
   boardMode: TeamAttendanceMode;
   expanded: boolean;
   onToggle: () => void;
+  expandedGroups: Record<BoardGroup, boolean>;
+  onToggleGroup: (group: BoardGroup) => void;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
-  const presentHeading = boardMode === 'live' ? 'موجودون الآن' : 'حضروا في هذا اليوم';
-  const notPresentHeading = boardMode === 'live' ? 'غير موجودون' : 'غير حاضرين في هذا اليوم';
+  const presentHeading =
+    boardMode === 'live'
+      ? section.showHrMetrics
+        ? 'موجودون الآن'
+        : 'متاحون الآن'
+      : 'حضروا في هذا اليوم';
+  const notPresentHeading =
+    boardMode === 'live'
+      ? section.showHrMetrics
+        ? 'غير موجودون'
+        : 'غير متاحين الآن'
+      : 'غير حاضرين في هذا اليوم';
   const departmentIconStyle = section.departmentColor
     ? getDepartmentColorTokens(section.departmentColor).iconStyle
     : undefined;
@@ -844,30 +997,44 @@ function DepartmentAttendanceSection({
       </button>
 
       {expanded ? (
-        <div className="px-4 py-3">
+        <div className="flex flex-col gap-4 px-4 py-3">
           {section.presentRows.length > 0 ? (
-            <div className="pb-1">
-              <p className="pb-2 pt-1 text-[11px] font-semibold text-emerald-700">
-                {`${presentHeading} (${section.presentRows.length})`}
-              </p>
-              <div className="divide-y divide-slate-200/80">
-                {section.presentRows.map((row) => (
-                  <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
-                ))}
-              </div>
+            <div className="rounded-[1.75rem] border border-slate-200/80 bg-slate-50/70 p-2">
+              <AttendanceGroupHeader
+                tone="present"
+                title={presentHeading}
+                count={section.presentRows.length}
+                expanded={expandedGroups.present}
+                onToggle={() => onToggleGroup('present')}
+                className="mt-0"
+              />
+              {expandedGroups.present ? (
+                <div className="space-y-2">
+                  {section.presentRows.map((row) => (
+                    <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           {section.notPresentRows.length > 0 ? (
-            <div className={cn(section.presentRows.length > 0 ? 'border-t border-slate-200/80 pt-3' : '')}>
-              <p className="pb-2 text-[11px] font-semibold text-slate-600">
-                {`${notPresentHeading} (${section.notPresentRows.length})`}
-              </p>
-              <div className="divide-y divide-slate-200/80">
-                {section.notPresentRows.map((row) => (
-                  <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
-                ))}
-              </div>
+            <div className="rounded-[1.75rem] border border-slate-200/80 bg-slate-50/70 p-2">
+              <AttendanceGroupHeader
+                tone="not_present"
+                title={notPresentHeading}
+                count={section.notPresentRows.length}
+                expanded={expandedGroups.not_present}
+                onToggle={() => onToggleGroup('not_present')}
+                className="mt-0"
+              />
+              {expandedGroups.not_present ? (
+                <div className="space-y-2">
+                  {section.notPresentRows.map((row) => (
+                    <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -913,6 +1080,33 @@ export function TeamAttendancePage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [selectedDetailRow, setSelectedDetailRow] = useState<AttendanceBoardRow | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const selectedDepartmentDbId =
+    selectedDepartmentId === ALL_DEPARTMENTS ? null : selectedDepartmentId;
+  const activeRole = (currentUser?.role ?? 'employee') as UserRole;
+  const effectiveManagerDepartmentId =
+    activeRole === 'manager' ? managerDepartmentId ?? currentUser?.departmentId ?? null : null;
+  const pendingManagerDepartmentAccess =
+    activeRole === 'manager' && !metaReady && effectiveManagerDepartmentId == null;
+  const canUseHistoryMode = canAccessTeamHistory(
+    activeRole,
+    effectiveManagerDepartmentId,
+    pendingManagerDepartmentAccess
+  );
+  const resolvedMode: TeamAttendanceMode = canUseHistoryMode ? mode : 'live';
+  const effectiveSelectedDepartmentDbId =
+    activeRole === 'manager' && resolvedMode === 'date' && effectiveManagerDepartmentId
+      ? effectiveManagerDepartmentId
+      : selectedDepartmentDbId;
+  const effectiveSelectedDepartmentValue =
+    effectiveSelectedDepartmentDbId ?? ALL_DEPARTMENTS;
+  const canShowHrChips =
+    activeRole === 'admin' ||
+    (activeRole === 'manager' &&
+      (effectiveManagerDepartmentId != null || pendingManagerDepartmentAccess) &&
+      (resolvedMode === 'date' ||
+        effectiveSelectedDepartmentDbId == null ||
+        effectiveSelectedDepartmentDbId === effectiveManagerDepartmentId));
 
   useEffect(() => {
     const nextMode = parseTeamAttendanceMode(searchParams.get('mode'));
@@ -932,10 +1126,10 @@ export function TeamAttendancePage() {
   }, [searchParams, todayDate, yesterdayDate]);
 
   useEffect(() => {
-    if (mode === 'date') {
+    if (resolvedMode === 'date') {
       preservedHistoryDateRef.current = selectedDate;
     }
-  }, [mode, selectedDate]);
+  }, [resolvedMode, selectedDate]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -978,15 +1172,11 @@ export function TeamAttendancePage() {
     };
   }, [currentUser]);
 
-  const selectedDepartmentDbId =
-    selectedDepartmentId === ALL_DEPARTMENTS ? null : selectedDepartmentId;
-  const activeRole = (currentUser?.role ?? 'employee') as UserRole;
-
   const loadBoard = useCallback(
     async (silent = false) => {
       if (!currentUser || !metaReady) return;
 
-      const activeDate = mode === 'live' ? todayDate : selectedDate;
+      const activeDate = resolvedMode === 'live' ? todayDate : selectedDate;
       const nextState: BoardDataState = {
         detailedRows: [],
         liveAvailabilityRows: [],
@@ -1002,40 +1192,36 @@ export function TeamAttendancePage() {
         if (currentUser.role === 'admin') {
           nextState.detailedRows = await attendanceService.getTeamAttendanceDay({
             date: activeDate,
-            departmentId: selectedDepartmentDbId,
+            departmentId: effectiveSelectedDepartmentDbId,
             includeAllProfiles: true,
           });
         } else if (currentUser.role === 'employee') {
-          if (mode === 'live') {
+          if (resolvedMode === 'live') {
             nextState.liveAvailabilityRows =
               await attendanceService.getRedactedDepartmentAvailability({
-                departmentId: selectedDepartmentDbId,
+                departmentId: effectiveSelectedDepartmentDbId,
               });
-          } else {
-            nextState.dayAvailabilityRows = await attendanceService.getRedactedTeamAttendanceDay({
-              date: activeDate,
-              departmentId: selectedDepartmentDbId,
-            });
           }
         } else {
           const ownDepartmentSelected =
-            managerDepartmentId != null && selectedDepartmentDbId === managerDepartmentId;
+            effectiveManagerDepartmentId != null &&
+            effectiveSelectedDepartmentDbId === effectiveManagerDepartmentId;
 
           if (ownDepartmentSelected) {
             nextState.detailedRows = await attendanceService.getTeamAttendanceDay({
               date: activeDate,
-              departmentId: managerDepartmentId,
+              departmentId: effectiveManagerDepartmentId,
               includeAllProfiles: true,
             });
-          } else if (mode === 'live') {
+          } else if (resolvedMode === 'live') {
             const [liveRows, ownRows] = await Promise.all([
               attendanceService.getRedactedDepartmentAvailability({
-                departmentId: selectedDepartmentDbId,
+                departmentId: effectiveSelectedDepartmentDbId,
               }),
-              selectedDepartmentDbId == null && managerDepartmentId
+              effectiveSelectedDepartmentDbId == null && effectiveManagerDepartmentId
                 ? attendanceService.getTeamAttendanceDay({
                     date: activeDate,
-                    departmentId: managerDepartmentId,
+                    departmentId: effectiveManagerDepartmentId,
                     includeAllProfiles: true,
                   })
                 : Promise.resolve([]),
@@ -1043,28 +1229,11 @@ export function TeamAttendancePage() {
 
             nextState.liveAvailabilityRows = liveRows;
             nextState.detailedRows = ownRows;
-          } else {
-            const [dayRows, ownRows] = await Promise.all([
-              attendanceService.getRedactedTeamAttendanceDay({
-                date: activeDate,
-                departmentId: selectedDepartmentDbId,
-              }),
-              selectedDepartmentDbId == null && managerDepartmentId
-                ? attendanceService.getTeamAttendanceDay({
-                    date: activeDate,
-                    departmentId: managerDepartmentId,
-                    includeAllProfiles: true,
-                  })
-                : Promise.resolve([]),
-            ]);
-
-            nextState.dayAvailabilityRows = dayRows;
-            nextState.detailedRows = ownRows;
           }
         }
 
         setBoardData(nextState);
-        if (mode === 'live') {
+        if (resolvedMode === 'live') {
           setLastUpdatedAt(new Date());
         }
       } catch {
@@ -1081,7 +1250,15 @@ export function TeamAttendancePage() {
         }
       }
     },
-    [currentUser, managerDepartmentId, metaReady, mode, selectedDate, selectedDepartmentDbId, todayDate]
+    [
+      currentUser,
+      effectiveManagerDepartmentId,
+      effectiveSelectedDepartmentDbId,
+      metaReady,
+      resolvedMode,
+      selectedDate,
+      todayDate,
+    ]
   );
 
   useEffect(() => {
@@ -1090,36 +1267,37 @@ export function TeamAttendancePage() {
   }, [loadBoard, metaReady]);
 
   useEffect(() => {
-    if (!metaReady || mode !== 'live') return;
+    if (!metaReady || resolvedMode !== 'live') return;
     const intervalId = window.setInterval(() => {
       void loadBoard(true);
     }, LIVE_REFRESH_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [loadBoard, metaReady, mode]);
+  }, [loadBoard, metaReady, resolvedMode]);
 
   useEffect(() => {
     setSelectedDetailRow(null);
-  }, [mode, selectedDate, selectedDepartmentId]);
+  }, [resolvedMode, selectedDate, effectiveSelectedDepartmentValue]);
 
   const boardRows = useMemo(
     () =>
       buildBoardRows({
-        mode,
+        mode: resolvedMode,
         detailedRows: boardData.detailedRows,
         liveAvailabilityRows: boardData.liveAvailabilityRows,
         dayAvailabilityRows: boardData.dayAvailabilityRows,
       }),
-    [boardData.dayAvailabilityRows, boardData.detailedRows, boardData.liveAvailabilityRows, mode]
+    [boardData.dayAvailabilityRows, boardData.detailedRows, boardData.liveAvailabilityRows, resolvedMode]
   );
 
   const activeChips = useMemo(
     () =>
       getChipsForRole(
-        mode === 'live' ? TEAM_ATTENDANCE_LIVE_CHIPS : TEAM_ATTENDANCE_DATE_CHIPS,
-        activeRole
+        resolvedMode === 'live' ? TEAM_ATTENDANCE_LIVE_CHIPS : TEAM_ATTENDANCE_DATE_CHIPS,
+        activeRole,
+        { includeHrChips: canShowHrChips }
       ),
-    [activeRole, mode]
+    [activeRole, canShowHrChips, resolvedMode]
   );
 
   const chipCounts = useMemo(
@@ -1138,9 +1316,9 @@ export function TeamAttendancePage() {
     const currentDate = searchParams.get('date');
     const currentFilter = searchParams.get('filter');
 
-    const effectiveDate = mode === 'live' ? todayDate : selectedDate;
+    const effectiveDate = resolvedMode === 'live' ? todayDate : selectedDate;
     if (
-      currentMode === mode &&
+      currentMode === resolvedMode &&
       currentDate === effectiveDate &&
       currentFilter === statusFilter
     ) {
@@ -1148,11 +1326,11 @@ export function TeamAttendancePage() {
     }
 
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('mode', mode);
+    nextParams.set('mode', resolvedMode);
     nextParams.set('date', effectiveDate);
     nextParams.set('filter', statusFilter);
     setSearchParams(nextParams, { replace: true });
-  }, [mode, searchParams, selectedDate, setSearchParams, statusFilter, todayDate]);
+  }, [resolvedMode, searchParams, selectedDate, setSearchParams, statusFilter, todayDate]);
 
   const filteredRows = useMemo(() => {
     const activeChip = activeChips.find((chip) => chip.key === statusFilter);
@@ -1166,20 +1344,21 @@ export function TeamAttendancePage() {
         allRows: boardRows,
         visibleRows: filteredRows,
         departments,
-        selectedDepartmentId: selectedDepartmentDbId,
-        mode,
+        selectedDepartmentId: effectiveSelectedDepartmentDbId,
+        mode: resolvedMode,
       }),
-    [boardRows, departments, filteredRows, mode, selectedDepartmentDbId]
+    [boardRows, departments, effectiveSelectedDepartmentDbId, filteredRows, resolvedMode]
   );
 
   useEffect(() => {
     setExpandedSections({});
-  }, [mode, selectedDepartmentId, statusFilter]);
+    setExpandedGroups({});
+  }, [effectiveSelectedDepartmentValue, resolvedMode, statusFilter]);
 
   const selectedDepartmentName = useMemo(() => {
-    if (selectedDepartmentDbId == null) return 'كل الأقسام';
-    return departments.find((department) => department.id === selectedDepartmentDbId)?.name_ar ?? 'القسم';
-  }, [departments, selectedDepartmentDbId]);
+    if (effectiveSelectedDepartmentDbId == null) return 'كل الأقسام';
+    return departments.find((department) => department.id === effectiveSelectedDepartmentDbId)?.name_ar ?? 'القسم';
+  }, [departments, effectiveSelectedDepartmentDbId]);
 
   const handleRefresh = useCallback(() => {
     void loadBoard(false);
@@ -1188,21 +1367,21 @@ export function TeamAttendancePage() {
   const resetFilters = useCallback(() => {
     setSelectedDepartmentId(ALL_DEPARTMENTS);
     setStatusFilter('all');
-    if (mode === 'date') {
+    if (resolvedMode === 'date') {
       setSelectedDate(yesterdayDate);
       preservedHistoryDateRef.current = yesterdayDate;
     }
-  }, [mode, yesterdayDate]);
+  }, [resolvedMode, yesterdayDate]);
 
   const hasNoDepartmentData = !loading && !errorMessage && departments.length === 0 && boardRows.length === 0;
   const showFilterEmptyState = !loading && !errorMessage && boardRows.length > 0 && filteredRows.length === 0;
   const showBoardEmptyState = !loading && !errorMessage && boardRows.length === 0 && !hasNoDepartmentData;
   const topBarMeta = useMemo(() => {
-    if (mode === 'live') {
+    if (resolvedMode === 'live') {
       return `آخر تحديث ${formatLastUpdated(lastUpdatedAt)}`;
     }
     return formatSelectedDateLabel(selectedDate);
-  }, [lastUpdatedAt, mode, selectedDate]);
+  }, [lastUpdatedAt, resolvedMode, selectedDate]);
 
   const topBarAction = useMemo(() => (
     <button
@@ -1243,13 +1422,21 @@ export function TeamAttendancePage() {
 
       <div className="space-y-3 overflow-x-hidden pt-3">
         <div className="rounded-3xl border border-gray-200 bg-white p-2 shadow-sm">
-          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] items-center gap-2">
+          <div
+            className={cn(
+              'grid items-center gap-2',
+              canUseHistoryMode
+                ? 'grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto]'
+                : 'grid-cols-1'
+            )}
+          >
             <div className="min-w-0">
               <div className="relative min-w-0">
                 <Building2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <select
-                  value={selectedDepartmentId}
+                  value={effectiveSelectedDepartmentValue}
                   onChange={(event) => setSelectedDepartmentId(event.target.value)}
+                  disabled={activeRole === 'manager' && resolvedMode === 'date'}
                   className="h-10 w-full rounded-2xl border border-gray-200 bg-white pr-9 pl-3 text-sm text-gray-700 outline-none transition-colors focus:border-slate-400"
                 >
                   <option value={ALL_DEPARTMENTS}>كل الأقسام</option>
@@ -1262,40 +1449,46 @@ export function TeamAttendancePage() {
               </div>
             </div>
 
-            <div className="grid min-w-0 grid-cols-2 rounded-2xl bg-slate-50 p-1 ring-1 ring-gray-200">
-              <button
-                type="button"
-                onClick={() => {
-                  if (mode === 'date') {
-                    preservedHistoryDateRef.current = selectedDate;
-                  }
-                  setMode('live');
-                  setSelectedDate(todayDate);
-                }}
-                className={cn(
-                  'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
-                  mode === 'live' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-blue-50'
-                )}
-              >
-                اليوم
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('date');
-                  setSelectedDate(preservedHistoryDateRef.current);
-                }}
-                className={cn(
-                  'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
-                  mode === 'date' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-blue-50'
-                )}
-              >
-                سجل
-              </button>
-            </div>
+            {canUseHistoryMode ? (
+              <div className="grid min-w-0 grid-cols-2 rounded-2xl bg-slate-50 p-1 ring-1 ring-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (resolvedMode === 'date') {
+                      preservedHistoryDateRef.current = selectedDate;
+                    }
+                    setMode('live');
+                    setSelectedDate(todayDate);
+                  }}
+                  className={cn(
+                    'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
+                    resolvedMode === 'live'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-blue-50'
+                  )}
+                >
+                  اليوم
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('date');
+                    setSelectedDate(preservedHistoryDateRef.current);
+                  }}
+                  className={cn(
+                    'rounded-xl px-3 py-2 text-sm font-medium transition-colors',
+                    resolvedMode === 'date'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-blue-50'
+                  )}
+                >
+                  سجل
+                </button>
+              </div>
+            ) : null}
 
           </div>
-          {mode === 'date' ? (
+          {resolvedMode === 'date' ? (
             <div
               data-testid="team-attendance-date-picker"
               className="mt-2 max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-2"
@@ -1350,7 +1543,7 @@ export function TeamAttendancePage() {
 
         {showBoardEmptyState ? (
           <EmptyState
-            title={mode === 'live' ? 'لا توجد بيانات مباشرة الآن' : 'لا توجد بيانات لهذا التاريخ'}
+            title={resolvedMode === 'live' ? 'لا توجد بيانات مباشرة الآن' : 'لا توجد بيانات لهذا التاريخ'}
             subtitle={`لا توجد سجلات ظاهرة ضمن ${selectedDepartmentName}.`}
             actionLabel="تحديث"
             onAction={handleRefresh}
@@ -1373,18 +1566,37 @@ export function TeamAttendancePage() {
           !showFilterEmptyState &&
           sections.map((section) => {
             const isExpanded = expandedSections[section.id] ?? section.defaultExpanded;
+            const sectionExpandedGroups: Record<BoardGroup, boolean> = {
+              present:
+                expandedGroups[`${section.id}:present`] ?? GROUP_EXPANSION_DEFAULT.present,
+              not_present:
+                expandedGroups[`${section.id}:not_present`] ?? GROUP_EXPANSION_DEFAULT.not_present,
+            };
 
             return (
               <DepartmentAttendanceSection
                 key={section.id}
                 section={section}
-                boardMode={mode}
+                boardMode={resolvedMode}
                 expanded={isExpanded}
                 onToggle={() =>
                   setExpandedSections((current) => ({
                     ...current,
                     [section.id]: !isExpanded,
                   }))
+                }
+                expandedGroups={sectionExpandedGroups}
+                onToggleGroup={(group) =>
+                  setExpandedGroups((current) => {
+                    const groupKey = `${section.id}:${group}`;
+                    const isGroupExpanded =
+                      current[groupKey] ?? GROUP_EXPANSION_DEFAULT[group];
+
+                    return {
+                      ...current,
+                      [groupKey]: !isGroupExpanded,
+                    };
+                  })
                 }
                 onOpenDetails={setSelectedDetailRow}
               />
@@ -1394,7 +1606,7 @@ export function TeamAttendancePage() {
 
       <DayDetailsSheet
         userId={selectedDetailRow?.userId ?? ''}
-        date={selectedDetailRow ? (mode === 'live' ? todayDate : selectedDate) : null}
+        date={selectedDetailRow ? (resolvedMode === 'live' ? todayDate : selectedDate) : null}
         summary={selectedDetailRow?.detailSummary ?? null}
         onClose={() => setSelectedDetailRow(null)}
       />

@@ -120,6 +120,27 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ── Live attendance row: pulsing border glow ──────────────────────────── */
+@keyframes live-border-glow {
+  0%, 100% {
+    box-shadow:
+      inset -2px 0 0 0 rgb(52 211 153 / 0.75),
+      0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  50% {
+    box-shadow:
+      inset -3px 0 0 0 rgb(16 185 129),
+      0 1px 4px rgba(15, 23, 42, 0.06),
+      -6px 0 18px -4px rgb(52 211 153 / 0.45);
+  }
+}
+
+@layer utilities {
+  .animate-live-row {
+    animation: live-border-glow 4s ease-in-out infinite;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TEAM_ATTENDANCE_LIVE_CHIPS, countByChip } from './chipConfig';
+import { TEAM_ATTENDANCE_LIVE_CHIPS, countByChip, rowMatchesChip } from './chipConfig';
 
 describe('TEAM_ATTENDANCE_LIVE_CHIPS', () => {
   it('checked_in chip counts employees with an open session regardless of primaryState', () => {
@@ -23,5 +23,23 @@ describe('TEAM_ATTENDANCE_LIVE_CHIPS', () => {
     ]);
 
     expect(counts.checked_in).toBe(0);
+  });
+
+  it('ignores generic rows for HR-only chips', () => {
+    const lateChip = TEAM_ATTENDANCE_LIVE_CHIPS.find((chip) => chip.key === 'late');
+
+    expect(lateChip).toBeDefined();
+    expect(
+      countByChip(TEAM_ATTENDANCE_LIVE_CHIPS, [
+        { primaryState: 'late', hasOvertime: false, isCheckedInNow: true, canViewHrStatus: true },
+        { primaryState: 'late', hasOvertime: false, isCheckedInNow: true, canViewHrStatus: false },
+      ]).late
+    ).toBe(1);
+    expect(
+      rowMatchesChip(
+        lateChip!,
+        { primaryState: 'late', hasOvertime: false, isCheckedInNow: true, canViewHrStatus: false }
+      )
+    ).toBe(false);
   });
 });

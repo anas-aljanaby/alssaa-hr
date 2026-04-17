@@ -393,6 +393,7 @@ describe('TeamAttendancePage', () => {
     expect(screen.queryByText('سارة')).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('2026-04-06')).not.toBeInTheDocument();
     expect(screen.queryByText('08:10')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/غائب أو لم يسجل/i)).not.toBeInTheDocument();
 
     await expandDepartment('التحرير');
 
@@ -400,7 +401,7 @@ describe('TeamAttendancePage', () => {
       expect(screen.getByText('سارة')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('موجودون الآن (1)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^متاحون الآن.*\(1\)$/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('سارة'));
     expect(screen.queryByTestId('day-details-sheet')).not.toBeInTheDocument();
@@ -460,9 +461,10 @@ describe('TeamAttendancePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'سجل' }));
 
     await waitFor(() => {
-      expect(attendanceService.getRedactedTeamAttendanceDay).toHaveBeenCalledWith({
+      expect(attendanceService.getTeamAttendanceDay).toHaveBeenLastCalledWith({
         date: '2026-04-05',
-        departmentId: null,
+        departmentId: 'dept-news',
+        includeAllProfiles: true,
       });
     });
 
@@ -474,6 +476,8 @@ describe('TeamAttendancePage', () => {
     expect(stickyFilters).toHaveStyle({ top: 'var(--mobile-top-bar-offset, 3.5rem)' });
     expect(stickyFilters).not.toContainElement(datePicker);
     expect(stickyFilters).not.toContainElement(departmentSelect);
+    expect(departmentSelect).toBeDisabled();
+    expect(departmentSelect).toHaveValue('dept-news');
     expect(screen.getByDisplayValue('2026-04-05')).toBeInTheDocument();
     expect(within(stickyFilters).getByRole('button', { name: /^أكملوا الدوام/ })).toBeInTheDocument();
     expect(within(stickyFilters).getByRole('button', { name: /^دوام غير مكتمل/ })).toBeInTheDocument();
@@ -481,10 +485,91 @@ describe('TeamAttendancePage', () => {
     await expandDepartment('الأخبار');
 
     await waitFor(() => {
-      expect(screen.getByText('حضروا في هذا اليوم (2)')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^حضروا في هذا اليوم.*\(2\)$/ })).toBeInTheDocument();
     });
 
-    expect(screen.getByText('غير حاضرين في هذا اليوم (1)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^غير حاضرين في هذا اليوم.*\(1\)$/ })).toBeInTheDocument();
+  });
+
+  it('hides HR chips when a manager switches to another department they do not manage', async () => {
+    mockUser = {
+      uid: 'manager-1',
+      role: 'manager',
+      departmentId: 'dept-news',
+    };
+
+    render(
+      <MemoryRouter>
+        <TeamAttendancePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /الأخبار/i })).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: 'dept-editing' },
+    });
+
+    await waitFor(() => {
+      expect(attendanceService.getRedactedDepartmentAvailability).toHaveBeenLastCalledWith({
+        departmentId: 'dept-editing',
+      });
+    });
+
+    const filterBar = screen.getByTestId('team-attendance-sticky-filters');
+    expect(within(filterBar).getByRole('button', { name: /^الكل/ })).toBeInTheDocument();
+    expect(within(filterBar).getByRole('button', { name: /^موجودون الآن/ })).toBeInTheDocument();
+    expect(within(filterBar).queryByRole('button', { name: /^متأخر/ })).not.toBeInTheDocument();
+    expect(within(filterBar).queryByRole('button', { name: /^غائب/ })).not.toBeInTheDocument();
+    expect(within(filterBar).queryByRole('button', { name: /^إجازة/ })).not.toBeInTheDocument();
+    expect(within(filterBar).queryByRole('button', { name: /^عمل إضافي/ })).not.toBeInTheDocument();
+
+    await expandDepartment('التحرير');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^متاحون الآن.*\(1\)$/ })).toBeInTheDocument();
+      expect(screen.getByText('سارة')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByLabelText(/غائب أو لم يسجل/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('عمل إضافي')).not.toBeInTheDocument();
+  });
+
+  it('preserves manager history mode from the URL while department scope metadata is still loading', async () => {
+    mockUser = {
+      uid: 'manager-1',
+      role: 'manager',
+    };
+
+    vi.mocked(departmentsService.getDepartmentByManagerUid).mockResolvedValue({
+      id: 'dept-news',
+      org_id: 'org-1',
+      name: 'News',
+      name_ar: 'الأخبار',
+      manager_uid: 'manager-1',
+      created_at: '2026-01-01T00:00:00.000Z',
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/team-attendance?mode=date&date=2026-04-05&filter=late']}>
+        <TeamAttendancePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(attendanceService.getTeamAttendanceDay).toHaveBeenLastCalledWith({
+        date: '2026-04-05',
+        departmentId: 'dept-news',
+        includeAllProfiles: true,
+      });
+    });
+
+    expect(attendanceService.getRedactedDepartmentAvailability).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue('2026-04-05')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeDisabled();
+    expect(screen.getByRole('combobox')).toHaveValue('dept-news');
   });
 
   it('gives admins full live visibility across departments and keeps department filtering intact', async () => {
@@ -555,6 +640,62 @@ describe('TeamAttendancePage', () => {
       expect(screen.getByTestId('day-details-sheet')).toHaveTextContent(
         'designer-1:2026-04-06:هدى:أكمل الدوام'
       );
+    });
+  });
+
+  it('lets users collapse one status group without hiding the other group in the same department', async () => {
+    mockUser = {
+      uid: 'manager-1',
+      role: 'manager',
+      departmentId: 'dept-news',
+    };
+
+    render(
+      <MemoryRouter>
+        <TeamAttendancePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /الأخبار/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'سجل' }));
+
+    await waitFor(() => {
+      expect(attendanceService.getTeamAttendanceDay).toHaveBeenLastCalledWith({
+        date: '2026-04-05',
+        departmentId: 'dept-news',
+        includeAllProfiles: true,
+      });
+    });
+
+    await expandDepartment('الأخبار');
+
+    await waitFor(() => {
+      expect(screen.getByText('علي')).toBeInTheDocument();
+      expect(screen.getByText('خالد')).toBeInTheDocument();
+      expect(screen.getByText('ريم')).toBeInTheDocument();
+    });
+
+    const notPresentToggle = screen.getByRole('button', {
+      name: /^غير حاضرين في هذا اليوم.*\(1\)$/,
+    });
+    expect(notPresentToggle).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(notPresentToggle);
+
+    expect(screen.getByText('علي')).toBeInTheDocument();
+    expect(screen.getByText('خالد')).toBeInTheDocument();
+    expect(screen.queryByText('ريم')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^غير حاضرين في هذا اليوم.*\(1\)$/ })
+    ).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: /^غير حاضرين في هذا اليوم.*\(1\)$/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('ريم')).toBeInTheDocument();
     });
   });
 

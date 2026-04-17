@@ -12,6 +12,7 @@ export interface ChipConfig<Row = { displayStatus: DisplayStatus }> {
   key: string;
   label: string;
   visibleToRoles: UserRole[];
+  requiresHrVisibility?: boolean;
   themeStatus?: DisplayStatus | TeamAttendancePrimaryState | 'checked_in';
   matchStatuses?: DisplayStatus[];
   matchesRow?: (row: Row) => boolean;
@@ -21,6 +22,7 @@ export interface TeamAttendanceChipRow {
   primaryState: TeamAttendancePrimaryState | null; // null = baseline (on time, checked in, no chip)
   hasOvertime: boolean;
   isCheckedInNow: boolean;
+  canViewHrStatus?: boolean;
 }
 
 const ALL_ROLES: UserRole[] = ['admin', 'manager', 'employee'];
@@ -44,6 +46,7 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'متأخر',
     themeStatus: 'late',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'late',
   },
   {
@@ -51,6 +54,7 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'في استراحة',
     themeStatus: 'on_break',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'on_break',
   },
   {
@@ -58,6 +62,7 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'لم يسجلوا بعد',
     themeStatus: 'not_entered_yet',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'not_entered_yet',
   },
   {
@@ -65,6 +70,7 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'غائب',
     themeStatus: 'absent',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'absent',
   },
   {
@@ -72,6 +78,7 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'عمل إضافي',
     themeStatus: 'fulfilled_shift',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.hasOvertime,
   },
   {
@@ -79,6 +86,7 @@ export const TEAM_ATTENDANCE_LIVE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'إجازة',
     themeStatus: 'on_leave',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'on_leave',
   },
 ];
@@ -94,6 +102,7 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'أكملوا الدوام',
     themeStatus: 'fulfilled_shift',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'fulfilled_shift',
   },
   {
@@ -101,6 +110,7 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'دوام غير مكتمل',
     themeStatus: 'incomplete_shift',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'incomplete_shift',
   },
   {
@@ -108,6 +118,7 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'متأخر',
     themeStatus: 'late',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'late',
   },
   {
@@ -115,6 +126,7 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'غائب',
     themeStatus: 'absent',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'absent',
   },
   {
@@ -122,6 +134,7 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'عمل إضافي',
     themeStatus: 'fulfilled_shift',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.hasOvertime,
   },
   {
@@ -129,6 +142,7 @@ export const TEAM_ATTENDANCE_DATE_CHIPS: ChipConfig<TeamAttendanceChipRow>[] = [
     label: 'إجازة',
     themeStatus: 'on_leave',
     visibleToRoles: MANAGEMENT_ROLES,
+    requiresHrVisibility: true,
     matchesRow: (row) => row.primaryState === 'on_leave',
   },
 ];
@@ -168,9 +182,22 @@ export const DASHBOARD_DATE_SUMMARY_CHIPS = pickChipSubset(
 
 export function getChipsForRole<Row>(
   chips: ChipConfig<Row>[],
-  role: UserRole
+  role: UserRole,
+  options?: {
+    includeHrChips?: boolean;
+  }
 ): ChipConfig<Row>[] {
-  return chips.filter((chip) => chip.visibleToRoles.includes(role));
+  return chips.filter((chip) => {
+    if (!chip.visibleToRoles.includes(role)) return false;
+    if (chip.requiresHrVisibility && options?.includeHrChips === false) return false;
+    return true;
+  });
+}
+
+function rowSupportsHrChip<Row>(chip: ChipConfig<Row>, row: Row): boolean {
+  if (!chip.requiresHrVisibility) return true;
+  const candidate = row as { canViewHrStatus?: boolean };
+  return candidate.canViewHrStatus !== false;
 }
 
 export function countByChip<Row>(
@@ -184,11 +211,12 @@ export function countByChip<Row>(
     }
 
     if (chip.matchesRow) {
-      counts[chip.key] = rows.filter((row) => chip.matchesRow?.(row)).length;
+      counts[chip.key] = rows.filter((row) => rowSupportsHrChip(chip, row) && chip.matchesRow?.(row)).length;
       return counts;
     }
 
     counts[chip.key] = rows.filter((row) => {
+      if (!rowSupportsHrChip(chip, row)) return false;
       const candidate = row as { displayStatus?: DisplayStatus };
       return !!candidate.displayStatus && chip.matchStatuses?.includes(candidate.displayStatus);
     }).length;
@@ -197,6 +225,7 @@ export function countByChip<Row>(
 }
 
 export function rowMatchesChip<Row>(chip: ChipConfig<Row>, row: Row): boolean {
+  if (!rowSupportsHrChip(chip, row)) return false;
   if (chip.matchesRow) return chip.matchesRow(row);
   if (!chip.matchStatuses || chip.matchStatuses.length === 0) return true;
   const candidate = row as { displayStatus?: DisplayStatus };
