@@ -11,7 +11,7 @@ type PublishingTagProfileSummary = Pick<
   department: Pick<Tables<'departments'>, 'name_ar'> | null;
 };
 
-const PUBLISHING_TAG_PROFILE_COLUMNS = 'id, name_ar, avatar_url, department:departments(name_ar)';
+const PUBLISHING_TAG_PROFILE_COLUMNS = 'id, name_ar, avatar_url, department_id';
 
 export type PublishingTagClaimStatus = 'claimed' | 'unclaimed';
 
@@ -52,7 +52,38 @@ async function getPublishingTagProfiles(
 
   if (error) throw error;
 
-  return new Map((data ?? []).map((profile) => [profile.id, profile]));
+  const profiles = data ?? [];
+  const departmentIds = Array.from(
+    new Set(profiles.map((p) => p.department_id).filter((v): v is string => Boolean(v)))
+  );
+
+  const departmentMap = new Map<string, Pick<Tables<'departments'>, 'name_ar'>>();
+  if (departmentIds.length) {
+    const { data: departments, error: departmentsError } = await supabase
+      .from('departments')
+      .select('id, name_ar')
+      .in('id', departmentIds);
+
+    if (departmentsError) throw departmentsError;
+
+    for (const dept of departments ?? []) {
+      departmentMap.set(dept.id, { name_ar: dept.name_ar });
+    }
+  }
+
+  return new Map(
+    profiles.map((profile) => [
+      profile.id,
+      {
+        id: profile.id,
+        name_ar: profile.name_ar,
+        avatar_url: profile.avatar_url,
+        department: profile.department_id
+          ? departmentMap.get(profile.department_id) ?? null
+          : null,
+      },
+    ])
+  );
 }
 
 async function getLatestPublishingTagRow(

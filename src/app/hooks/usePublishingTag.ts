@@ -51,7 +51,8 @@ export function usePublishingTag({ orgId, userId }: UsePublishingTagOptions) {
       const nextHolder = await publishingTagService.getPublishingTagHolder(orgId);
       setHolder(nextHolder);
       setLoadError(null);
-    } catch {
+    } catch (error) {
+      console.error('[usePublishingTag] refresh failed', error);
       const message = 'فشل تحميل وسم الناشر';
       setLoadError(message);
       if (!silent) {
