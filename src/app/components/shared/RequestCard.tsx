@@ -5,6 +5,11 @@ import type { Profile } from '@/lib/services/profiles.service';
 import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import * as storageService from '@/lib/services/storage.service';
 import { toast } from 'sonner';
+import {
+  formatRequestCalendarDate,
+  formatRequestDateTime,
+  formatRequestTime,
+} from '@/lib/requestDateDisplay';
 
 interface RequestCardProps {
   request: LeaveRequest;
@@ -115,9 +120,9 @@ export function RequestCard({
             <div className="flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" />
               <span>
-                {new Date(request.from_date_time).toLocaleDateString('ar-IQ')}
+                {formatRequestCalendarDate(request.from_date_time, request.type)}
                 {' — '}
-                {new Date(request.from_date_time).toLocaleTimeString('ar-IQ', {
+                {formatRequestTime(request.from_date_time, 'ar-IQ', {
                   hour: '2-digit',
                   minute: '2-digit',
                 })}
@@ -129,14 +134,14 @@ export function RequestCard({
                 <Calendar className="w-3.5 h-3.5" />
                 <span>
                   من:{' '}
-                  {new Date(request.from_date_time).toLocaleDateString('ar-IQ')}
+                  {formatRequestCalendarDate(request.from_date_time, request.type)}
                 </span>
               </div>
               <div className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />
                 <span>
                   إلى:{' '}
-                  {new Date(request.to_date_time).toLocaleDateString('ar-IQ')}
+                  {formatRequestCalendarDate(request.to_date_time, request.type)}
                 </span>
               </div>
             </>
@@ -191,7 +196,7 @@ export function RequestCard({
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" />
                 <span className="opacity-70">{decidedAtLabel}</span>
-                <span>{new Date(requestWithMeta.decided_at).toLocaleString('ar-IQ')}</span>
+                <span>{formatRequestDateTime(requestWithMeta.decided_at)}</span>
               </div>
             )}
           </div>

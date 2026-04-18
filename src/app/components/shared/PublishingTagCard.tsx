@@ -117,7 +117,7 @@ export function PublishingTagCard({
             </Avatar>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-sky-950">{holderName}</p>
-              <p className="mt-1 text-xs text-sky-700">القسم الحالي: {holderDepartment}</p>
+              <p className="mt-1 text-xs text-sky-700">{holderDepartment}</p>
             </div>
           </div>
         </div>

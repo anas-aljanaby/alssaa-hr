@@ -14,6 +14,12 @@ import * as policyService from '@/lib/services/policy.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as auditService from '@/lib/services/audit.service';
+import {
+  formatRequestCalendarDate,
+  formatRequestDateTime,
+  formatRequestTime,
+  isFullDayLeaveRequestType,
+} from '@/lib/requestDateDisplay';
 import * as XLSX from 'xlsx';
 import { getRequestTypeAr, getStatusAr } from '../../data/mockData';
 import {
@@ -830,39 +836,6 @@ export function UserDetailsPage() {
             </div>
           )}
 
-          {leaveBalance && (
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-              <h3 className="text-sm text-gray-600 mb-3">رصيد الإجازات</h3>
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-gray-600">إجازة اعتيادية</span>
-                    <span className="text-sm text-blue-700">
-                      {leaveBalance.remaining_annual} متبقي
-                    </span>
-                  </div>
-                  <div className="flex gap-2 text-xs">
-                    <span className="text-gray-500">الكلي: {leaveBalance.total_annual}</span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-500">المستخدم: {leaveBalance.used_annual}</span>
-                  </div>
-                </div>
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-gray-600">إجازة مرضية</span>
-                    <span className="text-sm text-emerald-700">
-                      {leaveBalance.remaining_sick} متبقي
-                    </span>
-                  </div>
-                  <div className="flex gap-2 text-xs">
-                    <span className="text-gray-500">الكلي: {leaveBalance.total_sick}</span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-500">المستخدم: {leaveBalance.used_sick}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1073,16 +1046,16 @@ export function UserDetailsPage() {
                     <div className="text-xs text-gray-600 space-y-1">
                       {req.type === 'time_adjustment' ? (
                         <div>
-                          {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
+                          {formatRequestCalendarDate(req.from_date_time, req.type)}
                           {' — '}
-                          {new Date(req.from_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                          {formatRequestTime(req.from_date_time, 'ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                           {' → '}
-                          {new Date(req.to_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                          {formatRequestTime(req.to_date_time, 'ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       ) : (
                         <>
-                          <div>من: {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}</div>
-                          <div>إلى: {new Date(req.to_date_time).toLocaleDateString('ar-IQ')}</div>
+                          <div>من: {formatRequestCalendarDate(req.from_date_time, req.type)}</div>
+                          <div>إلى: {formatRequestCalendarDate(req.to_date_time, req.type)}</div>
                         </>
                       )}
                       {req.note && (
@@ -1161,27 +1134,31 @@ export function UserDetailsPage() {
                   <div className="text-xs text-gray-600 space-y-1">
                     {req.type === 'time_adjustment' ? (
                       <div>
-                        {new Date(req.from_date_time).toLocaleDateString('ar-IQ')}
+                        {formatRequestCalendarDate(req.from_date_time, req.type)}
                         {' — '}
-                        {new Date(req.from_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                        {formatRequestTime(req.from_date_time, 'ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                         {' → '}
-                        {new Date(req.to_date_time).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                        {formatRequestTime(req.to_date_time, 'ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     ) : (
                       <>
                         <div>
                           من:{' '}
-                          {new Date(req.from_date_time).toLocaleString('ar-IQ', {
-                            dateStyle: 'medium',
-                            timeStyle: req.type === 'hourly_permission' ? 'short' : undefined,
-                          })}
+                          {isFullDayLeaveRequestType(req.type)
+                            ? formatRequestCalendarDate(req.from_date_time, req.type)
+                            : formatRequestDateTime(req.from_date_time, 'ar-IQ', {
+                                dateStyle: 'medium',
+                                timeStyle: req.type === 'hourly_permission' ? 'short' : undefined,
+                              })}
                         </div>
                         <div>
                           إلى:{' '}
-                          {new Date(req.to_date_time).toLocaleString('ar-IQ', {
-                            dateStyle: 'medium',
-                            timeStyle: req.type === 'hourly_permission' ? 'short' : undefined,
-                          })}
+                          {isFullDayLeaveRequestType(req.type)
+                            ? formatRequestCalendarDate(req.to_date_time, req.type)
+                            : formatRequestDateTime(req.to_date_time, 'ar-IQ', {
+                                dateStyle: 'medium',
+                                timeStyle: req.type === 'hourly_permission' ? 'short' : undefined,
+                              })}
                         </div>
                       </>
                     )}

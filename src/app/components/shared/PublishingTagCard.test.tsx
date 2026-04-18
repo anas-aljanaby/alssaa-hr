@@ -38,7 +38,7 @@ describe('PublishingTagCard', () => {
     );
 
     expect(screen.getByText('سارة')).toBeInTheDocument();
-    expect(screen.getByText('القسم الحالي: الموارد البشرية')).toBeInTheDocument();
+    expect(screen.getByText('الموارد البشرية')).toBeInTheDocument();
     expect(screen.queryByText('EMP-001')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'التنازل عن الوسم' })).toBeEnabled();
   });

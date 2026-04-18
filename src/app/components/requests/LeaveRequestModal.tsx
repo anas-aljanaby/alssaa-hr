@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/app/components/ui/utils';
 import type { LeaveRequestFormData } from '@/lib/validations';
+import { countInclusiveDateRangeDays } from '@/lib/leaveDays';
+import { countWorkingDaysInRange, isWorkingDayForDate } from '@/lib/workSchedule';
 import type { RequestType } from '@/lib/services/requests.service';
 
 const ARABIC_MONTHS = [
@@ -58,6 +60,7 @@ type LeaveRequestModalProps = {
   submitting: boolean;
   uploading: boolean;
   workStartTime: string;
+  workDays: number[];
 };
 
 function formatArabicNumber(value: number) {
@@ -137,15 +140,6 @@ function getRangeEnd(range: AnnualRangeState) {
   return range.end ?? range.start;
 }
 
-function getInclusiveDayCount(startIso: string | null, endIso: string | null) {
-  if (!startIso) return 0;
-  const start = parseIsoDate(startIso);
-  const end = parseIsoDate(endIso ?? startIso);
-  const startTime = normalizeDate(start).getTime();
-  const endTime = normalizeDate(end).getTime();
-  return Math.floor((endTime - startTime) / 86_400_000) + 1;
-}
-
 function getArabicUnitLabel(
   count: number,
   options: { one: string; two: string; few: string; many: string }
@@ -219,11 +213,6 @@ function getMinutesFromTime(value?: string) {
   return hour * 60 + minute;
 }
 
-function isWeekend(date: Date) {
-  const weekday = date.getDay();
-  return weekday === 5 || weekday === 6;
-}
-
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <label className="text-sm font-medium text-slate-700">{children}</label>;
 }
@@ -270,17 +259,20 @@ function AnnualLeaveSection({
   errors,
   onSelectDate,
   range,
+  workDays,
 }: {
   errors: LeaveRequestModalProps['form']['formState']['errors'];
   onSelectDate: (isoDate: string) => void;
   range: AnnualRangeState;
+  workDays: number[];
 }) {
   const today = useMemo(() => normalizeDate(new Date()), []);
   const todayIso = useMemo(() => formatIsoDate(today), [today]);
   const initialMonth = range.start ? startOfMonth(parseIsoDate(range.start)) : startOfMonth(today);
   const [visibleMonth, setVisibleMonth] = useState(initialMonth);
   const selectedEnd = getRangeEnd(range);
-  const selectedDays = getInclusiveDayCount(range.start, selectedEnd);
+  const selectedDays = countInclusiveDateRangeDays(range.start, selectedEnd);
+  const deductibleDays = countWorkingDaysInRange(range.start, selectedEnd, workDays);
   const canGoToPreviousMonth = visibleMonth > startOfMonth(today);
   const cells = useMemo(() => getCalendarCells(visibleMonth), [visibleMonth]);
 
@@ -342,7 +334,7 @@ function AnnualLeaveSection({
               key={dayLabel}
               className={cn(
                 'py-2',
-                index >= 5 ? 'rounded-full bg-slate-100 text-slate-400' : ''
+                !workDays.includes(index) ? 'rounded-full bg-slate-100 text-slate-400' : ''
               )}
             >
               {dayLabel}
@@ -358,6 +350,8 @@ function AnnualLeaveSection({
 
             const isoDate = formatIsoDate(day);
             const isPast = day < today;
+            const isOffDay = !isWorkingDayForDate(day, workDays);
+            const isDisabled = isPast || isOffDay;
             const isToday = isoDate === todayIso;
             const isSelected =
               Boolean(range.start) &&
@@ -374,7 +368,7 @@ function AnnualLeaveSection({
                 key={isoDate}
                 className={cn(
                   'relative aspect-square rounded-2xl',
-                  isWeekend(day) ? 'bg-slate-50/80' : ''
+                  isOffDay ? 'bg-slate-50/80' : ''
                 )}
               >
                 {isSelected && !isSingleDay && (
@@ -392,15 +386,15 @@ function AnnualLeaveSection({
 
                 <button
                   type="button"
-                  disabled={isPast}
+                  disabled={isDisabled}
                   onClick={() => onSelectDate(isoDate)}
                   aria-label={`اختيار ${formatArabicDate(isoDate)}`}
                   className={cn(
                     'relative z-10 flex h-full w-full items-center justify-center rounded-2xl text-sm font-medium transition',
-                    isPast
+                    isDisabled
                       ? 'cursor-not-allowed text-slate-300'
                       : 'text-slate-700 hover:bg-slate-100',
-                    isWeekend(day) && !isSelected && !isPast ? 'text-slate-500' : '',
+                    isOffDay && !isSelected && !isPast ? 'text-slate-400' : '',
                     isSelected && !isRangeStart && !isRangeEnd ? 'bg-blue-100 text-blue-700 rounded-none hover:bg-blue-100' : '',
                     (isRangeStart || isRangeEnd) && 'rounded-full bg-blue-600 text-white shadow-sm hover:bg-blue-600',
                     isSingleDay && isRangeStart && 'rounded-full bg-blue-600 text-white'
@@ -432,11 +426,18 @@ function AnnualLeaveSection({
               {formatRangeSummary(range.start, selectedEnd)}
             </p>
             <span className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">
-              {formatSelectedDaysLabel(selectedDays)}
+              {formatSelectedDaysLabel(deductibleDays)}
             </span>
           </div>
         ) : (
           <p className="text-sm text-slate-500">اختر أيام الإجازة من التقويم</p>
+        )}
+
+        {range.start && (
+          <p className="mt-2 text-xs text-slate-500">
+            سيتم خصم {formatSelectedDaysLabel(deductibleDays)} من الرصيد فقط.
+            {selectedDays !== deductibleDays ? ' لن تُخصم أيام الراحة ضمن النطاق.' : ''}
+          </p>
         )}
 
         <div className="mt-2 flex flex-wrap gap-2">
@@ -545,11 +546,16 @@ function HourlyLeaveSection({
 
 function SickLeaveSection({
   form,
+  workDays,
 }: {
   form: UseFormReturn<LeaveRequestFormData>;
+  workDays: number[];
 }) {
   const errors = form.formState.errors;
   const todayIso = useMemo(() => formatIsoDate(normalizeDate(new Date())), []);
+  const fromDate = form.watch('fromDate');
+  const toDate = form.watch('toDate');
+  const deductibleDays = countWorkingDaysInRange(fromDate || null, toDate || fromDate || null, workDays);
 
   return (
     <section className="space-y-4 rounded-[28px] border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
@@ -588,6 +594,17 @@ function SickLeaveSection({
           />
           <FieldError message={errors.toDate?.message} />
         </div>
+      </div>
+
+      <div className="rounded-[24px] border border-slate-200/80 bg-white p-3 text-sm text-slate-600 shadow-sm">
+        {fromDate ? (
+          <>
+            سيتم خصم {formatSelectedDaysLabel(deductibleDays)} من الرصيد فقط.
+            {(toDate || fromDate) && deductibleDays === 0 ? ' النطاق المحدد يقع بالكامل ضمن أيام الراحة.' : ''}
+          </>
+        ) : (
+          'سيتم خصم أيام العمل فقط حسب جدول دوامك.'
+        )}
       </div>
     </section>
   );
@@ -646,6 +663,7 @@ export function LeaveRequestModal({
   submitting,
   uploading,
   workStartTime,
+  workDays,
 }: LeaveRequestModalProps) {
   const requestType = form.watch('type');
   const errors = form.formState.errors;
@@ -730,13 +748,14 @@ export function LeaveRequestModal({
                 errors={errors}
                 range={annualRange}
                 onSelectDate={handleAnnualDateSelect}
+                workDays={workDays}
               />
             ) : requestType === 'hourly_permission' ? (
               <HourlyLeaveSection form={form} />
             ) : requestType === 'time_adjustment' ? (
               <TimeAdjustmentSection form={form} workStartTime={workStartTime} />
             ) : (
-              <SickLeaveSection form={form} />
+              <SickLeaveSection form={form} workDays={workDays} />
             )}
           </div>
 

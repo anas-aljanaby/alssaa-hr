@@ -35,6 +35,7 @@ import { useVisibilityRefetch } from '../../hooks/useVisibilityRefetch';
 import { usePublishingTag } from '../../hooks/usePublishingTag';
 import { usePwa } from '../../contexts/PwaContext';
 import { LastUpdatedNote } from '../../components/shared/LastUpdatedNote';
+import { formatRequestCalendarDate } from '@/lib/requestDateDisplay';
 
 export function EmployeeDashboard() {
   const { currentUser } = useAuth();
@@ -333,7 +334,7 @@ export function EmployeeDashboard() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-800">{getRequestTypeAr(leave.type)}</span>
                   <span className="text-xs text-blue-600">
-                    {new Date(leave.from_date_time).toLocaleDateString('ar-IQ')}
+                    {formatRequestCalendarDate(leave.from_date_time, leave.type)}
                   </span>
                 </div>
               </div>

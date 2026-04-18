@@ -125,7 +125,7 @@ describe('ManagerDashboard', () => {
     );
 
     await screen.findByText('وسم الناشر');
-    expect(screen.getByText('القسم الحالي: الموارد البشرية')).toBeInTheDocument();
+    expect(screen.getByText('الموارد البشرية')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'التنازل عن الوسم' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'إلغاء الوسم' })).not.toBeInTheDocument();
   });

@@ -10,6 +10,7 @@ import * as requestsService from '@/lib/services/requests.service';
 import * as overtimeRequestsService from '@/lib/services/overtime-requests.service';
 import * as storageService from '@/lib/services/storage.service';
 import * as policyService from '@/lib/services/policy.service';
+import * as profilesService from '@/lib/services/profiles.service';
 import { useRealtimeSubscription } from '@/lib/hooks/useRealtimeSubscription';
 import type { LeaveRequest, RequestType } from '@/lib/services/requests.service';
 import type { OvertimeRequestWithSessionAndReviewer } from '@/lib/services/overtime-requests.service';
@@ -25,6 +26,7 @@ import { UnavailableState } from '../../components/shared/UnavailableState';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { isOfflineError, OFFLINE_ACTION_MESSAGE } from '@/lib/network';
 import { LeaveRequestModal } from '@/app/components/requests/LeaveRequestModal';
+import { countWorkingDaysInRange, resolveWorkDays } from '@/lib/workSchedule';
 
 const PAGE_SIZE = 10;
 
@@ -51,6 +53,7 @@ export function RequestsPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [workStartTime, setWorkStartTime] = useState<string>('08:00');
+  const [workDays, setWorkDays] = useState<number[]>(resolveWorkDays({ orgWeeklyOffDays: [5, 6] }));
   const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   useBodyScrollLock(showForm);
@@ -67,17 +70,35 @@ export function RequestsPage() {
     },
   });
 
-  const requestType = form.watch('type');
-  const isTimeAdjustment = requestType === 'time_adjustment';
+  const loadRequestSchedule = useCallback(async () => {
+    if (!currentUser) {
+      return {
+        resolvedWorkDays: resolveWorkDays({ orgWeeklyOffDays: [5, 6] }),
+        resolvedWorkStartTime: '08:00',
+      };
+    }
+
+    const [policy, profile] = await Promise.all([
+      policyService.getPolicy(),
+      profilesService.getUserById(currentUser.uid),
+    ]);
+
+    const resolvedWorkDays = resolveWorkDays({
+      profileWorkDays: profile?.work_days ?? null,
+      orgWeeklyOffDays: policy?.weekly_off_days ?? [5, 6],
+    });
+    const resolvedWorkStartTime = policy?.work_start_time ?? '08:00';
+
+    setWorkDays(resolvedWorkDays);
+    setWorkStartTime(resolvedWorkStartTime);
+
+    return { resolvedWorkDays, resolvedWorkStartTime };
+  }, [currentUser]);
 
   useEffect(() => {
-    if (!isTimeAdjustment) return;
-    policyService.getPolicy().then((p) => {
-      if (p?.work_start_time) {
-        setWorkStartTime(p.work_start_time);
-      }
-    });
-  }, [form, isTimeAdjustment]);
+    if (!currentUser) return;
+    loadRequestSchedule().catch(() => {});
+  }, [currentUser?.uid, loadRequestSchedule]);
 
   const loadOvertimeRequests = useCallback(async () => {
     if (!currentUser) return;
@@ -179,6 +200,7 @@ export function RequestsPage() {
     }
     setSubmitting(true);
     try {
+      form.clearErrors(['fromDate', 'toDate']);
       let attachmentUrl: string | undefined;
 
       if (attachmentFile) {
@@ -197,6 +219,24 @@ export function RequestsPage() {
       let fromDateTime: string;
       let toDateTime: string;
       if (data.type === 'annual_leave' || data.type === 'sick_leave') {
+        const schedule = await loadRequestSchedule().catch(() => null);
+        const effectiveWorkDays = schedule?.resolvedWorkDays ?? workDays;
+
+        const deductibleDays = countWorkingDaysInRange(
+          data.fromDate,
+          data.toDate ?? data.fromDate,
+          effectiveWorkDays
+        );
+
+        if (deductibleDays === 0) {
+          form.setError('toDate', {
+            type: 'manual',
+            message: 'النطاق المحدد يقع بالكامل ضمن أيام الراحة ولن يُخصم من الرصيد.',
+          });
+          toast.error('اختر نطاقاً يحتوي على يوم عمل واحد على الأقل.');
+          return;
+        }
+
         fromDateTime = `${data.fromDate}T00:00:00`;
         toDateTime = `${data.toDate}T23:59:59`;
       } else if (data.type === 'time_adjustment') {
@@ -316,6 +356,7 @@ export function RequestsPage() {
           submitting={submitting}
           uploading={uploading}
           workStartTime={workStartTime}
+          workDays={workDays}
         />
       )}
       {!showForm && (
@@ -326,7 +367,9 @@ export function RequestsPage() {
               toast.error(OFFLINE_ACTION_MESSAGE);
               return;
             }
-            setShowForm(true);
+            void loadRequestSchedule().catch(() => {}).finally(() => {
+              setShowForm(true);
+            });
           }}
           disabled={isOffline}
           aria-disabled={isOffline}
