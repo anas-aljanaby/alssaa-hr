@@ -285,7 +285,7 @@ function MobileLayoutContent() {
                 {resolvedTopBar.title}
               </h1>
               {resolvedTopBar.meta ? (
-                <div className="inline-flex max-w-[10rem] items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
+                <div className="inline-flex max-w-[10rem] items-center rounded-full bg-blue-50 px-2 py-1 text-[11px] text-blue-600">
                   <span className="truncate">{resolvedTopBar.meta}</span>
                 </div>
               ) : null}

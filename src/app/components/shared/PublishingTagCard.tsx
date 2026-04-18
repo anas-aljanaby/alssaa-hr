@@ -1,6 +1,7 @@
-import { BadgeCheck, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Button } from '@/app/components/ui/button';
+import { PublisherIcon } from './PublisherIcon';
 import type { PublishingTagHolder } from '@/lib/services/publishing-tag.service';
 
 type PublishingTagAction = 'claim' | 'release' | 'force-release' | null;
@@ -71,7 +72,7 @@ export function PublishingTagCard({
             <p className="mt-1 text-sm text-red-600">{loadError}</p>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-            <BadgeCheck className="h-5 w-5" />
+            <PublisherIcon size={20} className="text-red-600" />
           </div>
         </div>
         {onRetry && (
@@ -96,18 +97,18 @@ export function PublishingTagCard({
           <h3 className="text-gray-800">وسم الناشر</h3>
           <p className="mt-1 text-sm text-gray-500">الناشر الحالي</p>
         </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-          <BadgeCheck className="h-5 w-5" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50">
+          <PublisherIcon size={20} />
         </div>
       </div>
 
       {isClaimed ? (
-        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-amber-50/60 p-3">
-          <Avatar className="h-12 w-12 border border-amber-100">
+        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-blue-50/60 p-3">
+          <Avatar className="h-12 w-12 border border-blue-100">
             {holderProfile.avatar_url && (
               <AvatarImage src={holderProfile.avatar_url} alt={holderName} />
             )}
-            <AvatarFallback className="bg-amber-100 text-amber-700">
+            <AvatarFallback className="bg-blue-100 text-blue-700">
               {getInitials(holderName)}
             </AvatarFallback>
           </Avatar>
@@ -129,7 +130,7 @@ export function PublishingTagCard({
               type="button"
               onClick={onClaim}
               disabled={Boolean(actionLoading) || isHeldBySomeoneElse}
-              className="w-full bg-amber-600 text-white hover:bg-amber-700"
+              className="w-full bg-blue-600 text-white hover:bg-blue-700"
             >
               أخذ وسم الناشر
             </Button>

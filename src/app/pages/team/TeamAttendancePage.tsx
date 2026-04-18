@@ -43,6 +43,7 @@ import {
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react';
+import { PublisherIcon } from '@/app/components/shared/PublisherIcon';
 
 const ALL_DEPARTMENTS = '__all_departments__';
 const NO_DEPARTMENT_KEY = '__no_department__';
@@ -1378,7 +1379,12 @@ export function TeamAttendancePage() {
   const showBoardEmptyState = !loading && !errorMessage && boardRows.length === 0 && !hasNoDepartmentData;
   const topBarMeta = useMemo(() => {
     if (resolvedMode === 'live') {
-      return `آخر تحديث ${formatLastUpdated(lastUpdatedAt)}`;
+      return (
+        <span className="flex items-center gap-1">
+          <PublisherIcon size={11} />
+          <span>{`آخر تحديث ${formatLastUpdated(lastUpdatedAt)}`}</span>
+        </span>
+      );
     }
     return formatSelectedDateLabel(selectedDate);
   }, [lastUpdatedAt, resolvedMode, selectedDate]);
