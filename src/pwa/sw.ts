@@ -12,6 +12,7 @@ import {
 import { registerRoute, NavigationRoute, setCatchHandler } from 'workbox-routing';
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import type { PrecacheEntry } from 'workbox-precaching';
+import { wrapRtlText } from '../lib/rtl';
 
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<string | PrecacheEntry>;
@@ -145,8 +146,8 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(payload.title ?? 'إشعار جديد', {
-      body: payload.body ?? '',
+    self.registration.showNotification(wrapRtlText(payload.title ?? 'إشعار جديد'), {
+      body: wrapRtlText(payload.body ?? ''),
       icon: '/icons/icon-192x192.png',
       badge: '/icons/icon-192x192.png',
       dir: 'rtl',

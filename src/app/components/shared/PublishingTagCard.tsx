@@ -105,18 +105,20 @@ export function PublishingTagCard({
       </div>
 
       {isClaimed ? (
-        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-sky-100 bg-white p-3">
-          <Avatar className="h-12 w-12 border border-sky-200">
-            {holderProfile.avatar_url && (
+        <div className="publisher-live-row relative mt-4 overflow-hidden rounded-2xl border border-sky-100 bg-white/80 p-3">
+          <div className="relative z-10 flex items-center gap-3">
+            <Avatar className="h-12 w-12 border border-sky-200">
+              {holderProfile.avatar_url && (
               <AvatarImage src={holderProfile.avatar_url} alt={holderName} />
-            )}
-            <AvatarFallback className="bg-sky-100 text-sky-700">
-              {getInitials(holderName)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-sky-950">{holderName}</p>
-            <p className="mt-1 text-xs text-sky-700">القسم الحالي: {holderDepartment}</p>
+              )}
+              <AvatarFallback className="bg-sky-100 text-sky-700">
+                {getInitials(holderName)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-sky-950">{holderName}</p>
+              <p className="mt-1 text-xs text-sky-700">القسم الحالي: {holderDepartment}</p>
+            </div>
           </div>
         </div>
       ) : (
