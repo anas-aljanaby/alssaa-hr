@@ -7,14 +7,12 @@ import {
   getPushPermission,
   isPushSupported,
   requestAndSubscribe,
-  subscribeToPush,
 } from '@/lib/push/push-manager';
 
 export function DeviceNotificationsBanner() {
   const { currentUser } = useAuth();
   const { isOffline } = usePwa();
   const [permission, setPermission] = useState<NotificationPermission>(() => getPushPermission());
-  const [syncFailed, setSyncFailed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dismissedStateKey, setDismissedStateKey] = useState<string | null>(null);
 
@@ -34,48 +32,22 @@ export function DeviceNotificationsBanner() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!currentUser || isOffline || !pushSupported || permission !== 'granted') return;
-
-    let cancelled = false;
-
-    void subscribeToPush(currentUser.uid).then((ok) => {
-      if (cancelled) return;
-      setSyncFailed(!ok);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUser, isOffline, permission, pushSupported]);
-
   if (!currentUser || isOffline || !pushSupported) return null;
-  if (permission === 'granted' && !syncFailed) return null;
+  if (permission === 'granted') return null;
 
-  const isRetryState = permission === 'granted' && syncFailed;
   const isDeniedState = permission === 'denied';
 
-  const title = isRetryState
-    ? 'تعذر ربط هذا الجهاز بإشعارات الدوام'
-    : isDeniedState
-      ? 'إشعارات الجهاز متوقفة'
-      : 'فعّل إشعارات الجهاز';
+  const title = isDeniedState
+    ? 'إشعارات الجهاز متوقفة'
+    : 'فعّل إشعارات الجهاز';
 
-  const description = isRetryState
-    ? 'يوجد إذن للإشعارات، لكن تسجيل هذا الجهاز فشل. أعد المحاولة لإكمال الربط.'
-    : isDeniedState
-      ? 'اسمح بالإشعارات من إعدادات Safari أو iPhone، ثم ارجع واضغط "تحقق مجدداً".'
-      : 'لتصلك تنبيهات الدوام على الهاتف حتى عند إغلاق التطبيق، فعّل إشعارات الجهاز مرة واحدة.';
+  const description = isDeniedState
+    ? 'اسمح بالإشعارات من إعدادات Safari أو iPhone، ثم ارجع واضغط "تحقق مجدداً".'
+    : 'لتصلك تنبيهات الدوام على الهاتف حتى عند إغلاق التطبيق، فعّل إشعارات الجهاز مرة واحدة.';
 
-  const buttonLabel = isDeniedState
-    ? 'تحقق مجدداً'
-    : isRetryState
-      ? 'إعادة المحاولة'
-      : 'تفعيل الإشعارات';
+  const buttonLabel = isDeniedState ? 'تحقق مجدداً' : 'تفعيل الإشعارات';
 
-  const bannerStateKey = `${permission}:${syncFailed ? 'sync_failed' : 'ready'}`;
-
-  if (dismissedStateKey === bannerStateKey) return null;
+  if (dismissedStateKey === permission) return null;
 
   async function handleAction() {
     if (!currentUser || isSubmitting) return;
@@ -87,31 +59,16 @@ export function DeviceNotificationsBanner() {
 
     setIsSubmitting(true);
     try {
-      // requestAndSubscribe requests permission AND calls subscribeToPush internally.
-      // We call subscribeToPush once more after to get the success/fail status,
-      // since requestAndSubscribe only returns the permission state.
       const nextPermission = await requestAndSubscribe(currentUser.uid);
       setPermission(nextPermission);
 
-      if (nextPermission !== 'granted') {
-        toast.info('لن تصلك إشعارات الجهاز حتى تسمح بها من المتصفح.');
-        setSyncFailed(false);
-        return;
-      }
-
-      // Verify the subscription was actually saved (and retry if the first attempt failed)
-      const synced = await subscribeToPush(currentUser.uid);
-      setSyncFailed(!synced);
-
-      if (synced) {
+      if (nextPermission === 'granted') {
         toast.success('تم تفعيل إشعارات الجهاز لهذا الهاتف.');
       } else {
-        toast.error('تم السماح بالإشعارات، لكن تسجيل هذا الجهاز لم يكتمل. تحقق من وحدة تحكم المتصفح للمزيد.');
+        toast.info('لن تصلك إشعارات الجهاز حتى تسمح بها من المتصفح.');
       }
     } catch (err) {
       console.error('[push] handleAction error:', err);
-      setSyncFailed(true);
-      toast.error('تعذر تفعيل إشعارات الجهاز حالياً.');
     } finally {
       setIsSubmitting(false);
     }
@@ -133,7 +90,7 @@ export function DeviceNotificationsBanner() {
         <div className="flex shrink-0 items-start gap-2">
           <button
             type="button"
-            onClick={() => setDismissedStateKey(bannerStateKey)}
+            onClick={() => setDismissedStateKey(permission)}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-indigo-200/80 bg-white/80 text-indigo-500 transition-colors hover:bg-white hover:text-indigo-700"
             aria-label="إغلاق تنبيه الإشعارات"
           >

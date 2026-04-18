@@ -64,31 +64,45 @@ describe('DeviceNotificationsBanner', () => {
 
     await waitFor(() => {
       expect(pushMocks.requestAndSubscribe).toHaveBeenCalledWith('user-1');
-      expect(pushMocks.subscribeToPush).toHaveBeenCalledWith('user-1');
     });
+    expect(pushMocks.subscribeToPush).not.toHaveBeenCalled();
     expect(toastMocks.success).toHaveBeenCalled();
   });
 
-  it('silently syncs the existing subscription when permission is already granted', async () => {
+  it('does not render when permission is already granted', () => {
     pushMocks.getPushPermission.mockReturnValue('granted');
 
     render(<DeviceNotificationsBanner />);
 
-    await waitFor(() => {
-      expect(pushMocks.subscribeToPush).toHaveBeenCalledWith('user-1');
-    });
     expect(screen.queryByText('فعّل إشعارات الجهاز')).not.toBeInTheDocument();
+    expect(screen.queryByText('إشعارات الجهاز متوقفة')).not.toBeInTheDocument();
+    expect(pushMocks.subscribeToPush).not.toHaveBeenCalled();
   });
 
-  it('shows a retry state when permission is granted but subscription storage fails', async () => {
-    pushMocks.getPushPermission.mockReturnValue('granted');
-    pushMocks.subscribeToPush.mockResolvedValue(false);
+  it('shows the denied state and rechecks permission on click', () => {
+    pushMocks.getPushPermission.mockReturnValue('denied');
 
     render(<DeviceNotificationsBanner />);
 
+    expect(screen.getByText('إشعارات الجهاز متوقفة')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'تحقق مجدداً' }));
+
+    expect(pushMocks.requestAndSubscribe).not.toHaveBeenCalled();
+    expect(toastMocks.error).not.toHaveBeenCalled();
+  });
+
+  it('shows an info toast when the user declines the permission prompt', async () => {
+    pushMocks.requestAndSubscribe.mockResolvedValue('default');
+
+    render(<DeviceNotificationsBanner />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'تفعيل الإشعارات' }));
+
     await waitFor(() => {
-      expect(screen.getByText('تعذر ربط هذا الجهاز بإشعارات الدوام')).toBeInTheDocument();
+      expect(toastMocks.info).toHaveBeenCalled();
     });
+    expect(toastMocks.error).not.toHaveBeenCalled();
   });
 
   it('allows dismissing the banner with the close button', () => {
