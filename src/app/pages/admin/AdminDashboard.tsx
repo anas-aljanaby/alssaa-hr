@@ -393,6 +393,7 @@ export function AdminDashboard() {
               actionLoading={publishingTag.actionLoading}
               showSelfActions={true}
               showForceRelease={true}
+              forceReleaseLabel="سحب الوسم من الناشر الحالي"
               onClaim={() => void publishingTag.claim()}
               onRelease={() => void publishingTag.release()}
               onForceRelease={() => void publishingTag.forceRelease()}

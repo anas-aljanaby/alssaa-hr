@@ -44,6 +44,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { PublisherIcon } from '@/app/components/shared/PublisherIcon';
+import { usePublishingTag } from '@/app/hooks/usePublishingTag';
 
 const ALL_DEPARTMENTS = '__all_departments__';
 const NO_DEPARTMENT_KEY = '__no_department__';
@@ -750,11 +751,15 @@ function EmptyState({
 
 function EmployeeAttendanceRow({
   row,
+  publishingTagHolderUserId,
   onOpenDetails,
 }: {
   row: AttendanceBoardRow;
+  publishingTagHolderUserId?: string | null;
   onOpenDetails: (row: AttendanceBoardRow) => void;
 }) {
+  const isCurrentPublisher =
+    publishingTagHolderUserId != null && row.userId === publishingTagHolderUserId;
   const showOvertimeIndicator = row.canViewHrStatus && row.hasOvertime;
   const showPrimaryBadge =
     row.canViewHrStatus &&
@@ -783,7 +788,15 @@ function EmployeeAttendanceRow({
   const content = (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-900">{row.nameAr}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <p className="truncate text-sm font-medium text-slate-900">{row.nameAr}</p>
+          {isCurrentPublisher ? (
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-[0_1px_2px_rgba(14,165,233,0.08)]">
+              <PublisherIcon size={12} className="text-sky-600" />
+              الناشر
+            </span>
+          ) : null}
+        </div>
         {(row.metaText || row.factText) ? (
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-right">
             {row.metaText ? (
@@ -910,6 +923,7 @@ function AttendanceGroupHeader({
 function DepartmentAttendanceSection({
   section,
   boardMode,
+  publishingTagHolderUserId,
   expanded,
   onToggle,
   expandedGroups,
@@ -918,6 +932,7 @@ function DepartmentAttendanceSection({
 }: {
   section: BoardSection;
   boardMode: TeamAttendanceMode;
+  publishingTagHolderUserId?: string | null;
   expanded: boolean;
   onToggle: () => void;
   expandedGroups: Record<BoardGroup, boolean>;
@@ -1012,7 +1027,12 @@ function DepartmentAttendanceSection({
               {expandedGroups.present ? (
                 <div className="space-y-2">
                   {section.presentRows.map((row) => (
-                    <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
+                    <EmployeeAttendanceRow
+                      key={row.userId}
+                      row={row}
+                      publishingTagHolderUserId={publishingTagHolderUserId}
+                      onOpenDetails={onOpenDetails}
+                    />
                   ))}
                 </div>
               ) : null}
@@ -1032,7 +1052,12 @@ function DepartmentAttendanceSection({
               {expandedGroups.not_present ? (
                 <div className="space-y-2">
                   {section.notPresentRows.map((row) => (
-                    <EmployeeAttendanceRow key={row.userId} row={row} onOpenDetails={onOpenDetails} />
+                    <EmployeeAttendanceRow
+                      key={row.userId}
+                      row={row}
+                      publishingTagHolderUserId={publishingTagHolderUserId}
+                      onOpenDetails={onOpenDetails}
+                    />
                   ))}
                 </div>
               ) : null}
@@ -1046,6 +1071,10 @@ function DepartmentAttendanceSection({
 
 export function TeamAttendancePage() {
   const { currentUser } = useAuth();
+  const publishingTag = usePublishingTag({
+    orgId: currentUser?.orgId,
+    userId: currentUser?.uid,
+  });
   const [searchParams, setSearchParams] = useSearchParams();
   const today = useMemo(() => new Date(), []);
   const todayDate = toDateInputValue(today);
@@ -1584,6 +1613,7 @@ export function TeamAttendancePage() {
                 key={section.id}
                 section={section}
                 boardMode={resolvedMode}
+                publishingTagHolderUserId={publishingTag.holder?.user_id ?? null}
                 expanded={isExpanded}
                 onToggle={() =>
                   setExpandedSections((current) => ({

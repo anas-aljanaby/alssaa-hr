@@ -321,9 +321,9 @@ describe('AdminDashboard', () => {
     await screen.findByText('وسم الناشر');
     expect(screen.getByText('منى')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'أخذ وسم الناشر' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'إلغاء الوسم' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'سحب الوسم من الناشر الحالي' })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'إلغاء الوسم' }));
+    fireEvent.click(screen.getByRole('button', { name: 'سحب الوسم من الناشر الحالي' }));
 
     await waitFor(() => {
       expect(publishingTagService.forceReleasePublishingTag).toHaveBeenCalledWith(

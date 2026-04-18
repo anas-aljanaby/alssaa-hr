@@ -300,8 +300,22 @@ vi.mock('@/lib/services/attendance.service', async (importOriginal) => {
   };
 });
 
+vi.mock('@/app/hooks/usePublishingTag', () => ({
+  usePublishingTag: vi.fn(() => ({
+    holder: null,
+    loading: false,
+    loadError: null,
+    actionLoading: null,
+    refresh: vi.fn(),
+    claim: vi.fn(),
+    release: vi.fn(),
+    forceRelease: vi.fn(),
+  })),
+}));
+
 const departmentsService = await import('@/lib/services/departments.service');
 const attendanceService = await import('@/lib/services/attendance.service');
+const publishingTagHook = await import('@/app/hooks/usePublishingTag');
 
 function filterByDepartment<T extends { departmentId: string | null }>(
   rows: T[],
@@ -322,6 +336,18 @@ describe('TeamAttendancePage', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-04-06T09:00:00.000Z'));
     vi.clearAllMocks();
+    vi.mocked(publishingTagHook.usePublishingTag).mockReturnValue({
+      holder: {
+        user_id: 'reporter-1',
+      },
+      loading: false,
+      loadError: null,
+      actionLoading: null,
+      refresh: vi.fn(),
+      claim: vi.fn(),
+      release: vi.fn(),
+      forceRelease: vi.fn(),
+    } as any);
     vi.mocked(departmentsService.listDepartments).mockResolvedValue([
       {
         id: 'dept-news',
@@ -447,10 +473,12 @@ describe('TeamAttendancePage', () => {
       expect(screen.getByRole('button', { name: /علي/i })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('button', { name: /علي/i })).toBeInTheDocument();
+    const publisherRow = screen.getByRole('button', { name: /علي/i });
+    expect(publisherRow).toBeInTheDocument();
+    expect(within(publisherRow).getByText('الناشر')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /سارة/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /علي/i }));
+    fireEvent.click(publisherRow);
 
     await waitFor(() => {
       expect(screen.getByTestId('day-details-sheet')).toHaveTextContent(

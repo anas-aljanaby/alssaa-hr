@@ -14,8 +14,8 @@ const claimedHolder = {
   holder_profile: {
     id: 'user-1',
     name_ar: 'سارة',
-    employee_id: 'EMP-001',
     avatar_url: null,
+    department: { name_ar: 'الموارد البشرية' },
   },
   force_released_by_profile: null,
 };
@@ -38,6 +38,8 @@ describe('PublishingTagCard', () => {
     );
 
     expect(screen.getByText('سارة')).toBeInTheDocument();
+    expect(screen.getByText('القسم الحالي: الموارد البشرية')).toBeInTheDocument();
+    expect(screen.queryByText('EMP-001')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'التنازل عن الوسم' })).toBeEnabled();
   });
 
