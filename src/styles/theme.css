@@ -137,7 +137,7 @@
 
 @layer utilities {
   .animate-live-row {
-    animation: live-border-glow 4s ease-in-out infinite;
+    animation: live-border-glow 7s ease-in-out infinite;
   }
 }
 
@@ -177,7 +177,7 @@
     opacity: 0;
     transform: translateX(115%);
   }
-  16% {
+  10% {
     opacity: 0.9;
     transform: translateX(96%);
   }
@@ -185,7 +185,7 @@
     opacity: 0.4;
     transform: translateX(-96%);
   }
-  46% {
+  86% {
     opacity: 0;
     transform: translateX(-115%);
   }
@@ -197,7 +197,7 @@
 
 @layer utilities {
   .publisher-live-row {
-    animation: publisher-live-glow 4.4s ease-in-out infinite;
+    animation: publisher-live-glow 7s ease-in-out infinite;
     isolation: isolate;
   }
 
@@ -219,7 +219,7 @@
     pointer-events: none;
     transform: translateX(115%);
     opacity: 0;
-    animation: publisher-live-sheen 10.6s linear infinite;
+    animation: publisher-live-sheen 5.4s linear infinite;
   }
 
   @media (prefers-reduced-motion: reduce) {
