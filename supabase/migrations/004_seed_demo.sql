@@ -46,12 +46,12 @@ declare
   _req_annual_gm_emp13 uuid := 'eeeeeeee-0000-0000-0000-000000000014';
   _req_annual_rej_mgr_emp3 uuid := 'eeeeeeee-0000-0000-0000-000000000015';
   _req_annual_rej_gm_emp14 uuid := 'eeeeeeee-0000-0000-0000-000000000016';
-  _req_sick_mgr_emp5 uuid := 'eeeeeeee-0000-0000-0000-000000000021';
-  _req_sick_mgr_emp6 uuid := 'eeeeeeee-0000-0000-0000-000000000022';
-  _req_sick_gm_emp10 uuid := 'eeeeeeee-0000-0000-0000-000000000023';
-  _req_sick_gm_emp15 uuid := 'eeeeeeee-0000-0000-0000-000000000024';
-  _req_sick_rej_mgr_emp4 uuid := 'eeeeeeee-0000-0000-0000-000000000025';
-  _req_sick_rej_gm_emp12 uuid := 'eeeeeeee-0000-0000-0000-000000000026';
+  _req_leave_mgr_emp5 uuid := 'eeeeeeee-0000-0000-0000-000000000021';
+  _req_leave_mgr_emp6 uuid := 'eeeeeeee-0000-0000-0000-000000000022';
+  _req_leave_gm_emp10 uuid := 'eeeeeeee-0000-0000-0000-000000000023';
+  _req_leave_gm_emp15 uuid := 'eeeeeeee-0000-0000-0000-000000000024';
+  _req_leave_rej_mgr_emp4 uuid := 'eeeeeeee-0000-0000-0000-000000000025';
+  _req_leave_rej_gm_emp12 uuid := 'eeeeeeee-0000-0000-0000-000000000026';
 
   -- loop vars for attendance generation
   _d         date;
@@ -71,8 +71,8 @@ begin
   -- --------------------------------------------------------
   insert into public.attendance_policy (org_id, work_start_time, work_end_time,
     grace_period_minutes, weekly_off_days, max_late_days_before_warning,
-    absent_cutoff_time, annual_leave_per_year, sick_leave_per_year)
-  values (_demo_org, '08:00', '16:00', 15, '{5,6}', 3, '12:00', 21, 10);
+    absent_cutoff_time, annual_leave_per_year)
+  values (_demo_org, '08:00', '16:00', 15, '{5,6}', 3, '12:00', 21);
 
   -- --------------------------------------------------------
   -- 2. Departments
@@ -155,18 +155,14 @@ begin
 
     -- Ensure leave_balances row exists and has sensible defaults
     insert into public.leave_balances (
-      org_id, user_id, total_annual, used_annual, remaining_annual,
-      total_sick, used_sick, remaining_sick
+      org_id, user_id, total_annual, used_annual, remaining_annual
     ) values (
-      (_meta->>'org_id')::uuid, _id, 21, 0, 21, 10, 0, 10
+      (_meta->>'org_id')::uuid, _id, 21, 0, 21
     )
     on conflict (user_id) do update set
       total_annual = excluded.total_annual,
       used_annual = excluded.used_annual,
-      remaining_annual = excluded.remaining_annual,
-      total_sick = excluded.total_sick,
-      used_sick = excluded.used_sick,
-      remaining_sick = excluded.remaining_sick;
+      remaining_annual = excluded.remaining_annual;
   end;
   $fn$;
 
@@ -290,7 +286,7 @@ begin
     (id, org_id, user_id, type, from_date_time, to_date_time, note, status) values
     (_req_annual_mgr_emp1, _demo_org, _emp1, 'annual_leave',
      (current_date - 24) + time '08:00', (current_date - 22) + time '16:00',
-     'إجازة سنوية قصيرة', 'pending'),
+     'إجازة قصيرة', 'pending'),
     (_req_annual_mgr_emp2, _demo_org, _emp2, 'annual_leave',
      (current_date - 19) + time '08:00', (current_date - 18) + time '16:00',
      'زيارة عائلية', 'pending'),
@@ -306,22 +302,22 @@ begin
     (_req_annual_rej_gm_emp14, _demo_org, _emp14, 'annual_leave',
      (current_date - 9) + time '08:00', (current_date - 6) + time '16:00',
      'ظرف شخصي', 'pending'),
-    (_req_sick_mgr_emp5, _demo_org, _emp5, 'sick_leave',
+    (_req_leave_mgr_emp5, _demo_org, _emp5, 'annual_leave',
      (current_date - 8) + time '08:00', (current_date - 8) + time '16:00',
      'مراجعة طبية', 'pending'),
-    (_req_sick_mgr_emp6, _demo_org, _emp6, 'sick_leave',
+    (_req_leave_mgr_emp6, _demo_org, _emp6, 'annual_leave',
      (current_date - 14) + time '08:00', (current_date - 12) + time '16:00',
      'وعكة صحية', 'pending'),
-    (_req_sick_gm_emp10, _demo_org, _emp10, 'sick_leave',
+    (_req_leave_gm_emp10, _demo_org, _emp10, 'annual_leave',
      (current_date - 7) + time '08:00', (current_date - 7) + time '16:00',
      'إرهاق حاد', 'pending'),
-    (_req_sick_gm_emp15, _demo_org, _emp15, 'sick_leave',
+    (_req_leave_gm_emp15, _demo_org, _emp15, 'annual_leave',
      (current_date - 21) + time '08:00', (current_date - 19) + time '16:00',
      'تعافي بعد إجراء طبي', 'pending'),
-    (_req_sick_rej_mgr_emp4, _demo_org, _emp4, 'sick_leave',
+    (_req_leave_rej_mgr_emp4, _demo_org, _emp4, 'annual_leave',
      (current_date - 11) + time '08:00', (current_date - 11) + time '16:00',
      'وعكة بسيطة', 'pending'),
-    (_req_sick_rej_gm_emp12, _demo_org, _emp12, 'sick_leave',
+    (_req_leave_rej_gm_emp12, _demo_org, _emp12, 'annual_leave',
      (current_date - 5) + time '08:00', (current_date - 3) + time '16:00',
      'راحة طبية', 'pending');
 
@@ -336,26 +332,26 @@ begin
   set status = 'approved',
       approver_id = _mgr_tech,
       decision_note = 'تمت الموافقة من مدير القسم'
-  where id in (_req_sick_mgr_emp5, _req_sick_mgr_emp6);
+  where id in (_req_leave_mgr_emp5, _req_leave_mgr_emp6);
 
   update public.leave_requests
   set status = 'rejected',
       approver_id = _mgr_news,
       decision_note = 'تعذر اعتماد الطلب حالياً'
-  where id in (_req_annual_rej_mgr_emp3, _req_sick_rej_mgr_emp4);
+  where id in (_req_annual_rej_mgr_emp3, _req_leave_rej_mgr_emp4);
 
   -- GM approvals/rejections
   update public.leave_requests
   set status = 'approved',
       approver_id = _admin,
       decision_note = 'موافقة المدير العام'
-  where id in (_req_annual_gm_emp9, _req_annual_gm_emp13, _req_sick_gm_emp10, _req_sick_gm_emp15);
+  where id in (_req_annual_gm_emp9, _req_annual_gm_emp13, _req_leave_gm_emp10, _req_leave_gm_emp15);
 
   update public.leave_requests
   set status = 'rejected',
       approver_id = _admin,
       decision_note = 'مرفوض من الإدارة العامة'
-  where id in (_req_annual_rej_gm_emp14, _req_sick_rej_gm_emp12);
+  where id in (_req_annual_rej_gm_emp14, _req_leave_rej_gm_emp12);
 
   -- Non-leave example
   insert into public.leave_requests
@@ -377,20 +373,11 @@ begin
           and lr.user_id = lb.user_id
           and lr.status = 'approved'
           and lr.type = 'annual_leave'
-      ), 0),
-      used_sick = coalesce((
-        select sum(greatest(1, (lr.to_date_time::date - lr.from_date_time::date)))
-        from public.leave_requests lr
-        where lr.org_id = _demo_org
-          and lr.user_id = lb.user_id
-          and lr.status = 'approved'
-          and lr.type = 'sick_leave'
       ), 0)
   where lb.org_id = _demo_org;
 
   update public.leave_balances
-  set remaining_annual = greatest(0, total_annual - used_annual),
-      remaining_sick = greatest(0, total_sick - used_sick)
+  set remaining_annual = greatest(0, total_annual - used_annual)
   where org_id = _demo_org;
 
   -- --------------------------------------------------------
@@ -400,8 +387,8 @@ begin
     (org_id, user_id, title, title_ar, message, message_ar, type, read_status) values
     (_demo_org, _emp1,
      'Leave Request Update', 'تحديث طلب الإجازة',
-     'Your annual leave request is pending review',
-     'طلب إجازتك السنوية قيد المراجعة',
+     'Your leave request is pending review',
+     'طلب إجازتك قيد المراجعة',
      'request_update', false),
     (_demo_org, _emp1,
      'Late Arrival Warning', 'تنبيه تأخر',
@@ -410,8 +397,8 @@ begin
      'attendance', false),
     (_demo_org, _mgr_news,
      'New Leave Request', 'طلب إجازة جديد',
-     'Omar Al-Jubouri submitted an annual leave request',
-     'عمر الجبوري قدم طلب إجازة سنوية',
+     'Omar Al-Jubouri submitted a leave request',
+     'عمر الجبوري قدم طلب إجازة',
      'approval', false),
     (_demo_org, _mgr_news,
      'Pending Approval', 'بانتظار الموافقة',
@@ -425,13 +412,13 @@ begin
      'system', false),
     (_demo_org, _emp2,
      'Leave Approved', 'تمت الموافقة على الإجازة',
-     'Your sick leave has been approved',
-     'تمت الموافقة على إجازتك المرضية',
+     'Your leave has been approved',
+     'تمت الموافقة على إجازتك',
      'request_update', false),
     (_demo_org, _mgr_tech,
      'New Leave Request', 'طلب إجازة جديد',
-     'Saad Abbas submitted a sick leave request',
-     'سعد عباس قدم طلب إجازة مرضية',
+     'Saad Abbas submitted a leave request',
+     'سعد عباس قدم طلب إجازة',
      'approval', false);
 
   raise notice 'Demo seed complete: 18 users, 4 departments, attendance, requests, notifications.';

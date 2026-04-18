@@ -1,7 +1,7 @@
 # Todo
 
 ## Task 1
-- [ ] Done
+- [x] Done
 - Commit Head:
 - Title: Remove sick days entirely
 - Explanation:

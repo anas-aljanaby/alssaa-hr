@@ -49,7 +49,7 @@ export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
 export const leaveRequestSchema = z
   .object({
-    type: z.enum(['annual_leave', 'sick_leave', 'hourly_permission', 'time_adjustment'], {
+    type: z.enum(['annual_leave', 'hourly_permission', 'time_adjustment'], {
       required_error: 'نوع الطلب مطلوب',
     }),
     fromDate: z.string().min(1, 'تاريخ البداية مطلوب'),
@@ -59,7 +59,7 @@ export const leaveRequestSchema = z
     note: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    const fullDay = data.type === 'annual_leave' || data.type === 'sick_leave';
+    const fullDay = data.type === 'annual_leave';
     const timeAdjustment = data.type === 'time_adjustment';
     const hourly = data.type === 'hourly_permission';
 

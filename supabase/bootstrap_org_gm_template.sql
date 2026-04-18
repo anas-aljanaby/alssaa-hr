@@ -235,24 +235,17 @@ begin
     user_id,
     total_annual,
     used_annual,
-    remaining_annual,
-    total_sick,
-    used_sick,
-    remaining_sick
+    remaining_annual
   ) values (
     v_org_id,
     v_effective_gm_user_id,
-    21, 0, 21,
-    10, 0, 10
+    21, 0, 21
   )
   on conflict (user_id) do update set
     org_id = excluded.org_id,
     total_annual = excluded.total_annual,
     used_annual = excluded.used_annual,
-    remaining_annual = excluded.remaining_annual,
-    total_sick = excluded.total_sick,
-    used_sick = excluded.used_sick,
-    remaining_sick = excluded.remaining_sick;
+    remaining_annual = excluded.remaining_annual;
 
   -- 8) Set GM pointer on organization (never steal GM from another user by accident).
   select o.general_manager_id

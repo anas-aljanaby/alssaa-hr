@@ -1,6 +1,6 @@
 import type { RequestType } from '@/lib/services/requests.service';
 
-const FULL_DAY_REQUEST_TYPES: RequestType[] = ['annual_leave', 'sick_leave'];
+const FULL_DAY_REQUEST_TYPES: RequestType[] = ['annual_leave'];
 
 function parseStoredCalendarDate(value: string): Date {
   const [datePart] = value.split('T');

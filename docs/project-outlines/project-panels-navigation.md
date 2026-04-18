@@ -25,7 +25,7 @@ This file documents the **Admin**, **Manager**, and **Employee** panels as paren
       - **Tab: `الحضور`**
         - Work schedule, attendance history, all-time/range switch, status filters, export.
       - **Tab: `الإجازات`**
-        - Annual/sick leave balances and leave history, plus admin leave-balance editing.
+        - Leave balances and leave history, plus admin leave-balance editing.
       - **Tab: `الطلبات`**
         - Full request history with status filter.
 

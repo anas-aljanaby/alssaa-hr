@@ -104,7 +104,7 @@ create table public.leave_requests (
   org_id          uuid not null references public.organizations (id) on delete cascade,
   user_id         uuid not null references public.profiles (id) on delete cascade,
   type            text not null
-                    check (type in ('annual_leave', 'sick_leave', 'hourly_permission', 'time_adjustment', 'overtime')),
+                    check (type in ('annual_leave', 'hourly_permission', 'time_adjustment', 'overtime')),
   from_date_time  timestamptz not null,
   to_date_time    timestamptz not null,
   note            text not null default '',
@@ -139,10 +139,7 @@ create table public.leave_balances (
   user_id          uuid not null unique references public.profiles (id) on delete cascade,
   total_annual     int not null default 21,
   used_annual      int not null default 0,
-  remaining_annual int not null default 21,
-  total_sick       int not null default 10,
-  used_sick        int not null default 0,
-  remaining_sick   int not null default 10
+  remaining_annual int not null default 21
 );
 
 -- ============================================================
@@ -190,7 +187,6 @@ create table public.attendance_policy (
   max_late_days_before_warning int  not null default 3,
   absent_cutoff_time           time not null default '12:00',
   annual_leave_per_year        int  not null default 21,
-  sick_leave_per_year          int  not null default 10,
   auto_punch_out_buffer_minutes int  not null default 5,
   constraint attendance_policy_org_unique unique (org_id)
 );
@@ -657,7 +653,7 @@ begin
   insert into public.profiles (id, org_id, employee_id, name, name_ar, phone, role, department_id)
   values (new.id, _org_id, _emp_id, _name, _name_ar, _phone, _role, _dept_id);
 
-  select annual_leave_per_year, sick_leave_per_year
+  select annual_leave_per_year
     into _policy
     from public.attendance_policy
     where org_id = _org_id
@@ -665,12 +661,10 @@ begin
 
   insert into public.leave_balances (
     user_id, org_id,
-    total_annual, used_annual, remaining_annual,
-    total_sick,   used_sick,   remaining_sick
+    total_annual, used_annual, remaining_annual
   ) values (
     new.id, _org_id,
-    coalesce(_policy.annual_leave_per_year, 21), 0, coalesce(_policy.annual_leave_per_year, 21),
-    coalesce(_policy.sick_leave_per_year, 10),   0, coalesce(_policy.sick_leave_per_year, 10)
+    coalesce(_policy.annual_leave_per_year, 21), 0, coalesce(_policy.annual_leave_per_year, 21)
   );
 
   return new;
@@ -926,11 +920,6 @@ begin
       update public.leave_balances
          set used_annual      = used_annual + _days,
              remaining_annual = remaining_annual - _days
-       where user_id = new.user_id;
-    elsif new.type = 'sick_leave' then
-      update public.leave_balances
-         set used_sick      = used_sick + _days,
-             remaining_sick = remaining_sick - _days
        where user_id = new.user_id;
     end if;
   end if;

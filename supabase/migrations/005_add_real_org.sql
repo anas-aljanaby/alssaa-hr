@@ -101,22 +101,17 @@ begin
       updated_at = now();
 
     insert into public.leave_balances (
-      org_id, user_id, total_annual, used_annual, remaining_annual,
-      total_sick, used_sick, remaining_sick
+      org_id, user_id, total_annual, used_annual, remaining_annual
     ) values (
       (_meta->>'org_id')::uuid,
       _id,
-      21, 0, 21,
-      10, 0, 10
+      21, 0, 21
     )
     on conflict (user_id) do update set
       org_id = excluded.org_id,
       total_annual = excluded.total_annual,
       used_annual = excluded.used_annual,
-      remaining_annual = excluded.remaining_annual,
-      total_sick = excluded.total_sick,
-      used_sick = excluded.used_sick,
-      remaining_sick = excluded.remaining_sick;
+      remaining_annual = excluded.remaining_annual;
   end;
   $fn$;
 

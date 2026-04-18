@@ -218,7 +218,7 @@ export function RequestsPage() {
 
       let fromDateTime: string;
       let toDateTime: string;
-      if (data.type === 'annual_leave' || data.type === 'sick_leave') {
+      if (data.type === 'annual_leave') {
         const schedule = await loadRequestSchedule().catch(() => null);
         const effectiveWorkDays = schedule?.resolvedWorkDays ?? workDays;
 
@@ -269,8 +269,7 @@ export function RequestsPage() {
   };
 
   const requestTypes: { value: RequestType; label: string }[] = [
-    { value: 'annual_leave', label: 'إجازة سنوية' },
-    { value: 'sick_leave', label: 'إجازة مرضية' },
+    { value: 'annual_leave', label: 'إجازة' },
     { value: 'hourly_permission', label: 'إجازة ساعية' },
     { value: 'time_adjustment', label: 'تعديل وقت' },
   ];

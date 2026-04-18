@@ -186,9 +186,6 @@ function setupSuccessfulDataLoad() {
     total_annual: 20,
     used_annual: 5,
     remaining_annual: 15,
-    total_sick: 10,
-    used_sick: 2,
-    remaining_sick: 8,
     created_at: '2026-03-01T00:00:00.000Z',
     updated_at: '2026-03-01T00:00:00.000Z',
   });
@@ -318,7 +315,7 @@ describe('UserDetailsPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('إجازة سنوية')).toBeInTheDocument();
+      expect(screen.getByText('إجازة')).toBeInTheDocument();
     });
   });
 

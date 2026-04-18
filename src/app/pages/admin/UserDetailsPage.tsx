@@ -193,7 +193,6 @@ export function UserDetailsPage() {
   const [showLeaveBalanceModal, setShowLeaveBalanceModal] = useState(false);
   const [updatingLeaveBalance, setUpdatingLeaveBalance] = useState(false);
   const [editAnnualTotal, setEditAnnualTotal] = useState('');
-  const [editSickTotal, setEditSickTotal] = useState('');
   const [orgPolicy, setOrgPolicy] = useState<Awaited<ReturnType<typeof policyService.getPolicy>>>(null);
   useBodyScrollLock(
     showEditModal ||
@@ -315,7 +314,6 @@ export function UserDetailsPage() {
   const openLeaveBalanceModal = useCallback(() => {
     if (!leaveBalance) return;
     setEditAnnualTotal(String(leaveBalance.total_annual));
-    setEditSickTotal(String(leaveBalance.total_sick));
     setShowLeaveBalanceModal(true);
   }, [leaveBalance]);
 
@@ -327,27 +325,23 @@ export function UserDetailsPage() {
   const handleLeaveBalanceUpdate = useCallback(async () => {
     if (!profile || !leaveBalance) return;
     const nextAnnualTotal = Number(editAnnualTotal);
-    const nextSickTotal = Number(editSickTotal);
 
-    if (!Number.isFinite(nextAnnualTotal) || !Number.isFinite(nextSickTotal)) {
+    if (!Number.isFinite(nextAnnualTotal)) {
       toast.error('يرجى إدخال أرقام صحيحة');
       return;
     }
-    if (nextAnnualTotal < 0 || nextSickTotal < 0) {
+    if (nextAnnualTotal < 0) {
       toast.error('لا يمكن أن تكون القيم سالبة');
       return;
     }
 
     const usedAnnual = leaveBalance.used_annual;
-    const usedSick = leaveBalance.used_sick;
 
     try {
       setUpdatingLeaveBalance(true);
       const updated = await leaveBalanceService.updateBalance(profile.id, {
         total_annual: nextAnnualTotal,
         remaining_annual: Math.max(nextAnnualTotal - usedAnnual, 0),
-        total_sick: nextSickTotal,
-        remaining_sick: Math.max(nextSickTotal - usedSick, 0),
       });
       setLeaveBalance(updated);
       toast.success('تم تحديث رصيد الإجازات للموظف');
@@ -357,7 +351,7 @@ export function UserDetailsPage() {
     } finally {
       setUpdatingLeaveBalance(false);
     }
-  }, [profile, leaveBalance, editAnnualTotal, editSickTotal]);
+  }, [profile, leaveBalance, editAnnualTotal]);
 
 
 
@@ -983,9 +977,9 @@ export function UserDetailsPage() {
       {activeTab === 'leaves' && (
         <div className="space-y-3">
           {leaveBalance && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                <h4 className="text-xs text-gray-600 mb-2">إجازة اعتيادية</h4>
+                <h4 className="text-xs text-gray-600 mb-2">رصيد الإجازات</h4>
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between">
                     <span className="text-gray-600">الكلي:</span>
@@ -1001,33 +995,14 @@ export function UserDetailsPage() {
                   </div>
                 </div>
               </div>
-              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                <h4 className="text-xs text-gray-600 mb-2">إجازة مرضية</h4>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">الكلي:</span>
-                    <span className="text-emerald-700">{leaveBalance.total_sick}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">المستخدم:</span>
-                    <span className="text-emerald-700">{leaveBalance.used_sick}</span>
-                  </div>
-                  <div className="flex justify-between pt-1 border-t border-emerald-200">
-                    <span className="text-gray-600">المتبقي:</span>
-                    <span className="text-emerald-800">{leaveBalance.remaining_sick}</span>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
           <div className="space-y-2">
             <h3 className="text-sm text-gray-700">سجل الإجازات</h3>
-            {userRequests.filter(
-              (r) => r.type === 'annual_leave' || r.type === 'sick_leave'
-            ).length > 0 ? (
+            {userRequests.filter((r) => r.type === 'annual_leave').length > 0 ? (
               userRequests
-                .filter((r) => r.type === 'annual_leave' || r.type === 'sick_leave')
+                .filter((r) => r.type === 'annual_leave')
                 .map((req) => (
                   <div
                     key={req.id}
@@ -1214,35 +1189,21 @@ export function UserDetailsPage() {
             </div>
 
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-1 gap-3 text-xs">
                 <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 mb-1">المستخدم سنوي</p>
+                  <p className="text-gray-500 mb-1">الإجازات المستخدمة</p>
                   <p className="text-gray-700">{leaveBalance.used_annual} يوم</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 mb-1">المستخدم مرضي</p>
-                  <p className="text-gray-700">{leaveBalance.used_sick} يوم</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">إجمالي السنوي</label>
+                  <label className="block text-xs text-gray-600 mb-1">إجمالي الإجازات</label>
                   <input
                     type="number"
                     min={0}
                     value={editAnnualTotal}
                     onChange={(e) => setEditAnnualTotal(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">إجمالي المرضي</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={editSickTotal}
-                    onChange={(e) => setEditSickTotal(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>

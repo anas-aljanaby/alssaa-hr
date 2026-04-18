@@ -42,8 +42,7 @@ export async function getAllBalances(): Promise<LeaveBalance[]> {
 }
 
 export async function resetAllBalances(
-  totalAnnual: number,
-  totalSick: number
+  totalAnnual: number
 ): Promise<void> {
   const { error } = await supabase
     .from('leave_balances')
@@ -51,9 +50,6 @@ export async function resetAllBalances(
       total_annual: totalAnnual,
       used_annual: 0,
       remaining_annual: totalAnnual,
-      total_sick: totalSick,
-      used_sick: 0,
-      remaining_sick: totalSick,
     })
     .neq('user_id', '00000000-0000-0000-0000-000000000000');
 

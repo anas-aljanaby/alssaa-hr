@@ -358,7 +358,6 @@ export type Database = {
           minimum_overtime_minutes: number
           minimum_required_minutes: number | null
           org_id: string
-          sick_leave_per_year: number
           weekly_off_days: number[]
           work_end_time: string
           work_start_time: string
@@ -376,7 +375,6 @@ export type Database = {
           minimum_overtime_minutes?: number
           minimum_required_minutes?: number | null
           org_id: string
-          sick_leave_per_year?: number
           weekly_off_days?: number[]
           work_end_time?: string
           work_start_time?: string
@@ -394,7 +392,6 @@ export type Database = {
           minimum_overtime_minutes?: number
           minimum_required_minutes?: number | null
           org_id?: string
-          sick_leave_per_year?: number
           weekly_off_days?: number[]
           work_end_time?: string
           work_start_time?: string
@@ -582,33 +579,24 @@ export type Database = {
           id: string
           org_id: string
           remaining_annual: number
-          remaining_sick: number
           total_annual: number
-          total_sick: number
           used_annual: number
-          used_sick: number
           user_id: string
         }
         Insert: {
           id?: string
           org_id: string
           remaining_annual?: number
-          remaining_sick?: number
           total_annual?: number
-          total_sick?: number
           used_annual?: number
-          used_sick?: number
           user_id: string
         }
         Update: {
           id?: string
           org_id?: string
           remaining_annual?: number
-          remaining_sick?: number
           total_annual?: number
-          total_sick?: number
           used_annual?: number
-          used_sick?: number
           user_id?: string
         }
         Relationships: [

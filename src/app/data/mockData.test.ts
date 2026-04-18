@@ -168,7 +168,7 @@ describe('getDepartmentEmployees', () => {
 // ---------------------------------------------------------------------------
 
 describe('getRequestTypeAr', () => {
-  it.each<RequestType>(['annual_leave', 'sick_leave', 'hourly_permission', 'time_adjustment', 'overtime'])(
+  it.each<RequestType>(['annual_leave', 'hourly_permission', 'time_adjustment', 'overtime'])(
     'returns Arabic string for "%s"',
     (type) => {
       const result = getRequestTypeAr(type);

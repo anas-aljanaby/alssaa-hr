@@ -82,7 +82,6 @@ const policyRow = {
   max_late_days_before_warning: 3,
   absent_cutoff_time: '12:00',
   annual_leave_per_year: 21,
-  sick_leave_per_year: 10,
   auto_punch_out_buffer_minutes: 5,
   minimum_overtime_minutes: 30,
   minimum_required_minutes: null as number | null,

@@ -67,12 +67,6 @@ begin
              remaining_annual = greatest(remaining_annual - _days, 0)
        where org_id = new.org_id
          and user_id = new.user_id;
-    elsif new.type = 'sick_leave' then
-      update public.leave_balances
-         set used_sick = used_sick + _days,
-             remaining_sick = greatest(remaining_sick - _days, 0)
-       where org_id = new.org_id
-         and user_id = new.user_id;
     end if;
   end if;
 
@@ -95,26 +89,11 @@ with recalculated_usage as (
         and lr.user_id = lb.user_id
         and lr.status = 'approved'
         and lr.type = 'annual_leave'
-    ), 0) as used_annual,
-    coalesce((
-      select sum(public.count_leave_request_working_days(
-        lr.user_id,
-        lr.org_id,
-        lr.from_date_time::date,
-        lr.to_date_time::date
-      ))
-      from public.leave_requests lr
-      where lr.org_id = lb.org_id
-        and lr.user_id = lb.user_id
-        and lr.status = 'approved'
-        and lr.type = 'sick_leave'
-    ), 0) as used_sick
+    ), 0) as used_annual
   from public.leave_balances lb
 )
 update public.leave_balances lb
 set used_annual = recalculated_usage.used_annual,
-    used_sick = recalculated_usage.used_sick,
-    remaining_annual = greatest(0, lb.total_annual - recalculated_usage.used_annual),
-    remaining_sick = greatest(0, lb.total_sick - recalculated_usage.used_sick)
+    remaining_annual = greatest(0, lb.total_annual - recalculated_usage.used_annual)
 from recalculated_usage
 where recalculated_usage.id = lb.id;

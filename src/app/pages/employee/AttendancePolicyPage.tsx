@@ -121,12 +121,8 @@ export function AttendancePolicyPage() {
 
               <div className="space-y-3">
                 <PolicyRow
-                  label="الإجازة السنوية"
+                  label="رصيد الإجازات"
                   value={`${policy.annual_leave_per_year} يوم`}
-                />
-                <PolicyRow
-                  label="الإجازة المرضية"
-                  value={`${policy.sick_leave_per_year} يوم`}
                 />
               </div>
             </div>
@@ -203,7 +199,6 @@ export function AttendancePolicyPage() {
                     weekly_off_days: editPolicy.weekly_off_days,
                     max_late_days_before_warning: editPolicy.max_late_days_before_warning,
                     annual_leave_per_year: editPolicy.annual_leave_per_year,
-                    sick_leave_per_year: editPolicy.sick_leave_per_year,
                   });
                   setPolicy(updated);
                   toast.success('تم تحديث سياسة الحضور');
@@ -358,26 +353,13 @@ export function AttendancePolicyPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">الإجازة السنوية (يوم)</label>
+                  <label className="block text-xs text-gray-600 mb-1">رصيد الإجازات (يوم)</label>
                   <input
                     type="number"
                     value={editPolicy.annual_leave_per_year}
                     onChange={(e) =>
                       setEditPolicy((prev) =>
                         prev ? { ...prev, annual_leave_per_year: Number(e.target.value) || 0 } : prev
-                      )
-                    }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">الإجازة المرضية (يوم)</label>
-                  <input
-                    type="number"
-                    value={editPolicy.sick_leave_per_year}
-                    onChange={(e) =>
-                      setEditPolicy((prev) =>
-                        prev ? { ...prev, sick_leave_per_year: Number(e.target.value) || 0 } : prev
                       )
                     }
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"

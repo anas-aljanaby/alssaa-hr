@@ -10,9 +10,6 @@ const balanceRow = {
   total_annual: 21,
   used_annual: 2,
   remaining_annual: 19,
-  total_sick: 14,
-  used_sick: 1,
-  remaining_sick: 13,
 };
 
 describe('leave-balance.service', () => {
@@ -44,6 +41,6 @@ describe('leave-balance.service', () => {
   it('resetAllBalances completes without error', async () => {
     sb.queueResult({ data: null, error: null });
     const { resetAllBalances } = await import('./leave-balance.service');
-    await expect(resetAllBalances(21, 14)).resolves.toBeUndefined();
+    await expect(resetAllBalances(21)).resolves.toBeUndefined();
   });
 });

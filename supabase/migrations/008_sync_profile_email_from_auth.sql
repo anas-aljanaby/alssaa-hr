@@ -48,7 +48,7 @@ begin
   insert into public.profiles (id, org_id, employee_id, name, name_ar, email, phone, role, department_id)
   values (new.id, _org_id, _emp_id, _name, _name_ar, _email, _phone, _role, _dept_id);
 
-  select annual_leave_per_year, sick_leave_per_year
+  select annual_leave_per_year
     into _policy
     from public.attendance_policy
     where org_id = _org_id
@@ -56,12 +56,10 @@ begin
 
   insert into public.leave_balances (
     user_id, org_id,
-    total_annual, used_annual, remaining_annual,
-    total_sick,   used_sick,   remaining_sick
+    total_annual, used_annual, remaining_annual
   ) values (
     new.id, _org_id,
-    coalesce(_policy.annual_leave_per_year, 21), 0, coalesce(_policy.annual_leave_per_year, 21),
-    coalesce(_policy.sick_leave_per_year, 10),   0, coalesce(_policy.sick_leave_per_year, 10)
+    coalesce(_policy.annual_leave_per_year, 21), 0, coalesce(_policy.annual_leave_per_year, 21)
   );
 
   return new;

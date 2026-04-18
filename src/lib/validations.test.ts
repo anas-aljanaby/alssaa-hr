@@ -120,7 +120,7 @@ describe('changePasswordSchema', () => {
 // ---------------------------------------------------------------------------
 
 describe('leaveRequestSchema', () => {
-  describe('annual_leave / sick_leave (full-day)', () => {
+  describe('annual_leave (full-day)', () => {
     const base = { type: 'annual_leave' as const, fromDate: '2025-06-01' };
 
     it('passes with valid toDate', () => {
@@ -142,11 +142,6 @@ describe('leaveRequestSchema', () => {
 
     it('accepts same-day range', () => {
       const r = leaveRequestSchema.safeParse({ ...base, toDate: '2025-06-01' });
-      expect(r.success).toBe(true);
-    });
-
-    it('works for sick_leave too', () => {
-      const r = leaveRequestSchema.safeParse({ type: 'sick_leave', fromDate: '2025-06-01', toDate: '2025-06-02' });
       expect(r.success).toBe(true);
     });
   });

@@ -294,7 +294,7 @@ function AnnualLeaveSection({
           <CalendarDays className="h-5 w-5" />
         </div>
         <div className="min-w-0 space-y-1">
-          <h3 className="text-base font-semibold text-slate-900">أيام الإجازة السنوية</h3>
+          <h3 className="text-base font-semibold text-slate-900">أيام الإجازة</h3>
           <p className="text-sm leading-6 text-slate-600">
             اختر تاريخ البداية ثم النهاية من التقويم الظاهر أدناه.
           </p>
@@ -544,72 +544,6 @@ function HourlyLeaveSection({
   );
 }
 
-function SickLeaveSection({
-  form,
-  workDays,
-}: {
-  form: UseFormReturn<LeaveRequestFormData>;
-  workDays: number[];
-}) {
-  const errors = form.formState.errors;
-  const todayIso = useMemo(() => formatIsoDate(normalizeDate(new Date())), []);
-  const fromDate = form.watch('fromDate');
-  const toDate = form.watch('toDate');
-  const deductibleDays = countWorkingDaysInRange(fromDate || null, toDate || fromDate || null, workDays);
-
-  return (
-    <section className="space-y-4 rounded-[28px] border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-slate-900">تفاصيل الإجازة المرضية</h3>
-        <p className="text-sm leading-6 text-slate-600">حدّد تاريخ البداية والنهاية بالطريقة المعتادة.</p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2">
-          <SectionLabel>من تاريخ</SectionLabel>
-          <input
-            type="date"
-            min={todayIso}
-            lang="ar"
-            {...form.register('fromDate')}
-            className={cn(
-              'h-12 w-full rounded-2xl border bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100',
-              errors.fromDate ? 'border-red-300' : 'border-slate-200'
-            )}
-          />
-          <FieldError message={errors.fromDate?.message} />
-        </div>
-
-        <div className="space-y-2">
-          <SectionLabel>إلى تاريخ</SectionLabel>
-          <input
-            type="date"
-            min={form.watch('fromDate') || todayIso}
-            lang="ar"
-            {...form.register('toDate')}
-            className={cn(
-              'h-12 w-full rounded-2xl border bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100',
-              errors.toDate ? 'border-red-300' : 'border-slate-200'
-            )}
-          />
-          <FieldError message={errors.toDate?.message} />
-        </div>
-      </div>
-
-      <div className="rounded-[24px] border border-slate-200/80 bg-white p-3 text-sm text-slate-600 shadow-sm">
-        {fromDate ? (
-          <>
-            سيتم خصم {formatSelectedDaysLabel(deductibleDays)} من الرصيد فقط.
-            {(toDate || fromDate) && deductibleDays === 0 ? ' النطاق المحدد يقع بالكامل ضمن أيام الراحة.' : ''}
-          </>
-        ) : (
-          'سيتم خصم أيام العمل فقط حسب جدول دوامك.'
-        )}
-      </div>
-    </section>
-  );
-}
-
 function TimeAdjustmentSection({
   form,
   workStartTime,
@@ -755,7 +689,12 @@ export function LeaveRequestModal({
             ) : requestType === 'time_adjustment' ? (
               <TimeAdjustmentSection form={form} workStartTime={workStartTime} />
             ) : (
-              <SickLeaveSection form={form} workDays={workDays} />
+              <AnnualLeaveSection
+                errors={errors}
+                range={annualRange}
+                onSelectDate={handleAnnualDateSelect}
+                workDays={workDays}
+              />
             )}
           </div>
 

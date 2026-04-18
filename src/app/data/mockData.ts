@@ -4,7 +4,6 @@ export type UserRole = 'employee' | 'manager' | 'admin';
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'on_leave';
 export type RequestType =
   | 'annual_leave'
-  | 'sick_leave'
   | 'hourly_permission'
   | 'time_adjustment'
   | 'overtime';
@@ -46,9 +45,6 @@ export interface LeaveBalance {
   totalAnnual: number;
   usedAnnual: number;
   remainingAnnual: number;
-  totalSick: number;
-  usedSick: number;
-  remainingSick: number;
 }
 
 export interface LeaveRequest {
@@ -97,7 +93,6 @@ export interface AttendancePolicy {
   maxLateDaysBeforeWarning: number;
   absentCutoffTime: string;
   annualLeavePerYear: number;
-  sickLeavePerYear: number;
 }
 
 // Departments
@@ -305,9 +300,6 @@ export const leaveBalances: LeaveBalance[] = users
     totalAnnual: 21,
     usedAnnual: Math.floor(Math.random() * 10),
     remainingAnnual: 21 - Math.floor(Math.random() * 10),
-    totalSick: 14,
-    usedSick: Math.floor(Math.random() * 5),
-    remainingSick: 14 - Math.floor(Math.random() * 5),
   }));
 
 // Leave Requests
@@ -325,7 +317,7 @@ export const leaveRequests: LeaveRequest[] = [
   {
     id: 'req-2',
     userId: 'user-4',
-    type: 'sick_leave',
+    type: 'annual_leave',
     fromDateTime: '2026-02-17T08:00:00',
     toDateTime: '2026-02-17T16:00:00',
     note: 'مراجعة طبية',
@@ -369,7 +361,7 @@ export const leaveRequests: LeaveRequest[] = [
   {
     id: 'req-6',
     userId: 'user-11',
-    type: 'sick_leave',
+    type: 'annual_leave',
     fromDateTime: '2026-02-18T08:00:00',
     toDateTime: '2026-02-19T16:00:00',
     note: 'حالة صحية طارئة',
@@ -395,8 +387,8 @@ export const notifications: Notification[] = [
     userId: 'user-3',
     title: 'Leave Request Update',
     titleAr: 'تحديث طلب الإجازة',
-    message: 'Your annual leave request for Feb 22-24 is pending review',
-    messageAr: 'طلب إجازتك السنوية من 22-24 فبراير قيد المراجعة',
+    message: 'Your leave request for Feb 22-24 is pending review',
+    messageAr: 'طلب إجازتك من 22-24 فبراير قيد المراجعة',
     readStatus: false,
     createdAt: '2026-02-18T10:35:00',
     type: 'request_update',
@@ -417,8 +409,8 @@ export const notifications: Notification[] = [
     userId: 'user-2',
     title: 'New Leave Request',
     titleAr: 'طلب إجازة جديد',
-    message: 'Mohammed Karim submitted an annual leave request',
-    messageAr: 'محمد كريم قدم طلب إجازة سنوية',
+    message: 'Mohammed Karim submitted a leave request',
+    messageAr: 'محمد كريم قدم طلب إجازة',
     readStatus: false,
     createdAt: '2026-02-18T10:30:00',
     type: 'approval',
@@ -450,8 +442,8 @@ export const notifications: Notification[] = [
     userId: 'user-4',
     title: 'Leave Approved',
     titleAr: 'تمت الموافقة على الإجازة',
-    message: 'Your sick leave for Feb 17 has been approved',
-    messageAr: 'تمت الموافقة على إجازتك المرضية ليوم 17 فبراير',
+    message: 'Your leave for Feb 17 has been approved',
+    messageAr: 'تمت الموافقة على إجازتك ليوم 17 فبراير',
     readStatus: false,
     createdAt: '2026-02-16T15:00:00',
     type: 'request_update',
@@ -538,7 +530,6 @@ export const attendancePolicy: AttendancePolicy = {
   maxLateDaysBeforeWarning: 3,
   absentCutoffTime: '10:00',
   annualLeavePerYear: 21,
-  sickLeavePerYear: 14,
 };
 
 // Helper functions
@@ -572,8 +563,7 @@ export function getDepartmentEmployees(departmentId: string): User[] {
 
 export function getRequestTypeAr(type: RequestType): string {
   const map: Record<RequestType, string> = {
-    annual_leave: 'إجازة سنوية',
-    sick_leave: 'إجازة مرضية',
+    annual_leave: 'إجازة',
     hourly_permission: 'إذن ساعي',
     time_adjustment: 'تعديل وقت',
     overtime: 'عمل إضافي',

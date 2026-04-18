@@ -283,16 +283,10 @@ export function EmployeeDashboard() {
           <h3 className="mb-2 text-gray-800">رصيد الإجازات</h3>
           <div className="space-y-3">
             <BalanceBar
-              label="الإجازة السنوية"
+              label="الإجازات"
               used={leaveBalance.used_annual}
               total={leaveBalance.total_annual}
               color="bg-blue-500"
-            />
-            <BalanceBar
-              label="الإجازة المرضية"
-              used={leaveBalance.used_sick}
-              total={leaveBalance.total_sick}
-              color="bg-emerald-500"
             />
           </div>
         </div>
