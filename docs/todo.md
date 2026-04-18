@@ -1,8 +1,34 @@
-- Remove sick days entirely.
-- Check what is happening when a user continues to work after 12 am, what is the best way to handle this, if its overtime, and if its non overtime.
-- What happens when a user starts work really early and continues, what happens when a user stays after work (assuming the auto punch out didn't run), in both cases we need to correctly segment sessions based on their type and log them.
-- Different shifts allocation for same user.
+# Todo
 
-Later (needs review from radhwan)
-- Universal settings for: 12-24 hour format, numbers (arabic or english), months names.
+## Task 1
+- [ ] Done
+- Commit Head:
+- Title: Remove sick days entirely
+- Explanation:
+We don't need sick days in this system at all, we just have regular off days and employees will write inside them the reason for off day, so remove it from everywhere including db, ui, any mention of it at all, make sure to analyze well and find direct and indirect code related to it and proceed accordingly.
 
+## Task 2
+- [ ] Done
+- Commit Head:
+- Title: Check what is happening when a user continues to work after 12 am
+- Explanation: Determine the best way to handle post-midnight work, including both overtime and non-overtime cases.
+
+## Task 3
+- [ ] Done
+- Commit Head:
+- Title: Handle very early starts and late stays correctly
+- Explanation: Define what should happen when a user starts work very early and continues, or stays after work assuming auto punch-out did not run. In both cases, sessions need to be segmented correctly based on their type and logged properly.
+
+## Task 4
+- [ ] Done
+- Commit Head:
+- Title: Support different shift allocations for the same user
+- Explanation:
+
+## Later (Needs Review From Radhwan)
+
+## Task 5
+- [ ] Done
+- Commit Head:
+- Title: Universal settings
+- Explanation: Add universal settings for 12/24 hour format, number style (Arabic or English), and month names.
