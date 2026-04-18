@@ -110,8 +110,8 @@ describe('ManagerDashboard', () => {
       holder_profile: {
         id: 'manager-1',
         name_ar: 'سارة',
-        employee_id: 'EMP-010',
         avatar_url: null,
+        department: { name_ar: 'الموارد البشرية' },
       },
       force_released_by_profile: null,
     } as any);
@@ -125,7 +125,7 @@ describe('ManagerDashboard', () => {
     );
 
     await screen.findByText('وسم الناشر');
-    expect(screen.getByText('EMP-010')).toBeInTheDocument();
+    expect(screen.getByText('الموارد البشرية')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'التنازل عن الوسم' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'إلغاء الوسم' })).not.toBeInTheDocument();
   });

@@ -252,8 +252,8 @@ describe('AdminDashboard', () => {
       holder_profile: {
         id: 'emp-2',
         name_ar: 'منى',
-        employee_id: 'EMP-002',
         avatar_url: null,
+        department: { name_ar: 'تقنية المعلومات' },
       },
       force_released_by_profile: null,
     } as any);

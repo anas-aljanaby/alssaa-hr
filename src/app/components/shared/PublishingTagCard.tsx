@@ -43,7 +43,7 @@ export function PublishingTagCard({
   const isHeldBySomeoneElse = isClaimed && holder?.user_id !== currentUserId;
   const holderProfile = holder?.holder_profile ?? null;
   const holderName = holderProfile?.name_ar ?? 'مستخدم';
-  const holderEmployeeId = holderProfile?.employee_id ?? '—';
+  const holderDepartment = holderProfile?.department?.name_ar ?? null;
 
   if (loading) {
     return (
@@ -114,7 +114,9 @@ export function PublishingTagCard({
           </Avatar>
           <div className="min-w-0">
             <p className="truncate text-sm text-gray-800">{holderName}</p>
-            <p className="mt-1 text-xs text-gray-500">{holderEmployeeId}</p>
+            {holderDepartment && (
+              <p className="mt-1 text-xs text-gray-500">{holderDepartment}</p>
+            )}
           </div>
         </div>
       ) : (

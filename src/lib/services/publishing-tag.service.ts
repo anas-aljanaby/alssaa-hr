@@ -6,10 +6,12 @@ type PublishingTagHolderRow = Tables<'publishing_tag_holders'>;
 type PublishingTagHolderInsert = InsertTables<'publishing_tag_holders'>;
 type PublishingTagProfileSummary = Pick<
   Tables<'profiles'>,
-  'id' | 'name_ar' | 'employee_id' | 'avatar_url'
->;
+  'id' | 'name_ar' | 'avatar_url'
+> & {
+  department: Pick<Tables<'departments'>, 'name_ar'> | null;
+};
 
-const PUBLISHING_TAG_PROFILE_COLUMNS = 'id, name_ar, employee_id, avatar_url';
+const PUBLISHING_TAG_PROFILE_COLUMNS = 'id, name_ar, avatar_url, department:departments(name_ar)';
 
 export type PublishingTagClaimStatus = 'claimed' | 'unclaimed';
 
