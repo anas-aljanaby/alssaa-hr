@@ -349,6 +349,7 @@ export type Database = {
           absent_cutoff_time: string
           annual_leave_per_year: number
           auto_punch_out_buffer_minutes: number
+          auto_punch_out_rules: Json
           check_in_notification_message: string | null
           check_out_notification_message: string | null
           early_login_minutes: number
@@ -367,6 +368,7 @@ export type Database = {
           absent_cutoff_time?: string
           annual_leave_per_year?: number
           auto_punch_out_buffer_minutes?: number
+          auto_punch_out_rules?: Json
           check_in_notification_message?: string | null
           check_out_notification_message?: string | null
           early_login_minutes?: number
@@ -385,6 +387,7 @@ export type Database = {
           absent_cutoff_time?: string
           annual_leave_per_year?: number
           auto_punch_out_buffer_minutes?: number
+          auto_punch_out_rules?: Json
           check_in_notification_message?: string | null
           check_out_notification_message?: string | null
           early_login_minutes?: number
