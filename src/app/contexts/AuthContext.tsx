@@ -28,6 +28,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 function profileToUser(profile: Tables<'profiles'>, email: string): User {
   return {
     uid: profile.id,
+    orgId: profile.org_id,
     employeeId: profile.employee_id,
     name: profile.name,
     nameAr: profile.name_ar,

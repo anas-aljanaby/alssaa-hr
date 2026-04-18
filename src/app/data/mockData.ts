@@ -12,6 +12,7 @@ export type RequestStatus = 'pending' | 'approved' | 'rejected';
 
 export interface User {
   uid: string;
+  orgId?: string;
   employeeId: string;
   name: string;
   nameAr: string;

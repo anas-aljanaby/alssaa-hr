@@ -3,9 +3,14 @@ import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminDashboard } from './AdminDashboard';
 
+vi.mock('@/app/contexts/AuthContext', () => ({
+  useAuth: vi.fn(),
+}));
+
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
+    success: vi.fn(),
   },
 }));
 
@@ -31,9 +36,18 @@ vi.mock('@/lib/services/requests.service', () => ({
   subscribeToAllRequests: vi.fn(() => () => {}),
 }));
 
+vi.mock('@/lib/services/publishing-tag.service', () => ({
+  getPublishingTagHolder: vi.fn(),
+  claimPublishingTag: vi.fn(),
+  releasePublishingTag: vi.fn(),
+  forceReleasePublishingTag: vi.fn(),
+}));
+
+const authContext = await import('@/app/contexts/AuthContext');
 const profilesService = await import('@/lib/services/profiles.service');
 const departmentsService = await import('@/lib/services/departments.service');
 const attendanceService = await import('@/lib/services/attendance.service');
+const publishingTagService = await import('@/lib/services/publishing-tag.service');
 const requestsService = await import('@/lib/services/requests.service');
 
 function LocationDisplay() {
@@ -46,6 +60,12 @@ describe('AdminDashboard', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-04-04T09:00:00.000Z'));
     vi.clearAllMocks();
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      currentUser: {
+        uid: 'admin-1',
+        orgId: 'org-1',
+      },
+    } as any);
 
     vi.mocked(profilesService.listUsers).mockResolvedValue([
       {
@@ -220,6 +240,24 @@ describe('AdminDashboard', () => {
       },
     ] as any);
     vi.mocked(requestsService.getAllPendingRequests).mockResolvedValue([]);
+    vi.mocked(publishingTagService.getPublishingTagHolder).mockResolvedValue({
+      id: 'tag-1',
+      org_id: 'org-1',
+      user_id: 'emp-2',
+      claimed_at: '2026-04-04T08:00:00.000Z',
+      released_at: null,
+      force_released_by: null,
+      force_released_at: null,
+      claim_status: 'claimed',
+      holder_profile: {
+        id: 'emp-2',
+        name_ar: 'منى',
+        employee_id: 'EMP-002',
+        avatar_url: null,
+      },
+      force_released_by_profile: null,
+    } as any);
+    vi.mocked(publishingTagService.forceReleasePublishingTag).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -269,5 +307,31 @@ describe('AdminDashboard', () => {
         '/team-attendance?mode=date&date=2026-04-04&filter=incomplete_shift'
       );
     });
+  });
+
+  it('shows the publishing tag panel and allows admins to force release it', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <AdminDashboard />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('وسم الناشر');
+    expect(screen.getByText('منى')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'أخذ وسم الناشر' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'إلغاء الوسم' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'إلغاء الوسم' }));
+
+    await waitFor(() => {
+      expect(publishingTagService.forceReleasePublishingTag).toHaveBeenCalledWith(
+        'org-1',
+        'admin-1'
+      );
+    });
+
+    confirmSpy.mockRestore();
   });
 });

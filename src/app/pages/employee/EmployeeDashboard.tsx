@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { StatCard } from '../../components/shared/StatCard';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
+import { PublishingTagCard } from '../../components/shared/PublishingTagCard';
 import { getStatusColor } from '@/lib/ui-helpers';
 import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { useTodayPunch } from '../../hooks/useTodayPunch';
@@ -31,6 +32,7 @@ import { UnavailableState } from '../../components/shared/UnavailableState';
 import { isOfflineError } from '@/lib/network';
 import { cachedFetch } from '@/lib/offlineCache';
 import { useVisibilityRefetch } from '../../hooks/useVisibilityRefetch';
+import { usePublishingTag } from '../../hooks/usePublishingTag';
 import { usePwa } from '../../contexts/PwaContext';
 import { LastUpdatedNote } from '../../components/shared/LastUpdatedNote';
 
@@ -47,6 +49,10 @@ export function EmployeeDashboard() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [fromCache, setFromCache] = useState(false);
+  const publishingTag = usePublishingTag({
+    orgId: currentUser?.orgId,
+    userId: currentUser?.uid,
+  });
   const todayPunch = useTodayPunch({
     userId: currentUser?.uid,
     onLogUpdated: setTodayLog,
@@ -54,12 +60,16 @@ export function EmployeeDashboard() {
 
   useEffect(() => {
     if (!currentUser) return;
-    loadData();
+    void loadData();
   }, [currentUser?.uid]);
 
   // Refresh when the PWA comes back to the foreground or regains connection.
   useVisibilityRefetch(() => {
-    if (currentUser) void loadData();
+    if (!currentUser) return;
+    void loadData();
+    if (currentUser.orgId) {
+      void publishingTag.refresh({ silent: true });
+    }
   }, { enabled: !!currentUser });
 
   useRealtimeSubscription(
@@ -208,6 +218,19 @@ export function EmployeeDashboard() {
           onCheckIn={todayPunch.handleCheckIn}
           onCheckOut={todayPunch.handleCheckOut}
           isOffline={isOffline}
+        />
+      )}
+
+      {currentUser.orgId && (
+        <PublishingTagCard
+          holder={publishingTag.holder}
+          currentUserId={currentUser.uid}
+          loading={publishingTag.loading}
+          loadError={publishingTag.loadError}
+          actionLoading={publishingTag.actionLoading}
+          onClaim={() => void publishingTag.claim()}
+          onRelease={() => void publishingTag.release()}
+          onRetry={() => void publishingTag.refresh()}
         />
       )}
 

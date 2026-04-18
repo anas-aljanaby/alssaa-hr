@@ -25,10 +25,12 @@ import {
   Coffee,
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
+import { PublishingTagCard } from '../../components/shared/PublishingTagCard';
 import { StatCard } from '../../components/shared/StatCard';
 import { TodayStatusCard } from '../../components/attendance/TodayStatusCard';
 import { useTodayPunch } from '../../hooks/useTodayPunch';
 import { UnavailableState } from '../../components/shared/UnavailableState';
+import { usePublishingTag } from '../../hooks/usePublishingTag';
 import { isOfflineError } from '@/lib/network';
 import { usePwa } from '../../contexts/PwaContext';
 
@@ -64,6 +66,10 @@ export function ManagerDashboard() {
   const [weekLogs, setWeekLogs] = useState<{ day: string; logs: AttendanceLog[] }[]>([]);
   const [activeTab, setActiveTab] = useState<ManagerTab>('overview');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const publishingTag = usePublishingTag({
+    orgId: currentUser?.orgId,
+    userId: currentUser?.uid,
+  });
   const todayPunch = useTodayPunch({
     userId: currentUser?.uid,
   });
@@ -85,7 +91,7 @@ export function ManagerDashboard() {
 
   useEffect(() => {
     if (!currentUser) return;
-    loadData();
+    void loadData();
   }, [currentUser?.uid]);
 
   const handleAttendanceEvent = useCallback(
@@ -294,6 +300,19 @@ export function ManagerDashboard() {
           onCheckIn={todayPunch.handleCheckIn}
           onCheckOut={todayPunch.handleCheckOut}
           isOffline={isOffline}
+        />
+      )}
+
+      {currentUser.orgId && (
+        <PublishingTagCard
+          holder={publishingTag.holder}
+          currentUserId={currentUser.uid}
+          loading={publishingTag.loading}
+          loadError={publishingTag.loadError}
+          actionLoading={publishingTag.actionLoading}
+          onClaim={() => void publishingTag.claim()}
+          onRelease={() => void publishingTag.release()}
+          onRetry={() => void publishingTag.refresh()}
         />
       )}
 

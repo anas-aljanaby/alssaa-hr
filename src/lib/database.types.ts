@@ -834,6 +834,58 @@ export type Database = {
           },
         ]
       }
+      publishing_tag_holders: {
+        Row: {
+          claimed_at: string | null
+          force_released_at: string | null
+          force_released_by: string | null
+          id: string
+          org_id: string
+          released_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          claimed_at?: string | null
+          force_released_at?: string | null
+          force_released_by?: string | null
+          id?: string
+          org_id: string
+          released_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          claimed_at?: string | null
+          force_released_at?: string | null
+          force_released_by?: string | null
+          id?: string
+          org_id?: string
+          released_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_tag_holders_force_released_by_fkey"
+            columns: ["force_released_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_tag_holders_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_tag_holders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       overtime_requests: {
         Row: {
           created_at: string
@@ -1328,6 +1380,28 @@ export type TablesUpdate<
       ? U
       : never
     : never
+
+export type InsertTables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = TablesInsert<DefaultSchemaTableNameOrOptions, TableName>
+
+export type UpdateTables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = TablesUpdate<DefaultSchemaTableNameOrOptions, TableName>
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends

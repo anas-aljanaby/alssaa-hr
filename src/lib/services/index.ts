@@ -7,3 +7,4 @@ export * as notificationsService from './notifications.service';
 export * as departmentsService from './departments.service';
 export * as auditService from './audit.service';
 export * as policyService from './policy.service';
+export * as publishingTagService from './publishing-tag.service';

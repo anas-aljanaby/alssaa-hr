@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { useAuth } from '@/app/contexts/AuthContext';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
 import * as attendanceService from '@/lib/services/attendance.service';
@@ -23,8 +24,10 @@ import {
   Shield,
 } from 'lucide-react';
 import { DashboardHeader } from '../../components/shared/DashboardHeader';
+import { PublishingTagCard } from '../../components/shared/PublishingTagCard';
 import { StatCard } from '../../components/shared/StatCard';
 import { UnavailableState } from '../../components/shared/UnavailableState';
+import { usePublishingTag } from '../../hooks/usePublishingTag';
 import { isOfflineError } from '@/lib/network';
 import {
   DASHBOARD_DATE_SUMMARY_CHIPS,
@@ -75,6 +78,7 @@ interface DashboardSummaryRow {
 }
 
 export function AdminDashboard() {
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -85,9 +89,13 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [summaryMode, setSummaryMode] = useState<ViewMode>('live');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const publishingTag = usePublishingTag({
+    orgId: currentUser?.orgId,
+    userId: currentUser?.uid,
+  });
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   const handleAttendanceEvent = useCallback(
@@ -376,6 +384,21 @@ export function AdminDashboard() {
 
       {activeTab === 'overview' && (
         <>
+          {currentUser?.orgId && (
+            <PublishingTagCard
+              holder={publishingTag.holder}
+              currentUserId={currentUser.uid}
+              loading={publishingTag.loading}
+              loadError={publishingTag.loadError}
+              actionLoading={publishingTag.actionLoading}
+              showSelfActions={true}
+              showForceRelease={true}
+              onClaim={() => void publishingTag.claim()}
+              onRelease={() => void publishingTag.release()}
+              onForceRelease={() => void publishingTag.forceRelease()}
+              onRetry={() => void publishingTag.refresh()}
+            />
+          )}
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-gray-800">ملخص اليوم</h3>
