@@ -5,8 +5,52 @@ import {
 import { supabase } from '../supabase';
 import type { Tables, UpdateTables } from '../database.types';
 
-export type AttendancePolicy = Tables<'attendance_policy'>;
-export type AttendancePolicyUpdate = UpdateTables<'attendance_policy'>;
+export type AttendancePolicy = Omit<Tables<'attendance_policy'>, 'auto_punch_out_rules'> & {
+  auto_punch_out_rules: AutoPunchOutRule[];
+};
+
+export type AttendancePolicyUpdate = Omit<UpdateTables<'attendance_policy'>, 'auto_punch_out_rules'> & {
+  auto_punch_out_rules?: AutoPunchOutRule[];
+};
+
+export interface AutoPunchOutRule {
+  id: string;
+  title: string;
+  time: string;
+  sessionType: 'all' | 'overtime' | 'regular';
+  enabled: boolean;
+}
+
+const DEFAULT_AUTO_PUNCH_OUT_RULES: AutoPunchOutRule[] = [
+  {
+    id: 'default-3am-overtime',
+    title: 'انصراف تلقائي 3 صباحاً (عمل إضافي)',
+    time: '03:00',
+    sessionType: 'overtime',
+    enabled: false,
+  },
+];
+
+function parseRules(raw: unknown): AutoPunchOutRule[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (r): r is AutoPunchOutRule =>
+      r !== null &&
+      typeof r === 'object' &&
+      typeof r.id === 'string' &&
+      typeof r.title === 'string' &&
+      typeof r.time === 'string' &&
+      (r.sessionType === 'all' || r.sessionType === 'overtime' || r.sessionType === 'regular') &&
+      typeof r.enabled === 'boolean'
+  );
+}
+
+function toPolicy(row: Tables<'attendance_policy'>): AttendancePolicy {
+  return {
+    ...row,
+    auto_punch_out_rules: parseRules(row.auto_punch_out_rules),
+  };
+}
 
 export async function getPolicy(): Promise<AttendancePolicy | null> {
   const { data, error } = await supabase
@@ -16,7 +60,7 @@ export async function getPolicy(): Promise<AttendancePolicy | null> {
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return data ? toPolicy(data) : null;
 }
 
 export async function updatePolicy(
@@ -39,21 +83,25 @@ export async function updatePolicy(
         annual_leave_per_year: updates.annual_leave_per_year ?? 21,
         minimum_overtime_minutes:
           updates.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
+        auto_punch_out_rules: (updates.auto_punch_out_rules ?? DEFAULT_AUTO_PUNCH_OUT_RULES) as never,
       })
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return toPolicy(data);
   }
 
   const { data, error } = await supabase
     .from('attendance_policy')
-    .update(updates)
+    .update({
+      ...updates,
+      auto_punch_out_rules: updates.auto_punch_out_rules as never,
+    })
     .eq('id', existing.id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return toPolicy(data);
 }
