@@ -14,6 +14,7 @@ import {
   AlarmClock,
   CalendarDays,
   Timer,
+  Pencil,
 } from 'lucide-react';
 import { PageLayout } from '../../components/layout/PageLayout';
 import {
@@ -24,6 +25,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type EditSection = 'schedule' | 'punchout' | 'overtime' | 'rest' | 'leave';
+type TabKey = 'schedule' | 'rules';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -71,9 +73,9 @@ function generateId() {
 
 function PolicyRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-      <span className="text-xs text-gray-400 font-medium">{label}</span>
-      <span className="text-sm text-gray-700 font-medium">{value}</span>
+    <div className="flex items-center justify-between py-2 border-b border-dashed border-gray-100 last:border-0">
+      <span className="text-xs text-gray-600 font-medium">{label}</span>
+      <span className="text-sm text-gray-800 font-semibold">{value}</span>
     </div>
   );
 }
@@ -81,10 +83,10 @@ function PolicyRow({ label, value }: { label: string; value: string }) {
 function DayPill({ label, active }: { label: string; active: boolean }) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${
+      className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
         active
-          ? 'bg-gray-100 text-gray-700 border-gray-200'
-          : 'bg-white text-gray-300 border-gray-100'
+          ? 'bg-blue-600 text-white border-blue-600'
+          : 'bg-white text-gray-300 border-gray-150'
       }`}
     >
       {label}
@@ -95,18 +97,18 @@ function DayPill({ label, active }: { label: string; active: boolean }) {
 function AutoPunchOutRuleCard({ rule }: { rule: AutoPunchOutRule }) {
   return (
     <div
-      className={`flex items-center justify-between p-3 rounded-xl border ${
-        rule.enabled ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100 opacity-50'
+      className={`flex items-center justify-between p-3 rounded-xl border transition-opacity ${
+        rule.enabled ? 'bg-white border-amber-100' : 'bg-gray-50 border-gray-100 opacity-50'
       }`}
     >
       <div className="flex items-center gap-3">
-        <div className={`w-2 h-2 rounded-full shrink-0 ${rule.enabled ? 'bg-gray-400' : 'bg-gray-300'}`} />
+        <div className={`w-2 h-2 rounded-full shrink-0 ${rule.enabled ? 'bg-amber-400' : 'bg-gray-300'}`} />
         <div>
-          <p className="text-sm text-gray-700 font-medium">{rule.title}</p>
+          <p className="text-sm text-gray-800 font-semibold">{rule.title}</p>
           <p className="text-xs text-gray-400 mt-0.5 font-medium">{rule.time}</p>
         </div>
       </div>
-      <span className="text-xs px-2 py-0.5 rounded-md bg-gray-50 text-gray-500 border border-gray-100 font-medium">
+      <span className="text-xs px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 border border-amber-100 font-medium">
         {SESSION_TYPE_LABELS[rule.sessionType]}
       </span>
     </div>
@@ -126,29 +128,38 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
 
 function PolicyCard({
   icon,
+  iconBg,
   title,
+  accentBorder,
   onEdit,
   children,
 }: {
   icon: React.ReactNode;
+  iconBg: string;
   title: string;
+  accentBorder: string;
   onEdit?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+    <div
+      className={`bg-white rounded-2xl border border-gray-100 border-r-4 ${accentBorder}`}
+      style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}
+    >
       <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-gray-50">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h3 className="text-gray-700 text-sm font-medium">{title}</h3>
+        <div className="flex items-center gap-2.5">
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
+            {icon}
+          </div>
+          <h3 className="text-gray-800 text-sm font-semibold">{title}</h3>
         </div>
         {onEdit && (
           <button
             type="button"
             onClick={onEdit}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-blue-100 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors font-medium"
           >
-            <Settings className="w-3 h-3" />
+            <Pencil className="w-3 h-3" />
             تعديل
           </button>
         )}
@@ -157,8 +168,6 @@ function PolicyCard({
     </div>
   );
 }
-
-type TabKey = 'schedule' | 'rules';
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -274,7 +283,8 @@ export function AttendancePolicyPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <PageLayout title="سياسة الحضور" backPath="/more">
-      {/* ── Tab bar ────────────────────────────────────────────────────────────── */}
+
+      {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
       <div className="px-4 pt-2 pb-0" dir="rtl">
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
           {([
@@ -285,9 +295,9 @@ export function AttendancePolicyPage() {
               key={key}
               type="button"
               onClick={() => setActiveTab(key)}
-              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${
                 activeTab === key
-                  ? 'bg-white text-gray-800 shadow-sm'
+                  ? 'bg-gray-900 text-white shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -300,12 +310,13 @@ export function AttendancePolicyPage() {
       <div className="p-4 max-w-lg mx-auto space-y-4">
         {policy ? (
           <>
-            {/* ── Tab 1: الدوام والإجازات ──────────────────────────────────── */}
+            {/* ── Tab 1: الدوام والإجازات ────────────────────────────────────── */}
             {activeTab === 'schedule' && (
               <>
-                {/* جدول العمل */}
                 <PolicyCard
-                  icon={<Clock className="w-4 h-4 text-gray-400" />}
+                  icon={<Clock className="w-4 h-4 text-blue-500" />}
+                  iconBg="bg-blue-50"
+                  accentBorder="border-r-blue-300"
                   title="جدول العمل"
                   onEdit={isAdmin ? () => openSection('schedule') : undefined}
                 >
@@ -315,9 +326,10 @@ export function AttendancePolicyPage() {
                   <PolicyRow label="وقت قطع الغياب" value={policy.absent_cutoff_time} />
                 </PolicyCard>
 
-                {/* سياسة الإجازات */}
                 <PolicyCard
-                  icon={<Calendar className="w-4 h-4 text-gray-400" />}
+                  icon={<Calendar className="w-4 h-4 text-indigo-500" />}
+                  iconBg="bg-indigo-50"
+                  accentBorder="border-r-indigo-300"
                   title="سياسة الإجازات"
                   onEdit={isAdmin ? () => openSection('leave') : undefined}
                 >
@@ -326,12 +338,13 @@ export function AttendancePolicyPage() {
               </>
             )}
 
-            {/* ── Tab 2: قواعد الحضور ──────────────────────────────────────── */}
+            {/* ── Tab 2: قواعد الحضور ────────────────────────────────────────── */}
             {activeTab === 'rules' && (
               <>
-                {/* الانصراف التلقائي */}
                 <PolicyCard
-                  icon={<AlarmClock className="w-4 h-4 text-gray-400" />}
+                  icon={<AlarmClock className="w-4 h-4 text-amber-500" />}
+                  iconBg="bg-amber-50"
+                  accentBorder="border-r-amber-300"
                   title="الانصراف التلقائي"
                   onEdit={isAdmin ? () => openSection('punchout') : undefined}
                 >
@@ -340,7 +353,12 @@ export function AttendancePolicyPage() {
                     value={`${policy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES} دقيقة`}
                   />
                   {policy.auto_punch_out_rules.length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-3">لا توجد قواعد انصراف تلقائي</p>
+                    <div className="flex flex-col items-center py-5 gap-2">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center">
+                        <AlarmClock className="w-5 h-5 text-orange-300" />
+                      </div>
+                      <p className="text-xs text-gray-400 font-medium">لا توجد قواعد انصراف تلقائي</p>
+                    </div>
                   ) : (
                     <div className="space-y-2 mt-2">
                       {policy.auto_punch_out_rules.map((rule) => (
@@ -350,9 +368,10 @@ export function AttendancePolicyPage() {
                   )}
                 </PolicyCard>
 
-                {/* العمل الإضافي */}
                 <PolicyCard
-                  icon={<Timer className="w-4 h-4 text-gray-400" />}
+                  icon={<Timer className="w-4 h-4 text-violet-500" />}
+                  iconBg="bg-violet-50"
+                  accentBorder="border-r-violet-300"
                   title="العمل الإضافي"
                   onEdit={isAdmin ? () => openSection('overtime') : undefined}
                 >
@@ -362,9 +381,10 @@ export function AttendancePolicyPage() {
                   />
                 </PolicyCard>
 
-                {/* أيام الراحة والتنبيهات */}
                 <PolicyCard
-                  icon={<CalendarDays className="w-4 h-4 text-gray-400" />}
+                  icon={<CalendarDays className="w-4 h-4 text-slate-500" />}
+                  iconBg="bg-slate-100"
+                  accentBorder="border-r-slate-300"
                   title="أيام الراحة والتنبيهات"
                   onEdit={isAdmin ? () => openSection('rest') : undefined}
                 >
@@ -373,7 +393,7 @@ export function AttendancePolicyPage() {
                     value={`${policy.max_late_days_before_warning} أيام`}
                   />
                   <div className="pt-2.5">
-                    <p className="text-xs text-gray-400 mb-2">أيام العمل</p>
+                    <p className="text-xs text-gray-400 mb-2 font-medium">أيام العمل</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[0, 1, 2, 3, 4, 5, 6].map((d) => (
                         <DayPill key={d} label={DAY_NAMES[d]} active={!policy.weekly_off_days.includes(d)} />
@@ -392,7 +412,7 @@ export function AttendancePolicyPage() {
         )}
       </div>
 
-      {/* ── Focused mini-modal ────────────────────────────────────────────────── */}
+      {/* ── Focused mini-modal ──────────────────────────────────────────────────── */}
       {isAdmin && activeSection && editPolicy && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 pb-24"
@@ -405,7 +425,7 @@ export function AttendancePolicyPage() {
           >
             {/* Header */}
             <div className="sticky top-0 bg-white rounded-t-2xl px-5 pt-5 pb-4 border-b border-gray-100 flex items-center justify-between z-10">
-              <h2 className="text-gray-800 text-sm font-medium">{SECTION_TITLES[activeSection]}</h2>
+              <h2 className="text-gray-800 text-sm font-semibold">{SECTION_TITLES[activeSection]}</h2>
               <button
                 type="button"
                 onClick={closeSection}
@@ -417,7 +437,7 @@ export function AttendancePolicyPage() {
 
             <form className="px-4 py-4 space-y-1" onSubmit={handleSubmit}>
 
-              {/* ── جدول العمل ─────────────────────────────────────────────── */}
+              {/* ── جدول العمل ───────────────────────────────────────────────── */}
               {activeSection === 'schedule' && (
                 <>
                   <FormRow label="وقت بدء العمل">
@@ -447,7 +467,7 @@ export function AttendancePolicyPage() {
                 </>
               )}
 
-              {/* ── الانصراف التلقائي ──────────────────────────────────────── */}
+              {/* ── الانصراف التلقائي ────────────────────────────────────────── */}
               {activeSection === 'punchout' && (
                 <>
                   <FormRow label="مهلة الانصراف التلقائي (دقيقة)">
@@ -463,7 +483,7 @@ export function AttendancePolicyPage() {
                       <button
                         type="button"
                         onClick={addRule}
-                        className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg transition-colors"
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-100 px-2.5 py-1 rounded-lg transition-colors font-medium"
                       >
                         <Plus className="w-3 h-3" />
                         إضافة قاعدة
@@ -471,9 +491,12 @@ export function AttendancePolicyPage() {
                     </div>
 
                     {editPolicy.auto_punch_out_rules.length === 0 ? (
-                      <p className="text-xs text-gray-400 text-center py-3 bg-gray-50 rounded-xl border border-gray-100 font-medium">
-                        لا توجد قواعد — أضف قاعدة لتحديد أوقات انصراف تلقائية
-                      </p>
+                      <div className="flex flex-col items-center py-5 gap-2 bg-gray-50 rounded-xl border border-gray-100">
+                        <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+                          <AlarmClock className="w-4.5 h-4.5 text-orange-300" />
+                        </div>
+                        <p className="text-xs text-gray-400 font-medium">لا توجد قواعد — أضف قاعدة لتحديد أوقات انصراف تلقائية</p>
+                      </div>
                     ) : (
                       <div className="space-y-2">
                         {editPolicy.auto_punch_out_rules.map((rule) => (
@@ -534,7 +557,7 @@ export function AttendancePolicyPage() {
                 </>
               )}
 
-              {/* ── العمل الإضافي ───────────────────────────────────────────── */}
+              {/* ── العمل الإضافي ─────────────────────────────────────────────── */}
               {activeSection === 'overtime' && (
                 <FormRow label="الحد الأدنى للعمل الإضافي (دقيقة)">
                   <input type="number" className={NUM_INPUT}
@@ -544,7 +567,7 @@ export function AttendancePolicyPage() {
                 </FormRow>
               )}
 
-              {/* ── أيام الراحة والتنبيهات ──────────────────────────────────── */}
+              {/* ── أيام الراحة والتنبيهات ────────────────────────────────────── */}
               {activeSection === 'rest' && (
                 <>
                   <div className="py-2 border-b border-gray-50">
@@ -559,15 +582,14 @@ export function AttendancePolicyPage() {
                         { d: 5, label: 'الجمعة' },
                         { d: 6, label: 'السبت' },
                       ].map(({ d, label }) => {
-                        // checked = this is a WORKING day (not in off days)
                         const checked = !editPolicy.weekly_off_days.includes(d);
                         return (
                           <label
                             key={d}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors font-medium ${
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors font-semibold ${
                               checked
-                                ? 'bg-gray-100 border-gray-300 text-gray-800'
-                                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                ? 'bg-blue-600 border-blue-600 text-white'
+                                : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'
                             }`}
                           >
                             <input
@@ -577,14 +599,13 @@ export function AttendancePolicyPage() {
                                 setEditPolicy((prev) => {
                                   if (!prev) return prev;
                                   const isWorkDay = !prev.weekly_off_days.includes(d);
-                                  // toggling off a work day → add to off days; toggling on → remove from off days
                                   const next = isWorkDay
                                     ? [...prev.weekly_off_days, d].sort((a, b) => a - b)
                                     : prev.weekly_off_days.filter((x) => x !== d);
                                   return { ...prev, weekly_off_days: next };
                                 })
                               }
-                              className="rounded border-gray-300"
+                              className="sr-only"
                             />
                             {label}
                           </label>
@@ -601,7 +622,7 @@ export function AttendancePolicyPage() {
                 </>
               )}
 
-              {/* ── سياسة الإجازات ──────────────────────────────────────────── */}
+              {/* ── سياسة الإجازات ────────────────────────────────────────────── */}
               {activeSection === 'leave' && (
                 <FormRow label="الإجازة السنوية (يوم)">
                   <input type="number" className={NUM_INPUT}
@@ -615,7 +636,7 @@ export function AttendancePolicyPage() {
                 <button
                   type="submit"
                   disabled={savingPolicy}
-                  className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition-colors disabled:opacity-50 text-sm font-medium"
+                  className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition-colors disabled:opacity-50 text-sm font-semibold"
                 >
                   {savingPolicy ? 'جاري الحفظ...' : 'حفظ'}
                 </button>
