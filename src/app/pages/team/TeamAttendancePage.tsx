@@ -521,9 +521,7 @@ function buildSectionSummary(
 ): Pick<BoardSection, 'subtitle' | 'healthStatus' | 'metrics'> {
   const presentCount = rows.filter((row) => row.group === 'present').length;
   const lateCount = rows.filter((row) => row.primaryState === 'late').length;
-  const absentCount = rows.filter(
-    (row) => row.primaryState === 'absent' || row.primaryState === 'not_entered_yet'
-  ).length;
+  const absentCount = rows.filter((row) => row.primaryState === 'absent').length;
   const onLeaveCount = rows.filter((row) => row.primaryState === 'on_leave').length;
   const onBreakCount = rows.filter((row) => row.primaryState === 'on_break').length;
   const totalCount = rows.length;
@@ -575,7 +573,7 @@ function buildSectionSummary(
           {
             key: 'absent',
             count: absentCount,
-            label: 'غائب أو لم يسجل',
+            label: 'غائب',
             status: 'absent',
           },
           {

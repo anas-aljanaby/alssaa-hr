@@ -2,7 +2,7 @@
 
 ## Task 1
 - [x] Done
-- Commit Head:
+- Commit Head: 7895ed5
 - Title: Remove sick days entirely
 - Explanation:
 We don't need sick days in this system at all, we just have regular off days and employees will write inside them the reason for off day, so remove it from everywhere including db, ui, any mention of it at all, make sure to analyze well and find direct and indirect code related to it and proceed accordingly.
@@ -24,6 +24,14 @@ We don't need sick days in this system at all, we just have regular off days and
 - Commit Head:
 - Title: Support different shift allocations for the same user
 - Explanation:
+
+
+## Task 5
+- [ ] Done
+- Commit Head:
+- Title: Rework attendance policy page
+- Explaination
+also add auto punch out rules component 
 
 ## Later (Needs Review From Radhwan)
 

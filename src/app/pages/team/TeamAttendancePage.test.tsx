@@ -616,6 +616,10 @@ describe('TeamAttendancePage', () => {
       expect(screen.getByRole('button', { name: /الأخبار/i })).toBeInTheDocument();
     });
 
+    const editingHeader = screen.getByRole('button', { name: /التحرير/i });
+    expect(within(editingHeader).getByLabelText('غائب (1)')).toBeInTheDocument();
+    expect(within(editingHeader).queryByLabelText(/غائب أو لم يسجل/i)).not.toBeInTheDocument();
+
     expect(screen.queryByText('علي')).not.toBeInTheDocument();
 
     await expandDepartment('الأخبار');
