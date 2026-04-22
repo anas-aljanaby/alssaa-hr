@@ -6,11 +6,15 @@ vi.mock('../supabase');
 const policyRow = {
   id: 'pol-1',
   org_id: 'org-1',
-  work_start_time: '08:00',
-  work_end_time: '16:00',
+  work_schedule: {
+    '0': { start: '08:00', end: '16:00' },
+    '1': { start: '08:00', end: '16:00' },
+    '2': { start: '08:00', end: '16:00' },
+    '3': { start: '08:00', end: '16:00' },
+    '4': { start: '08:00', end: '16:00' },
+  },
   grace_period_minutes: 10,
   auto_punch_out_buffer_minutes: 5,
-  weekly_off_days: [5, 6],
   max_late_days_before_warning: 3,
   absent_cutoff_time: '12:00',
   annual_leave_per_year: 21,

@@ -90,14 +90,23 @@ const baseEnv: PunchEnv = {
   serviceRoleKey: 'service',
 };
 
+type DayScheduleFixture = { start: string; end: string };
+type WorkScheduleFixture = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleFixture>>;
+
+const SUN_THU_9_TO_18: WorkScheduleFixture = {
+  '0': { start: '09:00', end: '18:00' },
+  '1': { start: '09:00', end: '18:00' },
+  '2': { start: '09:00', end: '18:00' },
+  '3': { start: '09:00', end: '18:00' },
+  '4': { start: '09:00', end: '18:00' },
+};
+
 function makeDeps(opts?: {
   userId?: string;
-  profile?: { org_id: string; work_days: number[] | null; work_start_time: string | null; work_end_time: string | null };
+  profile?: { org_id: string; work_schedule: WorkScheduleFixture | null };
   policy?: {
-    work_start_time: string;
-    work_end_time: string;
+    work_schedule: WorkScheduleFixture;
     grace_period_minutes: number;
-    weekly_off_days: number[];
     early_login_minutes: number;
     minimum_overtime_minutes: number;
     minimum_required_minutes: number | null;
@@ -108,15 +117,11 @@ function makeDeps(opts?: {
   const userId = opts?.userId ?? 'u1';
   const profile = opts?.profile ?? {
     org_id: 'o1',
-    work_days: null,
-    work_start_time: null,
-    work_end_time: null,
+    work_schedule: null,
   };
   const policyDefault = {
-    work_start_time: '09:00',
-    work_end_time: '18:00',
+    work_schedule: SUN_THU_9_TO_18,
     grace_period_minutes: 15,
-    weekly_off_days: [5, 6],
     early_login_minutes: 60,
     minimum_overtime_minutes: 30,
     minimum_required_minutes: 480,
@@ -549,9 +554,13 @@ Deno.test('part 2.1 off-day punch-in is always present + overtime', async () => 
     profile: {
       org_id: 'o1',
       // User works Sun-Thu, so Friday is user-specific off-day.
-      work_days: [0, 1, 2, 3, 4],
-      work_start_time: '09:00',
-      work_end_time: '18:00',
+      work_schedule: {
+        '0': { start: '09:00', end: '18:00' },
+        '1': { start: '09:00', end: '18:00' },
+        '2': { start: '09:00', end: '18:00' },
+        '3': { start: '09:00', end: '18:00' },
+        '4': { start: '09:00', end: '18:00' },
+      },
     },
   });
   const customRes = await punch(customOffDay.deps, 'check_in', orgInstant('2025-06-06', '10:00:00'));
@@ -775,9 +784,13 @@ Deno.test('part 3.4 off-day sessions keep effective_status null', async () => {
   const mem = makeDeps({
     profile: {
       org_id: 'o1',
-      work_days: [0, 1, 2, 3, 4],
-      work_start_time: '09:00',
-      work_end_time: '18:00',
+      work_schedule: {
+        '0': { start: '09:00', end: '18:00' },
+        '1': { start: '09:00', end: '18:00' },
+        '2': { start: '09:00', end: '18:00' },
+        '3': { start: '09:00', end: '18:00' },
+        '4': { start: '09:00', end: '18:00' },
+      },
     },
   });
 
@@ -1034,9 +1047,13 @@ Deno.test('part 4.10 off-day with no sessions keeps no effective_status', async 
   const mem = makeDeps({
     profile: {
       org_id: 'o1',
-      work_days: [0, 1, 2, 3, 4],
-      work_start_time: '09:00',
-      work_end_time: '18:00',
+      work_schedule: {
+        '0': { start: '09:00', end: '18:00' },
+        '1': { start: '09:00', end: '18:00' },
+        '2': { start: '09:00', end: '18:00' },
+        '3': { start: '09:00', end: '18:00' },
+        '4': { start: '09:00', end: '18:00' },
+      },
     },
   });
 
@@ -1063,9 +1080,13 @@ Deno.test('part 4.11 off-day with overtime sessions keeps no effective_status', 
   const mem = makeDeps({
     profile: {
       org_id: 'o1',
-      work_days: [0, 1, 2, 3, 4],
-      work_start_time: '09:00',
-      work_end_time: '18:00',
+      work_schedule: {
+        '0': { start: '09:00', end: '18:00' },
+        '1': { start: '09:00', end: '18:00' },
+        '2': { start: '09:00', end: '18:00' },
+        '3': { start: '09:00', end: '18:00' },
+        '4': { start: '09:00', end: '18:00' },
+      },
     },
   });
   await punch(mem.deps, 'check_in', orgInstant('2025-06-06', '10:00:00'));
@@ -1360,9 +1381,13 @@ Deno.test('part 8.2 off-day each session creates its own overtime request', asyn
   const mem = makeDeps({
     profile: {
       org_id: 'o1',
-      work_days: [0, 1, 2, 3, 4],
-      work_start_time: '09:00',
-      work_end_time: '18:00',
+      work_schedule: {
+        '0': { start: '09:00', end: '18:00' },
+        '1': { start: '09:00', end: '18:00' },
+        '2': { start: '09:00', end: '18:00' },
+        '3': { start: '09:00', end: '18:00' },
+        '4': { start: '09:00', end: '18:00' },
+      },
     },
   });
   const s1 = await punch(mem.deps, 'check_in', orgInstant('2025-06-06', '10:00:00'));
@@ -1494,8 +1519,13 @@ Deno.test('part 9.3 is_overtime remains as classified at check-in', async () => 
   await mem.admin
     .from('attendance_policy')
     .update({
-      work_start_time: '10:00',
-      work_end_time: '17:00',
+      work_schedule: {
+        '0': { start: '10:00', end: '17:00' },
+        '1': { start: '10:00', end: '17:00' },
+        '2': { start: '10:00', end: '17:00' },
+        '3': { start: '10:00', end: '17:00' },
+        '4': { start: '10:00', end: '17:00' },
+      },
       early_login_minutes: 30,
       grace_period_minutes: 5,
     })
@@ -1556,9 +1586,7 @@ Deno.test('part 10.5 no policy configured still allows punch with defaults', asy
     policy: null,
     profile: {
       org_id: 'o1',
-      work_days: null,
-      work_start_time: null,
-      work_end_time: null,
+      work_schedule: null,
     },
   });
   const res = await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));

@@ -21,6 +21,8 @@ import {
   DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
   DEFAULT_MINIMUM_OVERTIME_MINUTES,
 } from '@/shared/attendance/constants';
+import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
+import type { WorkSchedule } from '@/shared/attendance/workSchedule';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,14 +31,14 @@ type TabKey = 'schedule' | 'rules';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DAY_NAMES: Record<number, string> = {
-  0: 'الأحد',
-  1: 'الاثنين',
-  2: 'الثلاثاء',
-  3: 'الأربعاء',
-  4: 'الخميس',
-  5: 'الجمعة',
-  6: 'السبت',
+const DAY_NAMES_AR: Record<string, string> = {
+  '0': 'الأحد',
+  '1': 'الاثنين',
+  '2': 'الثلاثاء',
+  '3': 'الأربعاء',
+  '4': 'الخميس',
+  '5': 'الجمعة',
+  '6': 'السبت',
 };
 
 const SESSION_TYPE_LABELS: Record<AutoPunchOutRule['sessionType'], string> = {
@@ -49,7 +51,7 @@ const SECTION_TITLES: Record<EditSection, string> = {
   schedule: 'جدول العمل',
   punchout: 'الانصراف التلقائي',
   overtime: 'العمل الإضافي',
-  rest: 'أيام الراحة والتنبيهات',
+  rest: 'التنبيهات',
   leave: 'سياسة الإجازات',
 };
 
@@ -57,7 +59,7 @@ const SECTION_SUCCESS: Record<EditSection, string> = {
   schedule: 'تم تحديث جدول العمل',
   punchout: 'تم تحديث إعدادات الانصراف التلقائي',
   overtime: 'تم تحديث إعدادات العمل الإضافي',
-  rest: 'تم تحديث أيام الراحة والتنبيهات',
+  rest: 'تم تحديث إعدادات التنبيهات',
   leave: 'تم تحديث سياسة الإجازات',
 };
 
@@ -80,17 +82,19 @@ function PolicyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DayPill({ label, active }: { label: string; active: boolean }) {
+function ScheduleRow({ dayKey, schedule }: { dayKey: string; schedule: WorkSchedule }) {
+  const day = schedule[dayKey as '0' | '1' | '2' | '3' | '4' | '5' | '6'];
   return (
-    <span
-      className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-        active
-          ? 'bg-blue-600 text-white border-blue-600'
-          : 'bg-white text-gray-300 border-gray-150'
-      }`}
-    >
-      {label}
-    </span>
+    <div className="flex items-center justify-between py-2 border-b border-dashed border-gray-100 last:border-0">
+      <span className="text-xs text-gray-600 font-medium">{DAY_NAMES_AR[dayKey]}</span>
+      {day ? (
+        <span dir="ltr" className="text-sm text-gray-800 font-semibold">
+          {day.start} – {day.end}
+        </span>
+      ) : (
+        <span className="text-xs text-gray-400 font-medium">راحة</span>
+      )}
+    </div>
   );
 }
 
@@ -222,8 +226,7 @@ export function AttendancePolicyPage() {
     try {
       setSavingPolicy(true);
       const updated = await policyService.updatePolicy({
-        work_start_time: editPolicy.work_start_time,
-        work_end_time: editPolicy.work_end_time,
+        work_schedule: editPolicy.work_schedule,
         grace_period_minutes: editPolicy.grace_period_minutes,
         absent_cutoff_time: editPolicy.absent_cutoff_time,
         auto_punch_out_buffer_minutes:
@@ -231,10 +234,8 @@ export function AttendancePolicyPage() {
         auto_punch_out_rules: editPolicy.auto_punch_out_rules,
         minimum_overtime_minutes:
           editPolicy.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
-        weekly_off_days: editPolicy.weekly_off_days,
         max_late_days_before_warning: editPolicy.max_late_days_before_warning,
         annual_leave_per_year: editPolicy.annual_leave_per_year,
-        sick_leave_per_year: editPolicy.sick_leave_per_year,
       });
       setPolicy(updated);
       toast.success(SECTION_SUCCESS[activeSection]);
@@ -320,8 +321,9 @@ export function AttendancePolicyPage() {
                   title="جدول العمل"
                   onEdit={isAdmin ? () => openSection('schedule') : undefined}
                 >
-                  <PolicyRow label="وقت بدء العمل" value={policy.work_start_time} />
-                  <PolicyRow label="وقت نهاية العمل" value={policy.work_end_time} />
+                  {(['0', '1', '2', '3', '4', '5', '6'] as const).map((dow) => (
+                    <ScheduleRow key={dow} dayKey={dow} schedule={policy.work_schedule} />
+                  ))}
                   <PolicyRow label="فترة السماح" value={`${policy.grace_period_minutes} دقيقة`} />
                   <PolicyRow label="وقت قطع الغياب" value={policy.absent_cutoff_time} />
                 </PolicyCard>
@@ -385,21 +387,13 @@ export function AttendancePolicyPage() {
                   icon={<CalendarDays className="w-4 h-4 text-slate-500" />}
                   iconBg="bg-slate-100"
                   accentBorder="border-r-slate-300"
-                  title="أيام الراحة والتنبيهات"
+                  title="التنبيهات"
                   onEdit={isAdmin ? () => openSection('rest') : undefined}
                 >
                   <PolicyRow
                     label="الحد الأقصى للتأخر قبل التنبيه"
                     value={`${policy.max_late_days_before_warning} أيام`}
                   />
-                  <div className="pt-2.5">
-                    <p className="text-xs text-gray-400 mb-2 font-medium">أيام العمل</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                        <DayPill key={d} label={DAY_NAMES[d]} active={!policy.weekly_off_days.includes(d)} />
-                      ))}
-                    </div>
-                  </div>
                 </PolicyCard>
               </>
             )}
@@ -440,18 +434,15 @@ export function AttendancePolicyPage() {
               {/* ── جدول العمل ───────────────────────────────────────────────── */}
               {activeSection === 'schedule' && (
                 <>
-                  <FormRow label="وقت بدء العمل">
-                    <input type="time" dir="ltr" className={TIME_INPUT}
-                      value={editPolicy.work_start_time}
-                      onChange={(e) => setEditPolicy((p) => p ? { ...p, work_start_time: e.target.value } : p)}
+                  <div className="py-2 border-b border-gray-50">
+                    <p className="text-xs text-gray-500 font-medium mb-2">جدول العمل الأسبوعي</p>
+                    <WorkScheduleEditor
+                      value={editPolicy.work_schedule}
+                      onChange={(next) =>
+                        setEditPolicy((p) => (p ? { ...p, work_schedule: next } : p))
+                      }
                     />
-                  </FormRow>
-                  <FormRow label="وقت نهاية العمل">
-                    <input type="time" dir="ltr" className={TIME_INPUT}
-                      value={editPolicy.work_end_time}
-                      onChange={(e) => setEditPolicy((p) => p ? { ...p, work_end_time: e.target.value } : p)}
-                    />
-                  </FormRow>
+                  </div>
                   <FormRow label="فترة السماح (دقيقة)">
                     <input type="number" className={NUM_INPUT}
                       value={editPolicy.grace_period_minutes}
@@ -567,59 +558,14 @@ export function AttendancePolicyPage() {
                 </FormRow>
               )}
 
-              {/* ── أيام الراحة والتنبيهات ────────────────────────────────────── */}
+              {/* ── التنبيهات ────────────────────────────────────────────────── */}
               {activeSection === 'rest' && (
-                <>
-                  <div className="py-2 border-b border-gray-50">
-                    <p className="text-xs text-gray-500 font-medium mb-2">أيام العمل</p>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { d: 0, label: 'الأحد' },
-                        { d: 1, label: 'الاثنين' },
-                        { d: 2, label: 'الثلاثاء' },
-                        { d: 3, label: 'الأربعاء' },
-                        { d: 4, label: 'الخميس' },
-                        { d: 5, label: 'الجمعة' },
-                        { d: 6, label: 'السبت' },
-                      ].map(({ d, label }) => {
-                        const checked = !editPolicy.weekly_off_days.includes(d);
-                        return (
-                          <label
-                            key={d}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors font-semibold ${
-                              checked
-                                ? 'bg-blue-600 border-blue-600 text-white'
-                                : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() =>
-                                setEditPolicy((prev) => {
-                                  if (!prev) return prev;
-                                  const isWorkDay = !prev.weekly_off_days.includes(d);
-                                  const next = isWorkDay
-                                    ? [...prev.weekly_off_days, d].sort((a, b) => a - b)
-                                    : prev.weekly_off_days.filter((x) => x !== d);
-                                  return { ...prev, weekly_off_days: next };
-                                })
-                              }
-                              className="sr-only"
-                            />
-                            {label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <FormRow label="الحد الأقصى للتأخر قبل التنبيه (أيام)">
-                    <input type="number" className={NUM_INPUT}
-                      value={editPolicy.max_late_days_before_warning}
-                      onChange={(e) => setEditPolicy((p) => p ? { ...p, max_late_days_before_warning: Number(e.target.value) || 0 } : p)}
-                    />
-                  </FormRow>
-                </>
+                <FormRow label="الحد الأقصى للتأخر قبل التنبيه (أيام)">
+                  <input type="number" className={NUM_INPUT}
+                    value={editPolicy.max_late_days_before_warning}
+                    onChange={(e) => setEditPolicy((p) => p ? { ...p, max_late_days_before_warning: Number(e.target.value) || 0 } : p)}
+                  />
+                </FormRow>
               )}
 
               {/* ── سياسة الإجازات ────────────────────────────────────────────── */}

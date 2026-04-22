@@ -7,6 +7,28 @@ const DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES = 5;
 import type { PunchServiceClient } from '../punch/handler.ts';
 import { resolveCheckoutOvertimeHandling } from '../punch/handler.ts';
 
+type DayScheduleJson = { start: string; end: string };
+type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
+
+function parseWorkSchedule(raw: unknown): WorkScheduleJson {
+  if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const result: WorkScheduleJson = {};
+  for (const key of ['0', '1', '2', '3', '4', '5', '6'] as const) {
+    const day = (raw as Record<string, unknown>)[key];
+    if (
+      day !== null &&
+      typeof day === 'object' &&
+      typeof (day as { start?: unknown }).start === 'string' &&
+      typeof (day as { end?: unknown }).end === 'string'
+    ) {
+      result[key] = { start: (day as DayScheduleJson).start, end: (day as DayScheduleJson).end };
+    }
+  }
+  return result;
+}
+
 /** Shifts a UTC Date to org local time (UTC+3) so date/time components are correct. */
 export function toOrgLocalDate(d: Date, offsetHours = 3): Date {
   return new Date(d.getTime() + offsetHours * 3600 * 1000);
@@ -195,48 +217,36 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     for (const session of openSessions) {
       const { data: profileRaw } = await admin
         .from('profiles')
-        .select('work_days, work_start_time, work_end_time')
+        .select('work_schedule')
         .eq('id', session.user_id)
         .single();
 
       const profile = profileRaw as {
-        work_days?: number[] | null;
-        work_start_time?: string | null;
-        work_end_time?: string | null;
+        work_schedule?: unknown | null;
       } | null;
 
       const { data: policyRaw } = await admin
         .from('attendance_policy')
-        .select('work_end_time, auto_punch_out_buffer_minutes, weekly_off_days, minimum_overtime_minutes')
+        .select('work_schedule, auto_punch_out_buffer_minutes, minimum_overtime_minutes')
         .eq('org_id', session.org_id)
         .limit(1)
         .maybeSingle();
 
       const policy = policyRaw as {
-        work_end_time?: string | null;
+        work_schedule?: unknown | null;
         auto_punch_out_buffer_minutes?: number | null;
-        weekly_off_days?: number[] | null;
         minimum_overtime_minutes?: number | null;
       } | null;
 
-      const hasCustomSchedule =
-        profile?.work_days &&
-        profile.work_days.length > 0 &&
-        profile.work_start_time &&
-        profile.work_end_time;
-
-      const workEndTime = hasCustomSchedule ? profile!.work_end_time! : policy?.work_end_time ?? null;
+      const userSchedule = parseWorkSchedule(profile?.work_schedule);
+      const orgSchedule = parseWorkSchedule(policy?.work_schedule);
+      const dayKey = String(dayOfWeek) as '0' | '1' | '2' | '3' | '4' | '5' | '6';
+      const effective = userSchedule[dayKey] ?? orgSchedule[dayKey] ?? null;
+      const workEndTime = effective?.end ?? null;
       const bufferMinutes = policy?.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES;
-      const weeklyOff = policy?.weekly_off_days ?? [5, 6];
 
-      // No user schedule + no org policy means no configured shift, so this
-      // safety-net job should not invent a fallback shift end and auto-close it.
-      if (!workEndTime) continue;
-
-      const isWorkingDay = hasCustomSchedule
-        ? (profile!.work_days ?? []).includes(dayOfWeek)
-        : !weeklyOff.includes(dayOfWeek);
-      if (!isWorkingDay) continue;
+      // No effective shift for today (off day or no config), skip.
+      if (!effective || !workEndTime) continue;
 
       const shiftEndMinutes = timeToMinutes(workEndTime);
       const cutoffMinutes = shiftEndMinutes + bufferMinutes;

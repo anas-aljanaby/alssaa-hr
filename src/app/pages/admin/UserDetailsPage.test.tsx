@@ -112,9 +112,13 @@ function setupSuccessfulDataLoad() {
     email: 'sara@example.com',
     role: 'employee',
     department_id: 'dept-1',
-    work_days: [0, 1, 2, 3, 4],
-    work_start_time: '08:00',
-    work_end_time: '16:00',
+    work_schedule: {
+      '0': { start: '08:00', end: '16:00' },
+      '1': { start: '08:00', end: '16:00' },
+      '2': { start: '08:00', end: '16:00' },
+      '3': { start: '08:00', end: '16:00' },
+      '4': { start: '08:00', end: '16:00' },
+    },
     manager_id: null,
     created_at: '2026-03-01T00:00:00.000Z',
   });
@@ -135,7 +139,6 @@ function setupSuccessfulDataLoad() {
       gracePeriodMinutes: 15,
       bufferMinutesAfterShift: 5,
       minimumOvertimeMinutes: 30,
-      weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     },
     sessions: [

@@ -9,6 +9,12 @@ import {
   type TeamAttendanceDateState,
   type TeamAttendanceLiveState,
 } from '@/shared/attendance';
+import {
+  getShiftForDate,
+  isWorkingDay as isWorkingDayFromSchedule,
+  resolveEffectiveSchedule,
+  type EffectiveSchedule,
+} from '@/shared/attendance/workSchedule';
 
 export type AttendanceStatus = 'present' | 'late';
 export type AttendanceLogStatus = AttendanceStatus | 'absent' | 'on_leave';
@@ -52,8 +58,6 @@ export interface ShiftInfo {
   bufferMinutesAfterShift: number;
   /** Minimum overtime segment length that must be reached before overtime is counted. */
   minimumOvertimeMinutes: number;
-  /** JavaScript getDay() values that are off (e.g. [5, 6] = Fri, Sat). Default [5, 6]. */
-  weeklyOffDays: number[];
   /** Org policy: minimum minutes worked to count shift fulfilled; null = use full scheduled duration only in UI logic. */
   minimumRequiredMinutes: number | null;
 }
@@ -299,8 +303,9 @@ export interface TodayPunchUiState {
 export function getTodayPunchUiState(today: TodayRecord, at: Date = new Date()): TodayPunchUiState {
   const { shift } = today;
   const currentMinutes = at.getHours() * 60 + at.getMinutes();
-  const dayOfWeek = at.getDay();
-  const isOvertimeNow = shift ? isOvertimeTime(currentMinutes, shift, dayOfWeek) : false;
+  // `shift === null` means today is an off day (or no policy found): any
+  // punch is overtime.
+  const isOvertimeNow = shift ? isOvertimeTime(currentMinutes, shift) : true;
   const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
   const canPunchIn =
     !shift || isOvertimeNow || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
@@ -319,12 +324,10 @@ export function isShiftRequirementMet(shift: ShiftInfo, totalWorkedMinutes: numb
   return totalWorkedMinutes >= full || (min != null && totalWorkedMinutes >= min);
 }
 
-export function shouldShowShiftCongrats(today: TodayRecord, at: Date = new Date()): boolean {
+export function shouldShowShiftCongrats(today: TodayRecord, _at: Date = new Date()): boolean {
   const { shift } = today;
+  // A null shift means today is an off day — nothing to celebrate.
   if (!shift) return false;
-  const dayOfWeek = at.getDay();
-  const isWorkingDay = !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek);
-  if (!isWorkingDay) return false;
   if (isCheckedInToday(today)) return false;
   const worked = totalWorkedMinutesToday(today);
   if (worked <= 0) return false;
@@ -335,16 +338,16 @@ export function shouldShowShiftCongrats(today: TodayRecord, at: Date = new Date(
 }
 
 /**
- * Unified overtime check. A time is "overtime" when:
- * - It's a non-working day, OR
+ * Unified overtime check. Callers pass the shift for the relevant date
+ * (null = off day). A time is "overtime" when:
+ * - The day is an off day (caller should pass null shift, which short-circuits), OR
  * - On a working day: before (shiftStart - 60) or after shiftEnd
  *
  * The 1-hour window before shift start is "early login" (not overtime).
- * Anything after shift end is overtime. The buffer only controls auto-punch-out timing.
+ * Anything after shift end is overtime. The buffer only controls
+ * auto-punch-out timing.
  */
-export function isOvertimeTime(timeMinutes: number, shift: ShiftInfo, dayOfWeek: number): boolean {
-  const isWorkingDay = !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek);
-  if (!isWorkingDay) return true;
+export function isOvertimeTime(timeMinutes: number, shift: ShiftInfo): boolean {
   const startMin = toMinutes(shift.workStartTime);
   const endMin = toMinutes(shift.workEndTime);
   return timeMinutes < startMin - 60 || timeMinutes > endMin;
@@ -476,13 +479,11 @@ function buildHistoryDay(params: {
   date: string;
   summary: AttendanceDailySummary | undefined;
   sessions: AttendanceSession[];
-  shift: ShiftInfo | null;
+  isOffDay: boolean;
   todayStr_: string;
   joinDate?: string | null;
 }): AttendanceHistoryDay | null {
-  const { date, sessions, shift, todayStr_, joinDate } = params;
-  const offDays = shift?.weeklyOffDays ?? [5, 6];
-  const isOffDay = offDays.includes(new Date(`${date}T00:00:00`).getDay());
+  const { date, sessions, isOffDay, todayStr_, joinDate } = params;
   const summary = buildSummaryFallback(sessions, params.summary);
   const calendarStatus = resolveCalendarStatus(date, isOffDay, summary, todayStr_, joinDate);
   const primaryState = mapHistoryPrimaryState(calendarStatus, summary?.is_incomplete_shift ?? false);
@@ -581,64 +582,83 @@ export function toAttendanceLog(record: {
   return buildPseudoLog(date, sessions, summary);
 }
 
-/** Returns effective shift for a user: per-user schedule if set, else org policy. */
-export async function getEffectiveShiftForUser(userId: string): Promise<ShiftInfo | null> {
+function parseDateOnlyStr(value: string): Date {
+  // Interpret "YYYY-MM-DD" as local date so getDay() matches the calendar.
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
+}
+
+/**
+ * Fetches the raw work_schedule json for user and org, plus the policy
+ * fields needed to build a ShiftInfo. Returned objects are the
+ * normalized WorkSchedule maps.
+ */
+export async function getEffectiveScheduleForUser(userId: string): Promise<{
+  schedule: EffectiveSchedule;
+  policy: {
+    gracePeriodMinutes: number;
+    bufferMinutesAfterShift: number;
+    minimumOvertimeMinutes: number;
+    minimumRequiredMinutes: number | null;
+  } | null;
+} | null> {
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('work_days, work_start_time, work_end_time, org_id')
+    .select('work_schedule, org_id')
     .eq('id', userId)
     .single();
 
   if (profileError || !profile) return null;
 
-  const hasCustomSchedule =
-    profile.work_days &&
-    profile.work_days.length > 0 &&
-    profile.work_start_time &&
-    profile.work_end_time;
-
-  if (hasCustomSchedule) {
-    const { data: policy } = await supabase
-      .from('attendance_policy')
-      .select('grace_period_minutes, auto_punch_out_buffer_minutes, minimum_overtime_minutes, minimum_required_minutes')
-      .eq('org_id', profile.org_id)
-      .limit(1)
-      .maybeSingle();
-
-    const weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !profile.work_days!.includes(d));
-    return {
-      workStartTime: profile.work_start_time!,
-      workEndTime: profile.work_end_time!,
-      gracePeriodMinutes: policy?.grace_period_minutes ?? 15,
-      bufferMinutesAfterShift:
-        policy?.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
-      minimumOvertimeMinutes:
-        policy?.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
-      weeklyOffDays,
-      minimumRequiredMinutes: policy?.minimum_required_minutes ?? null,
-    };
-  }
-
   const { data: policy } = await supabase
     .from('attendance_policy')
     .select(
-      'work_start_time, work_end_time, grace_period_minutes, auto_punch_out_buffer_minutes, minimum_overtime_minutes, weekly_off_days, minimum_required_minutes'
+      'work_schedule, grace_period_minutes, auto_punch_out_buffer_minutes, minimum_overtime_minutes, minimum_required_minutes'
     )
     .eq('org_id', profile.org_id)
     .limit(1)
     .maybeSingle();
 
-  if (!policy) return null;
+  const schedule = resolveEffectiveSchedule(profile.work_schedule, policy?.work_schedule);
+
   return {
-    workStartTime: policy.work_start_time,
-    workEndTime: policy.work_end_time,
-    gracePeriodMinutes: policy.grace_period_minutes,
-    bufferMinutesAfterShift:
-      policy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
-    minimumOvertimeMinutes:
-      policy.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
-    weeklyOffDays: policy.weekly_off_days ?? [5, 6],
-    minimumRequiredMinutes: policy.minimum_required_minutes ?? null,
+    schedule,
+    policy: policy
+      ? {
+          gracePeriodMinutes: policy.grace_period_minutes ?? 15,
+          bufferMinutesAfterShift:
+            policy.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
+          minimumOvertimeMinutes:
+            policy.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
+          minimumRequiredMinutes: policy.minimum_required_minutes ?? null,
+        }
+      : null,
+  };
+}
+
+/**
+ * Returns the effective shift for a user on a specific date, or null if
+ * the user does not work that day. Per-user schedule (work_schedule) wins
+ * over per-org policy schedule (attendance_policy.work_schedule).
+ */
+export async function getEffectiveShiftForUser(
+  userId: string,
+  dateStr?: string,
+): Promise<ShiftInfo | null> {
+  const resolved = await getEffectiveScheduleForUser(userId);
+  if (!resolved || !resolved.policy) return null;
+
+  const date = dateStr ? parseDateOnlyStr(dateStr) : new Date();
+  const day = getShiftForDate(date, resolved.schedule.user, resolved.schedule.org);
+  if (!day) return null;
+
+  return {
+    workStartTime: day.start,
+    workEndTime: day.end,
+    gracePeriodMinutes: resolved.policy.gracePeriodMinutes,
+    bufferMinutesAfterShift: resolved.policy.bufferMinutesAfterShift,
+    minimumOvertimeMinutes: resolved.policy.minimumOvertimeMinutes,
+    minimumRequiredMinutes: resolved.policy.minimumRequiredMinutes,
   };
 }
 
@@ -650,7 +670,7 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
     .eq('user_id', userId)
     .eq('date', today)
     .order('check_in_time', { ascending: true });
-  const shift = await getEffectiveShiftForUser(userId);
+  const shift = await getEffectiveShiftForUser(userId, today);
   const summaryRes = await supabase
     .from('attendance_daily_summary')
     .select('*')
@@ -682,7 +702,7 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
       .eq('user_id', userId)
       .eq('date', date)
       .maybeSingle(),
-    getEffectiveShiftForUser(userId),
+    getEffectiveShiftForUser(userId, date),
   ]);
 
   if (sessionsRes.error) throw sessionsRes.error;
@@ -749,20 +769,21 @@ export async function getAttendanceMonthly(
   const lastDay = new Date(year, month + 1, 0).getDate();
   const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  const [summariesRes, shift, joinDate] = await Promise.all([
+  const [summariesRes, scheduleBundle, joinDate] = await Promise.all([
     supabase
       .from('attendance_daily_summary')
       .select('*')
       .eq('user_id', userId)
       .gte('date', from)
       .lte('date', to),
-    getEffectiveShiftForUser(userId),
+    getEffectiveScheduleForUser(userId),
     getUserJoinDate(userId),
   ]);
 
   if (summariesRes.error) throw summariesRes.error;
   const summaryMap = new Map((summariesRes.data ?? []).map((s) => [s.date, s]));
-  const offDays = shift?.weeklyOffDays ?? [5, 6];
+  const userSchedule = scheduleBundle?.schedule.user ?? {};
+  const orgSchedule = scheduleBundle?.schedule.org ?? {};
 
   const today = new Date();
   const todayStr_ = todayStr(today);
@@ -771,8 +792,8 @@ export async function getAttendanceMonthly(
   const summaries: MonthDaySummary[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const dayOfWeek = new Date(dateStr).getDay();
-    const isOffDay = offDays.includes(dayOfWeek);
+    const dateObj = parseDateOnlyStr(dateStr);
+    const isOffDay = !isWorkingDayFromSchedule(dateObj, userSchedule, orgSchedule);
     const summary = summaryMap.get(dateStr);
     const status = resolveCalendarStatus(dateStr, isOffDay, summary, todayStr_, joinDate);
 
@@ -797,7 +818,7 @@ export async function getAttendanceHistoryMonth(
   const lastDay = new Date(year, month + 1, 0).getDate();
   const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  const [summariesRes, sessionsRes, shift, joinDate] = await Promise.all([
+  const [summariesRes, sessionsRes, scheduleBundle, joinDate] = await Promise.all([
     supabase
       .from('attendance_daily_summary')
       .select('*')
@@ -812,7 +833,7 @@ export async function getAttendanceHistoryMonth(
       .lte('date', to)
       .order('date', { ascending: true })
       .order('check_in_time', { ascending: true }),
-    getEffectiveShiftForUser(userId),
+    getEffectiveScheduleForUser(userId),
     getUserJoinDate(userId),
   ]);
 
@@ -827,15 +848,19 @@ export async function getAttendanceHistoryMonth(
     sessionsByDate.set(session.date, existing);
   }
 
+  const userSchedule = scheduleBundle?.schedule.user ?? {};
+  const orgSchedule = scheduleBundle?.schedule.org ?? {};
   const todayStr_ = todayStr(new Date());
   const items: AttendanceHistoryDay[] = [];
   for (let day = 1; day <= lastDay; day++) {
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dateObj = parseDateOnlyStr(date);
+    const isOffDay = !isWorkingDayFromSchedule(dateObj, userSchedule, orgSchedule);
     const historyDay = buildHistoryDay({
       date,
       summary: summaryMap.get(date),
       sessions: sessionsByDate.get(date) ?? [],
-      shift,
+      isOffDay,
       todayStr_,
       joinDate,
     });
@@ -1027,15 +1052,14 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
       .select('org_id')
       .eq('id', userId)
       .single(),
-    getEffectiveShiftForUser(userId),
+    getEffectiveShiftForUser(userId, today),
   ]);
 
   if (profileError || !profile?.org_id) throw profileError ?? new Error('Missing profile org');
-  const nowDate = new Date();
-  const dayOfWeek = nowDate.getDay();
   const nowMin = toMinutes(time);
-  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
-  const isOvertimePunch = shift ? isOvertimeTime(nowMin, shift, dayOfWeek) : false;
+  // null shift = off day in the new schedule model: any punch is overtime.
+  const isWorkingDay = shift !== null;
+  const isOvertimePunch = shift ? isOvertimeTime(nowMin, shift) : true;
 
   let status: AttendanceStatus = 'present';
   if (shift && !isOvertimePunch && isWorkingDay) {

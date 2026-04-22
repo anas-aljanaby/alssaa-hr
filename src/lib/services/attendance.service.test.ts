@@ -67,18 +67,20 @@ const profileShift = {
   department_id: 'd1',
   avatar_url: null as string | null,
   join_date: '2020-01-01',
-  work_days: null as number[] | null,
-  work_start_time: null as string | null,
-  work_end_time: null as string | null,
+  work_schedule: null as unknown,
 };
 
 const policyRow = {
   id: 'p1',
   org_id: 'o1',
-  work_start_time: '08:00',
-  work_end_time: '16:00',
+  work_schedule: {
+    '0': { start: '08:00', end: '16:00' },
+    '1': { start: '08:00', end: '16:00' },
+    '2': { start: '08:00', end: '16:00' },
+    '3': { start: '08:00', end: '16:00' },
+    '4': { start: '08:00', end: '16:00' },
+  },
   grace_period_minutes: 15,
-  weekly_off_days: [5, 6],
   max_late_days_before_warning: 3,
   absent_cutoff_time: '12:00',
   annual_leave_per_year: 21,
@@ -100,7 +102,7 @@ describe('attendance.service', () => {
     vi.useRealTimers();
   });
 
-  it('isOvertimeTime detects weekend as overtime', async () => {
+  it('isOvertimeTime detects time outside shift as overtime', async () => {
     const { isOvertimeTime } = await import('./attendance.service');
     const shift = {
       workStartTime: '08:00',
@@ -108,10 +110,12 @@ describe('attendance.service', () => {
       gracePeriodMinutes: 10,
       bufferMinutesAfterShift: 5,
       minimumOvertimeMinutes: 30,
-      weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
-    expect(isOvertimeTime(9 * 60, shift, 5)).toBe(true);
+    // 17:00 is after shift end (16:00), so it counts as overtime.
+    expect(isOvertimeTime(17 * 60, shift)).toBe(true);
+    // 09:00 is well within the shift window (start 08:00, early-login 07:00).
+    expect(isOvertimeTime(9 * 60, shift)).toBe(false);
   });
 
   it('wallTimeToMinutes parses ISO and HH:MM', async () => {
@@ -128,7 +132,6 @@ describe('attendance.service', () => {
       gracePeriodMinutes: 15,
       bufferMinutesAfterShift: 5,
       minimumOvertimeMinutes: 30,
-      weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
     type TodayRecord = import('./attendance.service').TodayRecord;
@@ -150,7 +153,6 @@ describe('attendance.service', () => {
       gracePeriodMinutes: 15,
       bufferMinutesAfterShift: 5,
       minimumOvertimeMinutes: 30,
-      weeklyOffDays: [5, 6],
       minimumRequiredMinutes: 420,
     };
     expect(isShiftRequirementMet(shift, 419)).toBe(false);
@@ -169,7 +171,6 @@ describe('attendance.service', () => {
       gracePeriodMinutes: 15,
       bufferMinutesAfterShift: 5,
       minimumOvertimeMinutes: 30,
-      weeklyOffDays: [5, 6],
       minimumRequiredMinutes: null,
     };
     const tuesday = new Date('2025-06-10T19:00:00');

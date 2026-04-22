@@ -69,7 +69,33 @@ import {
   type DisplayStatus,
   type LivePresence,
 } from '@/shared/attendance';
+import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
+import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
 import { StatusBadge } from '@/shared/components';
+
+const DAY_LABELS_AR: Record<string, string> = {
+  '0': 'الأحد',
+  '1': 'الإثنين',
+  '2': 'الثلاثاء',
+  '3': 'الأربعاء',
+  '4': 'الخميس',
+  '5': 'الجمعة',
+  '6': 'السبت',
+};
+
+function renderScheduleSummary(schedule: WorkSchedule): string {
+  const parts: string[] = [];
+  for (const key of ['0', '1', '2', '3', '4', '5', '6'] as const) {
+    const day = schedule[key];
+    const label = DAY_LABELS_AR[key];
+    if (day) {
+      parts.push(`${label}: ${day.start}–${day.end}`);
+    } else {
+      parts.push(`${label}: راحة`);
+    }
+  }
+  return parts.join(' · ');
+}
 
 type AttendanceFilter =
   | 'all'
@@ -101,11 +127,9 @@ function getLivePresenceForTodayRecord(todayRecord: TodayRecord): LivePresence {
   return 'no_session';
 }
 
-function getDayStateForTodayRecord(todayRecord: TodayRecord, at: Date) {
-  const dayOfWeek = at.getDay();
-  const isOffDay = todayRecord.shift
-    ? (todayRecord.shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek)
-    : false;
+function getDayStateForTodayRecord(todayRecord: TodayRecord, _at: Date) {
+  // In the new schedule model, shift === null indicates an off day.
+  const isOffDay = todayRecord.shift === null;
   const hasOvertime =
     todayRecord.summary?.has_overtime === true ||
     (todayRecord.summary?.total_overtime_minutes ?? 0) > 0 ||
@@ -125,8 +149,6 @@ function getDayStateForTodayRecord(todayRecord: TodayRecord, at: Date) {
 
 function isWithinShiftWindow(todayRecord: TodayRecord, at: Date): boolean {
   if (!todayRecord.shift) return false;
-  const dayOfWeek = at.getDay();
-  if ((todayRecord.shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek)) return false;
 
   const currentMinutes = at.getHours() * 60 + at.getMinutes();
   const [endHour, endMinute] = todayRecord.shift.workEndTime.split(':').map(Number);
@@ -208,9 +230,7 @@ export function UserDetailsPage() {
       email: '',
       role: 'employee',
       department_id: '',
-      work_days: undefined,
-      work_start_time: '',
-      work_end_time: '',
+      work_schedule: {},
     },
   });
 
@@ -277,18 +297,18 @@ export function UserDetailsPage() {
 
   const openEditModal = useCallback(() => {
     if (!profile) return;
-    const fallbackWorkDays = orgPolicy?.weekly_off_days
-      ? [0, 1, 2, 3, 4, 5, 6].filter((d) => !orgPolicy.weekly_off_days.includes(d))
-      : undefined;
+    const userSchedule = toWorkSchedule(profile.work_schedule);
+    const hasUserSchedule = Object.keys(userSchedule).length > 0;
+    const initialSchedule: WorkSchedule = hasUserSchedule
+      ? userSchedule
+      : toWorkSchedule(orgPolicy?.work_schedule);
     setShowEditModal(true);
     editProfileForm.reset({
       name_ar: profile.name_ar,
       email: profile.email ?? '',
       role: profile.role,
       department_id: profile.department_id ?? '',
-      work_days: profile.work_days ?? fallbackWorkDays,
-      work_start_time: profile.work_start_time ?? orgPolicy?.work_start_time ?? '',
-      work_end_time: profile.work_end_time ?? orgPolicy?.work_end_time ?? '',
+      work_schedule: initialSchedule,
     });
   }, [profile, orgPolicy, editProfileForm]);
 
@@ -454,17 +474,12 @@ export function UserDetailsPage() {
     }
     setEditSubmitting(true);
     try {
-      const hasWorkDays = data.work_days && data.work_days.length > 0;
-      const workStart = data.work_start_time?.trim();
-      const workEnd = data.work_end_time?.trim();
       await profilesService.updateUser(profile.id, {
         name_ar: data.name_ar.trim(),
         email: data.email?.trim() || null,
         role: profile.role,
         department_id: profile.department_id,
-        work_days: hasWorkDays && workStart && workEnd ? data.work_days! : null,
-        work_start_time: hasWorkDays && workStart && workEnd ? workStart : null,
-        work_end_time: hasWorkDays && workStart && workEnd ? workEnd : null,
+        work_schedule: (data.work_schedule ?? {}) as never,
       });
       toast.success('تم تحديث المستخدم');
       setShowEditModal(false);
@@ -675,25 +690,16 @@ export function UserDetailsPage() {
                 {roleLabel(profile.role)}
               </span>
             </div>
-            {profile.work_days && profile.work_days.length > 0 && profile.work_start_time && profile.work_end_time && (
-              <p className="text-xs text-gray-500 mt-2" dir="rtl">
-                أيام العمل:{' '}
-                {[
-                  { d: 0, label: 'الأحد' },
-                  { d: 1, label: 'الإثنين' },
-                  { d: 2, label: 'الثلاثاء' },
-                  { d: 3, label: 'الأربعاء' },
-                  { d: 4, label: 'الخميس' },
-                  { d: 5, label: 'الجمعة' },
-                  { d: 6, label: 'السبت' },
-                ]
-                  .filter(({ d }) => profile.work_days!.includes(d))
-                  .map(({ label }) => label)
-                  .join('، ')}
-                {' — '}
-                <span dir="ltr">{profile.work_start_time}–{profile.work_end_time}</span>
-              </p>
-            )}
+            {(() => {
+              const schedule = toWorkSchedule(profile.work_schedule);
+              const hasSchedule = Object.keys(schedule).length > 0;
+              if (!hasSchedule) return null;
+              return (
+                <p className="text-[11px] text-gray-500 mt-2 leading-relaxed" dir="rtl">
+                  {renderScheduleSummary(schedule)}
+                </p>
+              );
+            })()}
           </div>
         </div>
 
@@ -851,29 +857,30 @@ export function UserDetailsPage() {
                 </button>
               )}
             </div>
-            {profile.work_days && profile.work_days.length > 0 && profile.work_start_time && profile.work_end_time ? (
-              <div className="text-sm text-gray-700">
-                <p className="text-xs text-gray-500 mb-1">أيام العمل</p>
-                <p className="mb-2">
-                  {[
-                    { d: 0, label: 'الأحد' },
-                    { d: 1, label: 'الإثنين' },
-                    { d: 2, label: 'الثلاثاء' },
-                    { d: 3, label: 'الأربعاء' },
-                    { d: 4, label: 'الخميس' },
-                    { d: 5, label: 'الجمعة' },
-                    { d: 6, label: 'السبت' },
-                  ]
-                    .filter(({ d }) => profile.work_days!.includes(d))
-                    .map(({ label }) => label)
-                    .join('، ')}
-                </p>
-                <p className="text-xs text-gray-500">وقت الدوام</p>
-                <p dir="ltr">{profile.work_start_time} – {profile.work_end_time}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">حسب إعدادات المنظمة</p>
-            )}
+            {(() => {
+              const schedule = toWorkSchedule(profile.work_schedule);
+              const hasSchedule = Object.keys(schedule).length > 0;
+              if (!hasSchedule) {
+                return <p className="text-sm text-gray-500">حسب إعدادات المنظمة</p>;
+              }
+              return (
+                <div className="text-xs text-gray-700 space-y-1" dir="rtl">
+                  {(['0', '1', '2', '3', '4', '5', '6'] as const).map((key) => {
+                    const day = schedule[key];
+                    return (
+                      <div key={key} className="flex justify-between border-b border-dashed border-gray-100 last:border-0 py-1">
+                        <span className="text-gray-500">{DAY_LABELS_AR[key]}</span>
+                        {day ? (
+                          <span dir="ltr" className="text-gray-800 font-medium">{day.start}–{day.end}</span>
+                        ) : (
+                          <span className="text-gray-400">راحة</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
@@ -1376,64 +1383,11 @@ export function UserDetailsPage() {
 
               <div className="border-t border-gray-100 pt-4">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
-                <p className="text-xs text-gray-500 mb-3">اختر أيام العمل ووقت البداية والنهاية (نفس التوقيت لجميع الأيام). إن لم تختر أي أيام تُستخدم إعدادات المنظمة.</p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {[
-                    { d: 0, label: 'الأحد' },
-                    { d: 1, label: 'الإثنين' },
-                    { d: 2, label: 'الثلاثاء' },
-                    { d: 3, label: 'الأربعاء' },
-                    { d: 4, label: 'الخميس' },
-                    { d: 5, label: 'الجمعة' },
-                    { d: 6, label: 'السبت' },
-                  ].map(({ d, label }) => {
-                    const workDays = editProfileForm.watch('work_days') ?? [];
-                    const checked = workDays.includes(d);
-                    return (
-                      <label
-                        key={d}
-                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
-                          checked ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            const prev = editProfileForm.getValues('work_days') ?? [];
-                            const next = prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b);
-                            editProfileForm.setValue('work_days', next);
-                          }}
-                          className="rounded border-gray-300"
-                        />
-                        {label}
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">وقت البداية</label>
-                    <input
-                      type="time"
-                      {...editProfileForm.register('work_start_time')}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                      dir="ltr"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">وقت النهاية</label>
-                    <input
-                      type="time"
-                      {...editProfileForm.register('work_end_time')}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
-                {editProfileForm.formState.errors.work_end_time && (
-                  <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.work_end_time.message}</p>
-                )}
+                <p className="text-xs text-gray-500 mb-3">حدّد أيام العمل ووقت كل يوم. الأيام غير المفعّلة تُعامَل كأيام راحة. إذا تُرك الجدول فارغاً بالكامل، تُستخدم إعدادات المنظمة.</p>
+                <WorkScheduleEditor
+                  value={editProfileForm.watch('work_schedule') ?? {}}
+                  onChange={(next) => editProfileForm.setValue('work_schedule', next, { shouldDirty: true })}
+                />
               </div>
 
               <button

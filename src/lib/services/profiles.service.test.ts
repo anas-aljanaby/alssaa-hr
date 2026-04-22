@@ -15,9 +15,7 @@ const profileRow = {
   department_id: 'd1',
   avatar_url: null as string | null,
   join_date: '2020-01-01',
-  work_days: null as number[] | null,
-  work_start_time: null as string | null,
-  work_end_time: null as string | null,
+  work_schedule: null as unknown,
 };
 
 function sessionToken(expiresAt: number) {

@@ -10,14 +10,13 @@ const defaultShift = {
   gracePeriodMinutes: 15,
   bufferMinutesAfterShift: 5,
   minimumOvertimeMinutes: 30,
-  weeklyOffDays: [5, 6] as number[],
   minimumRequiredMinutes: null as number | null,
 };
 
-function makeToday(weeklyOffDays: number[]): TodayRecord {
+function makeToday(options: { offDay?: boolean } = {}): TodayRecord {
   return {
     punches: [],
-    shift: { ...defaultShift, weeklyOffDays },
+    shift: options.offDay ? null : { ...defaultShift },
   };
 }
 
@@ -38,7 +37,7 @@ describe('TodayStatusCard overtime confirmation', () => {
 
     render(
       <TodayStatusCard
-        today={makeToday([5, 6])}
+        today={makeToday({ offDay: true })}
         actionLoading={false}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
@@ -61,7 +60,7 @@ describe('TodayStatusCard overtime confirmation', () => {
 
     render(
       <TodayStatusCard
-        today={makeToday([1])}
+        today={makeToday({ offDay: true })}
         actionLoading={false}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}
@@ -81,7 +80,7 @@ describe('TodayStatusCard overtime confirmation', () => {
 
     render(
       <TodayStatusCard
-        today={makeToday([5, 6])}
+        today={makeToday()}
         actionLoading={false}
         onCheckIn={onCheckIn}
         onCheckOut={onCheckOut}

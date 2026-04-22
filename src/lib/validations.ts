@@ -119,41 +119,30 @@ export const addUserSchema = z.object({
 });
 export type AddUserFormData = z.infer<typeof addUserSchema>;
 
-const workDay = z.number().int().min(0).max(6);
+const daySchedule = z.object({
+  start: z.string().regex(/^\d{2}:\d{2}$/),
+  end: z.string().regex(/^\d{2}:\d{2}$/),
+}).refine(s => s.start < s.end, { message: 'النهاية يجب أن تكون بعد البداية', path: ['end'] });
 
-const timeRegex = /^([01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
+export const workScheduleSchema = z.partialRecord(
+  z.enum(['0', '1', '2', '3', '4', '5', '6']),
+  daySchedule
+).default({});
+export type WorkScheduleFormData = z.infer<typeof workScheduleSchema>;
 
-export const updateProfileSchema = z
-  .object({
-    name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
-    email: z
-      .string()
-      .optional()
-      .refine(
-        (value) => !value || z.string().email().safeParse(value).success,
-        'البريد الإلكتروني غير صالح'
-      ),
-    role: z.enum(['employee', 'manager', 'admin'], { required_error: 'الدور مطلوب' }),
-    department_id: z.string(),
-    work_days: z.array(workDay).optional(),
-    work_start_time: z.string().optional(),
-    work_end_time: z.string().optional(),
-  })
-  .refine(
-    (data) => {
-      const hasDays = data.work_days && data.work_days.length > 0;
-      if (!hasDays) return true;
-
-      const hasStart = data.work_start_time && timeRegex.test(data.work_start_time);
-      const hasEnd = data.work_end_time && timeRegex.test(data.work_end_time);
-      if (!hasStart || !hasEnd) return false;
-
-      const [sh, sm] = data.work_start_time!.split(':').map(Number);
-      const [eh, em] = data.work_end_time!.split(':').map(Number);
-      return sh * 60 + sm < eh * 60 + em;
-    },
-    { message: 'يجب تحديد وقت البداية والنهاية وأن يكون وقت النهاية بعد البداية', path: ['work_end_time'] }
-  );
+export const updateProfileSchema = z.object({
+  name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
+  email: z
+    .string()
+    .optional()
+    .refine(
+      (value) => !value || z.string().email().safeParse(value).success,
+      'البريد الإلكتروني غير صالح'
+    ),
+  role: z.enum(['employee', 'manager', 'admin'], { required_error: 'الدور مطلوب' }),
+  department_id: z.string(),
+  work_schedule: workScheduleSchema,
+});
 export type UpdateProfileFormData = z.infer<typeof updateProfileSchema>;
 
 const departmentNameAr = z

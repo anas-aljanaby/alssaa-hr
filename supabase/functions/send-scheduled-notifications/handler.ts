@@ -51,18 +51,36 @@ type NotificationSetting = {
   minutes_before: number | null;
 };
 
+type DayScheduleJson = { start: string; end: string };
+type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
+
 type Profile = {
   id: string;
-  work_days: number[] | null;
-  work_start_time: string | null;
-  work_end_time: string | null;
+  work_schedule: unknown | null;
 };
 
 type Policy = {
-  work_start_time: string;
-  work_end_time: string;
-  weekly_off_days: number[];
+  work_schedule: unknown | null;
 };
+
+function parseWorkSchedule(raw: unknown): WorkScheduleJson {
+  if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const result: WorkScheduleJson = {};
+  for (const key of ['0', '1', '2', '3', '4', '5', '6'] as const) {
+    const day = (raw as Record<string, unknown>)[key];
+    if (
+      day !== null &&
+      typeof day === 'object' &&
+      typeof (day as { start?: unknown }).start === 'string' &&
+      typeof (day as { end?: unknown }).end === 'string'
+    ) {
+      result[key] = { start: (day as DayScheduleJson).start, end: (day as DayScheduleJson).end };
+    }
+  }
+  return result;
+}
 
 // deno-lint-ignore no-explicit-any
 type ServiceClient = any;
@@ -158,34 +176,30 @@ export async function handleSendScheduledNotifications(
       // Load org policy
       const { data: policyRaw } = await admin
         .from('attendance_policy')
-        .select('work_start_time, work_end_time, weekly_off_days')
+        .select('work_schedule')
         .eq('org_id', org.id)
         .maybeSingle();
 
       const policy = policyRaw as Policy | null;
-      if (!policy) continue;
+      const orgSchedule = parseWorkSchedule(policy?.work_schedule);
 
       // Load all profiles for this org
       const { data: profilesRaw } = await admin
         .from('profiles')
-        .select('id, work_days, work_start_time, work_end_time')
+        .select('id, work_schedule')
         .eq('org_id', org.id);
 
       const profiles = (profilesRaw as Profile[]) ?? [];
+      const dayKey = String(dayOfWeek) as '0' | '1' | '2' | '3' | '4' | '5' | '6';
 
       for (const profile of profiles) {
-        const hasCustomSchedule =
-          profile.work_days && profile.work_days.length > 0 &&
-          profile.work_start_time && profile.work_end_time;
+        const userSchedule = parseWorkSchedule(profile.work_schedule);
+        const effective = userSchedule[dayKey] ?? orgSchedule[dayKey] ?? null;
 
-        const isWorkingDay = hasCustomSchedule
-          ? profile.work_days!.includes(dayOfWeek)
-          : !policy.weekly_off_days.includes(dayOfWeek);
+        if (!effective) continue;
 
-        if (!isWorkingDay) continue;
-
-        const workStart = hasCustomSchedule ? profile.work_start_time! : policy.work_start_time;
-        const workEnd = hasCustomSchedule ? profile.work_end_time! : policy.work_end_time;
+        const workStart = effective.start;
+        const workEnd = effective.end;
 
         if (!workStart || !workEnd) continue;
 

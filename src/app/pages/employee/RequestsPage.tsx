@@ -26,7 +26,11 @@ import { UnavailableState } from '../../components/shared/UnavailableState';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { isOfflineError, OFFLINE_ACTION_MESSAGE } from '@/lib/network';
 import { LeaveRequestModal } from '@/app/components/requests/LeaveRequestModal';
-import { countWorkingDaysInRange, resolveWorkDays } from '@/lib/workSchedule';
+import {
+  countWorkingDaysInRange,
+  getWorkDays,
+  resolveEffectiveSchedule,
+} from '@/shared/attendance/workSchedule';
 
 const PAGE_SIZE = 10;
 
@@ -53,7 +57,10 @@ export function RequestsPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [workStartTime, setWorkStartTime] = useState<string>('08:00');
-  const [workDays, setWorkDays] = useState<number[]>(resolveWorkDays({ orgWeeklyOffDays: [5, 6] }));
+  const [workDays, setWorkDays] = useState<number[]>(() => getWorkDays(null, null));
+  const [scheduleBundle, setScheduleBundle] = useState<ReturnType<typeof resolveEffectiveSchedule>>(
+    () => resolveEffectiveSchedule(null, null),
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   useBodyScrollLock(showForm);
@@ -72,8 +79,10 @@ export function RequestsPage() {
 
   const loadRequestSchedule = useCallback(async () => {
     if (!currentUser) {
+      const emptyBundle = resolveEffectiveSchedule(null, null);
       return {
-        resolvedWorkDays: resolveWorkDays({ orgWeeklyOffDays: [5, 6] }),
+        resolvedBundle: emptyBundle,
+        resolvedWorkDays: getWorkDays(emptyBundle.user, emptyBundle.org),
         resolvedWorkStartTime: '08:00',
       };
     }
@@ -83,16 +92,32 @@ export function RequestsPage() {
       profilesService.getUserById(currentUser.uid),
     ]);
 
-    const resolvedWorkDays = resolveWorkDays({
-      profileWorkDays: profile?.work_days ?? null,
-      orgWeeklyOffDays: policy?.weekly_off_days ?? [5, 6],
-    });
-    const resolvedWorkStartTime = policy?.work_start_time ?? '08:00';
+    const resolvedBundle = resolveEffectiveSchedule(
+      profile?.work_schedule ?? null,
+      policy?.work_schedule ?? null,
+    );
+    const resolvedWorkDays = getWorkDays(resolvedBundle.user, resolvedBundle.org);
 
+    // Surface the first working day's start time as the "formal work start time"
+    // used by time_adjustment requests. Fall back to 08:00.
+    const today = new Date();
+    const todayDow = today.getDay();
+    const todayShift =
+      resolvedBundle.user[String(todayDow) as '0'] ??
+      resolvedBundle.org[String(todayDow) as '0'] ??
+      null;
+    const anyShift =
+      todayShift ??
+      (resolvedWorkDays
+        .map((d) => resolvedBundle.user[String(d) as '0'] ?? resolvedBundle.org[String(d) as '0'])
+        .find((s) => !!s) ?? null);
+    const resolvedWorkStartTime = anyShift?.start ?? '08:00';
+
+    setScheduleBundle(resolvedBundle);
     setWorkDays(resolvedWorkDays);
     setWorkStartTime(resolvedWorkStartTime);
 
-    return { resolvedWorkDays, resolvedWorkStartTime };
+    return { resolvedBundle, resolvedWorkDays, resolvedWorkStartTime };
   }, [currentUser]);
 
   useEffect(() => {
@@ -220,12 +245,13 @@ export function RequestsPage() {
       let toDateTime: string;
       if (data.type === 'annual_leave') {
         const schedule = await loadRequestSchedule().catch(() => null);
-        const effectiveWorkDays = schedule?.resolvedWorkDays ?? workDays;
+        const effectiveBundle = schedule?.resolvedBundle ?? scheduleBundle;
 
         const deductibleDays = countWorkingDaysInRange(
           data.fromDate,
           data.toDate ?? data.fromDate,
-          effectiveWorkDays
+          effectiveBundle.user,
+          effectiveBundle.org,
         );
 
         if (deductibleDays === 0) {

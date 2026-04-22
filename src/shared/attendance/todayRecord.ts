@@ -12,7 +12,6 @@ import {
 import type { DisplayStatus, LivePresence } from './types';
 
 interface TodayShiftLike {
-  weeklyOffDays?: number[] | null;
   workEndTime: string;
   bufferMinutesAfterShift: number;
 }
@@ -41,9 +40,8 @@ export function getTodayRecordLivePresence(record: TodayRecordStatusLike): LiveP
 }
 
 export function isWithinTodayShiftWindow(record: TodayRecordStatusLike, at: Date): boolean {
+  // A null shift means today is an off day — no shift window to be within.
   if (!record.shift) return false;
-  const offDays = record.shift.weeklyOffDays ?? [5, 6];
-  if (offDays.includes(at.getDay())) return false;
 
   const currentMinutes = at.getHours() * 60 + at.getMinutes();
   const [endHour, endMinute] = record.shift.workEndTime.split(':').map(Number);
@@ -59,8 +57,8 @@ export function resolveTodayRecordDisplayStatus(
   record: TodayRecordStatusLike,
   at: Date
 ): DisplayStatus {
-  const offDays = record.shift?.weeklyOffDays ?? [5, 6];
-  const isOffDay = !!record.shift && offDays.includes(at.getDay());
+  // In the new schedule model, the caller passes shift=null on off days.
+  const isOffDay = record.shift === null;
   const hasOvertime =
     record.summary?.has_overtime === true ||
     (record.summary?.total_overtime_minutes ?? 0) > 0 ||

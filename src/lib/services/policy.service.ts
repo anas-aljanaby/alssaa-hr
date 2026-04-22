@@ -2,15 +2,24 @@ import {
   DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
   DEFAULT_MINIMUM_OVERTIME_MINUTES,
 } from '@/shared/attendance/constants';
+import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
 import { supabase } from '../supabase';
 import type { Tables, UpdateTables } from '../database.types';
 
-export type AttendancePolicy = Omit<Tables<'attendance_policy'>, 'auto_punch_out_rules'> & {
+export type AttendancePolicy = Omit<
+  Tables<'attendance_policy'>,
+  'auto_punch_out_rules' | 'work_schedule'
+> & {
   auto_punch_out_rules: AutoPunchOutRule[];
+  work_schedule: WorkSchedule;
 };
 
-export type AttendancePolicyUpdate = Omit<UpdateTables<'attendance_policy'>, 'auto_punch_out_rules'> & {
+export type AttendancePolicyUpdate = Omit<
+  UpdateTables<'attendance_policy'>,
+  'auto_punch_out_rules' | 'work_schedule'
+> & {
   auto_punch_out_rules?: AutoPunchOutRule[];
+  work_schedule?: WorkSchedule;
 };
 
 export interface AutoPunchOutRule {
@@ -49,8 +58,17 @@ function toPolicy(row: Tables<'attendance_policy'>): AttendancePolicy {
   return {
     ...row,
     auto_punch_out_rules: parseRules(row.auto_punch_out_rules),
+    work_schedule: toWorkSchedule(row.work_schedule),
   };
 }
+
+const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
+  '0': { start: '08:00', end: '16:00' },
+  '1': { start: '08:00', end: '16:00' },
+  '2': { start: '08:00', end: '16:00' },
+  '3': { start: '08:00', end: '16:00' },
+  '4': { start: '08:00', end: '16:00' },
+};
 
 export async function getPolicy(): Promise<AttendancePolicy | null> {
   const { data, error } = await supabase
@@ -72,18 +90,16 @@ export async function updatePolicy(
     const { data, error } = await supabase
       .from('attendance_policy')
       .insert({
-        work_start_time: updates.work_start_time ?? '08:00',
-        work_end_time: updates.work_end_time ?? '16:00',
         grace_period_minutes: updates.grace_period_minutes ?? 15,
         auto_punch_out_buffer_minutes:
           updates.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
-        weekly_off_days: updates.weekly_off_days ?? [5, 6],
         max_late_days_before_warning: updates.max_late_days_before_warning ?? 3,
         absent_cutoff_time: updates.absent_cutoff_time ?? '12:00',
         annual_leave_per_year: updates.annual_leave_per_year ?? 21,
         minimum_overtime_minutes:
           updates.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
         auto_punch_out_rules: (updates.auto_punch_out_rules ?? DEFAULT_AUTO_PUNCH_OUT_RULES) as never,
+        work_schedule: (updates.work_schedule ?? DEFAULT_WORK_SCHEDULE) as never,
       })
       .select()
       .single();
@@ -97,6 +113,7 @@ export async function updatePolicy(
     .update({
       ...updates,
       auto_punch_out_rules: updates.auto_punch_out_rules as never,
+      work_schedule: updates.work_schedule as never,
     })
     .eq('id', existing.id)
     .select()

@@ -101,12 +101,17 @@ Deno.test('when now past cutoff, updates and inserts notification', async () => 
   };
   const q: QResult[] = [
     { data: [log], error: null },
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_schedule: null }, error: null },
     {
       data: {
-        work_end_time: '16:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '16:00' },
+          '1': { start: '09:00', end: '16:00' },
+          '2': { start: '09:00', end: '16:00' },
+          '3': { start: '09:00', end: '16:00' },
+          '4': { start: '09:00', end: '16:00' },
+        },
         auto_punch_out_buffer_minutes: 5,
-        weekly_off_days: [5, 6],
       },
       error: null,
     },
@@ -133,12 +138,17 @@ Deno.test('when now before cutoff, no update', async () => {
   };
   const q: QResult[] = [
     { data: [log], error: null },
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_schedule: null }, error: null },
     {
       data: {
-        work_end_time: '16:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '16:00' },
+          '1': { start: '09:00', end: '16:00' },
+          '2': { start: '09:00', end: '16:00' },
+          '3': { start: '09:00', end: '16:00' },
+          '4': { start: '09:00', end: '16:00' },
+        },
         auto_punch_out_buffer_minutes: 5,
-        weekly_off_days: [5, 6],
       },
       error: null,
     },
@@ -162,12 +172,17 @@ Deno.test('part 6.1 standard auto punch-out after cutoff is processed', async ()
   };
   const q: QResult[] = [
     { data: [log], error: null },
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_schedule: null }, error: null },
     {
       data: {
-        work_end_time: '18:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
         auto_punch_out_buffer_minutes: 5,
-        weekly_off_days: [5, 6],
       },
       error: null,
     },
@@ -194,12 +209,17 @@ Deno.test('part 6.2 before cutoff buffer auto punch-out is skipped', async () =>
   };
   const q: QResult[] = [
     { data: [log], error: null },
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_schedule: null }, error: null },
     {
       data: {
-        work_end_time: '18:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
         auto_punch_out_buffer_minutes: 5,
-        weekly_off_days: [5, 6],
       },
       error: null,
     },
@@ -238,17 +258,26 @@ Deno.test('part 6.4 off-day sessions are skipped', async () => {
     {
       data: {
         // Custom schedule that does not include Friday(5): off-day.
-        work_days: [0, 1, 2, 3, 4],
-        work_start_time: '09:00',
-        work_end_time: '18:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
       },
       error: null,
     },
     {
       data: {
-        work_end_time: '18:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
         auto_punch_out_buffer_minutes: 5,
-        weekly_off_days: [5, 6],
       },
       error: null,
     },
@@ -283,14 +312,14 @@ Deno.test('part 6.5 multiple open non-overtime sessions are handled consistently
   const q: QResult[] = [
     { data: logs, error: null },
     // session 1 profile + policy + update + notif settings + notification
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: { work_end_time: '18:00', auto_punch_out_buffer_minutes: 5, weekly_off_days: [5, 6] }, error: null },
+    { data: { work_schedule: null }, error: null },
+    { data: { work_schedule: { '0': { start: '09:00', end: '18:00' }, '1': { start: '09:00', end: '18:00' }, '2': { start: '09:00', end: '18:00' }, '3': { start: '09:00', end: '18:00' }, '4': { start: '09:00', end: '18:00' } }, auto_punch_out_buffer_minutes: 5 }, error: null },
     { data: null, error: null },
     { data: null, error: null },
     { data: null, error: null },
     // session 2 profile + policy + update + notification
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
-    { data: { work_end_time: '18:00', auto_punch_out_buffer_minutes: 5, weekly_off_days: [5, 6] }, error: null },
+    { data: { work_schedule: null }, error: null },
+    { data: { work_schedule: { '0': { start: '09:00', end: '18:00' }, '1': { start: '09:00', end: '18:00' }, '2': { start: '09:00', end: '18:00' }, '3': { start: '09:00', end: '18:00' }, '4': { start: '09:00', end: '18:00' } }, auto_punch_out_buffer_minutes: 5 }, error: null },
     { data: null, error: null },
     { data: null, error: null },
   ];
@@ -314,12 +343,17 @@ Deno.test('part 6.6 regression guard uses execution time beyond shift end', asyn
   };
   const q: QResult[] = [
     { data: [log], error: null },
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_schedule: null }, error: null },
     {
       data: {
-        work_end_time: '18:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
         auto_punch_out_buffer_minutes: 5,
-        weekly_off_days: [5, 6],
       },
       error: null,
     },
@@ -347,12 +381,17 @@ Deno.test('part 6.1b delayed auto punch-out splits when overtime reaches the min
   };
   const q: QResult[] = [
     { data: [log], error: null },
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_schedule: null }, error: null },
     {
       data: {
-        work_end_time: '18:00',
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
         auto_punch_out_buffer_minutes: 5,
-        weekly_off_days: [5, 6],
         minimum_overtime_minutes: 30,
       },
       error: null,
@@ -382,7 +421,7 @@ Deno.test('no configured shift does not auto punch out when org policy is missin
   };
   const q: QResult[] = [
     { data: [log], error: null },
-    { data: { work_days: null, work_start_time: null, work_end_time: null }, error: null },
+    { data: { work_schedule: null }, error: null },
     { data: null, error: null },
   ];
   const res = await handleAutoPunchOut(

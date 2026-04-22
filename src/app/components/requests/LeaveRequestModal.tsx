@@ -13,8 +13,38 @@ import {
 import { cn } from '@/app/components/ui/utils';
 import type { LeaveRequestFormData } from '@/lib/validations';
 import { countInclusiveDateRangeDays } from '@/lib/leaveDays';
-import { countWorkingDaysInRange, isWorkingDayForDate } from '@/lib/workSchedule';
 import type { RequestType } from '@/lib/services/requests.service';
+
+/** Inline helpers so this component stays decoupled from the schedule JSON model. */
+function parseIsoDateInline(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function isWorkingDayForDate(date: Date, workDays: number[]): boolean {
+  return workDays.includes(date.getDay());
+}
+
+function countWorkingDaysInRange(
+  startIso: string | null,
+  endIso: string | null,
+  workDays: number[],
+): number {
+  if (!startIso || workDays.length === 0) return 0;
+  const start = new Date(
+    parseIsoDateInline(startIso).getFullYear(),
+    parseIsoDateInline(startIso).getMonth(),
+    parseIsoDateInline(startIso).getDate(),
+  );
+  const endSource = parseIsoDateInline(endIso ?? startIso);
+  const end = new Date(endSource.getFullYear(), endSource.getMonth(), endSource.getDate());
+  if (end < start) return 0;
+  let count = 0;
+  for (let current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
+    if (isWorkingDayForDate(current, workDays)) count += 1;
+  }
+  return count;
+}
 
 const ARABIC_MONTHS = [
   'يناير',

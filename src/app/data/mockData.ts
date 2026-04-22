@@ -84,12 +84,19 @@ export interface AuditLog {
   details?: string;
 }
 
+export interface AttendancePolicyDay {
+  start: string;
+  end: string;
+}
+
+export type AttendancePolicySchedule = Partial<
+  Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', AttendancePolicyDay>
+>;
+
 export interface AttendancePolicy {
   id: string;
-  workStartTime: string;
-  workEndTime: string;
+  workSchedule: AttendancePolicySchedule;
   gracePeriodMinutes: number;
-  weeklyOffDays: number[];
   maxLateDaysBeforeWarning: number;
   absentCutoffTime: string;
   annualLeavePerYear: number;
@@ -520,13 +527,17 @@ export const auditLogs: AuditLog[] = [
   },
 ];
 
-// Attendance Policy
+// Attendance Policy (Sun-Thu working, Fri-Sat off)
 export const attendancePolicy: AttendancePolicy = {
   id: 'policy-1',
-  workStartTime: '08:00',
-  workEndTime: '16:00',
+  workSchedule: {
+    '0': { start: '08:00', end: '16:00' },
+    '1': { start: '08:00', end: '16:00' },
+    '2': { start: '08:00', end: '16:00' },
+    '3': { start: '08:00', end: '16:00' },
+    '4': { start: '08:00', end: '16:00' },
+  },
   gracePeriodMinutes: 10,
-  weeklyOffDays: [5, 6], // Friday, Saturday
   maxLateDaysBeforeWarning: 3,
   absentCutoffTime: '10:00',
   annualLeavePerYear: 21,
