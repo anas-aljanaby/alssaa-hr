@@ -27,8 +27,8 @@ We don't need sick days in this system at all, we just have regular off days and
 
 
 ## Task 5
-- [ ] Done
-- Commit Head:
+- [x] Done
+- Commit Head:18af817cc20de49e4bf9270e7cca6d3375b44751
 - Title: Rework attendance policy page
 - Explaination
 also add auto punch out rules component 
