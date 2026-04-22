@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables, UpdateTables } from '../database.types';
+import { assertValidWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
 
 /** Columns fetched in the app — excludes `phone` (not shown in the UI). */
 export const PROFILE_SELECT_COLUMNS =
@@ -53,6 +54,9 @@ export async function getUsersByRole(role: Profile['role']): Promise<Profile[]> 
 }
 
 export async function createUser(profile: ProfileInsert): Promise<Profile> {
+  if (profile.work_schedule !== undefined && profile.work_schedule !== null) {
+    assertValidWorkSchedule(profile.work_schedule as WorkSchedule);
+  }
   const { data, error } = await supabase
     .from('profiles')
     .insert(profile)
@@ -67,6 +71,9 @@ export async function updateUser(
   userId: string,
   updates: ProfileUpdate
 ): Promise<Profile> {
+  if (updates.work_schedule !== undefined && updates.work_schedule !== null) {
+    assertValidWorkSchedule(updates.work_schedule as WorkSchedule);
+  }
   const { data, error } = await supabase
     .from('profiles')
     .update(updates)

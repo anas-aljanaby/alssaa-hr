@@ -86,6 +86,27 @@ describe('profiles.service', () => {
     expect(row.name_ar).toBe('x');
   });
 
+  it('updateUser accepts short work schedules before saving', async () => {
+    sb.queueResult({
+      data: {
+        ...profileRow,
+        work_schedule: {
+          '0': { start: '13:00', end: '15:00' },
+        },
+      },
+      error: null,
+    });
+    const { updateUser } = await import('./profiles.service');
+    const row = await updateUser('u1', {
+      work_schedule: {
+        '0': { start: '13:00', end: '15:00' },
+      } as never,
+    });
+    expect(row.work_schedule).toEqual({
+      '0': { start: '13:00', end: '15:00' },
+    });
+  });
+
   it('inviteUser calls invoke with payload and bearer token', async () => {
     const far = Math.floor(Date.now() / 1000) + 3600;
     sb.auth.getSession.mockResolvedValue(sessionToken(far));

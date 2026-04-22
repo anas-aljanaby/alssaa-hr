@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addUserSchema, updateProfileSchema, type AddUserFormData, type UpdateProfileFormData } from '@/lib/validations';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
@@ -32,6 +33,7 @@ type UserRole = Profile['role'];
 const PAGE_SIZE = 15;
 
 export function UsersPage() {
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -72,7 +74,7 @@ export function UsersPage() {
       const [profs, depts, policy] = await Promise.all([
         profilesService.listUsers(),
         departmentsService.listDepartments(),
-        policyService.getPolicy(),
+        policyService.getPolicy(currentUser?.org_id),
       ]);
       setProfiles(profs);
       setDepartments(depts);
@@ -390,7 +392,7 @@ export function UsersPage() {
 
       {showForm && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-4 sm:px-4"
           onClick={() => {
             setShowForm(false);
             addUserForm.reset();
@@ -402,11 +404,11 @@ export function UsersPage() {
           aria-labelledby="add-user-title"
         >
           <div
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            className="relative mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100svh-2rem)] sm:my-6 sm:max-w-lg"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
               <h2 id="add-user-title" className="text-gray-800">إضافة مستخدم جديد</h2>
               <button
                 type="button"
@@ -415,104 +417,106 @@ export function UsersPage() {
                   addUserForm.reset();
                   setShowAddUserPassword(false);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="rounded-full p-2 hover:bg-gray-100"
                 aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <form className="space-y-4" onSubmit={addUserForm.handleSubmit(onAddUser)}>
-              <div>
-                <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
-                <input
-                  type="text"
-                  {...addUserForm.register('name')}
-                  placeholder="أدخل الاسم الكامل"
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    addUserForm.formState.errors.name ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                />
-                {addUserForm.formState.errors.name && (
-                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.name.message}</p>
-                )}
-              </div>
-              <div>
-                <label className="block mb-1.5 text-gray-700">بريد تسجيل الدخول</label>
-                <input
-                  type="email"
-                  {...addUserForm.register('email')}
-                  placeholder="example@alssaa.tv"
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    addUserForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                />
-                {addUserForm.formState.errors.email && (
-                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.email.message}</p>
-                )}
-                <p className="text-amber-700 text-xs mt-1">
-                  سيتم استخدام هذا البريد لتسجيل الدخول، يرجى التأكد من كتابته بشكل صحيح.
-                </p>
-              </div>
-              <div>
-                <label className="block mb-1.5 text-gray-700">كلمة المرور</label>
-                <input
-                  type={showAddUserPassword ? 'text' : 'password'}
-                  {...addUserForm.register('password')}
-                  placeholder="أدخل كلمة مرور قوية"
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    addUserForm.formState.errors.password ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                  dir="ltr"
-                />
-                <PasswordGenerateCopyRow
-                  className="mt-2"
-                  onGenerated={(pw) => {
-                    addUserForm.setValue('password', pw, { shouldValidate: true });
-                    setShowAddUserPassword(true);
-                  }}
-                  valueToCopy={addUserForm.watch('password') ?? ''}
-                  passwordVisible={showAddUserPassword}
-                  onTogglePasswordVisible={() => setShowAddUserPassword((v) => !v)}
-                />
-                {addUserForm.formState.errors.password && (
-                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.password.message}</p>
-                )}
-              </div>
-              <div>
-                <label className="block mb-1.5 text-gray-700">القسم</label>
-                <select
-                  {...addUserForm.register('department_id')}
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    addUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
-                  }`}
+            <div className="overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+              <form className="space-y-4" onSubmit={addUserForm.handleSubmit(onAddUser)}>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
+                  <input
+                    type="text"
+                    {...addUserForm.register('name')}
+                    placeholder="أدخل الاسم الكامل"
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      addUserForm.formState.errors.name ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  />
+                  {addUserForm.formState.errors.name && (
+                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.name.message}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">بريد تسجيل الدخول</label>
+                  <input
+                    type="email"
+                    {...addUserForm.register('email')}
+                    placeholder="example@alssaa.tv"
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      addUserForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  />
+                  {addUserForm.formState.errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.email.message}</p>
+                  )}
+                  <p className="text-amber-700 text-xs mt-1">
+                    سيتم استخدام هذا البريد لتسجيل الدخول، يرجى التأكد من كتابته بشكل صحيح.
+                  </p>
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">كلمة المرور</label>
+                  <input
+                    type={showAddUserPassword ? 'text' : 'password'}
+                    {...addUserForm.register('password')}
+                    placeholder="أدخل كلمة مرور قوية"
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      addUserForm.formState.errors.password ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                    dir="ltr"
+                  />
+                  <PasswordGenerateCopyRow
+                    className="mt-2"
+                    onGenerated={(pw) => {
+                      addUserForm.setValue('password', pw, { shouldValidate: true });
+                      setShowAddUserPassword(true);
+                    }}
+                    valueToCopy={addUserForm.watch('password') ?? ''}
+                    passwordVisible={showAddUserPassword}
+                    onTogglePasswordVisible={() => setShowAddUserPassword((v) => !v)}
+                  />
+                  {addUserForm.formState.errors.password && (
+                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.password.message}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">القسم</label>
+                  <select
+                    {...addUserForm.register('department_id')}
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      addUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  >
+                    <option value="">بدون قسم</option>
+                    {departmentsForAdd.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name_ar}
+                      </option>
+                    ))}
+                  </select>
+                  {addUserForm.formState.errors.department_id && (
+                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.department_id.message}</p>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
                 >
-                  <option value="">بدون قسم</option>
-                  {departmentsForAdd.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name_ar}
-                    </option>
-                  ))}
-                </select>
-                {addUserForm.formState.errors.department_id && (
-                  <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.department_id.message}</p>
-                )}
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
-              >
-                {submitting ? 'جاري الإضافة...' : 'إضافة المستخدم'}
-              </button>
-            </form>
+                  {submitting ? 'جاري الإضافة...' : 'إضافة المستخدم'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {editingUser && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-4 sm:px-4"
           onClick={() => { setEditingUser(null); editUserForm.reset(); }}
           onKeyDown={handleModalKeyDown}
           role="dialog"
@@ -520,60 +524,67 @@ export function UsersPage() {
           aria-labelledby="edit-user-title"
         >
           <div
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            className="relative mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100svh-2rem)] sm:my-6 sm:max-w-lg"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
               <h2 id="edit-user-title" className="text-gray-800">تعديل الملف الشخصي</h2>
               <button
                 type="button"
                 onClick={() => { setEditingUser(null); editUserForm.reset(); }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="rounded-full p-2 hover:bg-gray-100"
                 aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <form className="space-y-4" onSubmit={editUserForm.handleSubmit(onEditUser)}>
-              <div>
-                <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
-                <input
-                  type="text"
-                  {...editUserForm.register('name_ar')}
-                  placeholder="أدخل الاسم الكامل"
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    editUserForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                />
-                {editUserForm.formState.errors.name_ar && (
-                  <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.name_ar.message}</p>
-                )}
-              </div>
-              <p className="text-gray-500 text-xs -mt-2">
-                الدور والقسم يُعدّلان من صفحة الأقسام.
-              </p>
-              <input type="hidden" {...editUserForm.register('role')} />
-              <input type="hidden" {...editUserForm.register('department_id')} />
+            <div className="overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+              <form className="space-y-4" onSubmit={editUserForm.handleSubmit(onEditUser)}>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
+                  <input
+                    type="text"
+                    {...editUserForm.register('name_ar')}
+                    placeholder="أدخل الاسم الكامل"
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      editUserForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  />
+                  {editUserForm.formState.errors.name_ar && (
+                    <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.name_ar.message}</p>
+                  )}
+                </div>
+                <p className="text-gray-500 text-xs -mt-2">
+                  الدور والقسم يُعدّلان من صفحة الأقسام.
+                </p>
+                <input type="hidden" {...editUserForm.register('role')} />
+                <input type="hidden" {...editUserForm.register('department_id')} />
 
-              <div className="border-t border-gray-100 pt-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
-                <p className="text-xs text-gray-500 mb-3">حدد أيام وساعات عمل هذا المستخدم. الأيام غير المحددة تُعتبر راحة.</p>
-                <WorkScheduleEditor
-                  value={editUserForm.watch('work_schedule') ?? {}}
-                  onChange={(next) => editUserForm.setValue('work_schedule', next, { shouldDirty: true })}
-                />
-              </div>
+                <div className="border-t border-gray-100 pt-4">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
+                  <p className="text-xs text-gray-500 mb-3">حدد أيام وساعات عمل هذا المستخدم. الأيام غير المحددة تُعتبر راحة.</p>
+                  <WorkScheduleEditor
+                    value={editUserForm.watch('work_schedule') ?? {}}
+                    onChange={(next) =>
+                      editUserForm.setValue('work_schedule', next, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                  />
+                </div>
 
-              <button
-                type="submit"
-                disabled={editSubmitting}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
-              >
-                {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+                >
+                  {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}

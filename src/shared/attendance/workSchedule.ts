@@ -17,8 +17,27 @@ export type DaySchedule = {
 
 export type WorkSchedule = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DaySchedule>>;
 
-const DAY_KEYS = ['0', '1', '2', '3', '4', '5', '6'] as const;
-type DayKey = (typeof DAY_KEYS)[number];
+export const DAY_KEYS = ['0', '1', '2', '3', '4', '5', '6'] as const;
+export type DayKey = (typeof DAY_KEYS)[number];
+export const WORK_TIME_REGEX = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+export type WorkScheduleValidationIssue = {
+  dayKey: DayKey;
+  field: 'start' | 'end';
+  message: string;
+};
+
+export type NormalizedDayScheduleWindow = {
+  startClockMinutes: number;
+  endClockMinutes: number;
+  endMinutes: number;
+  durationMinutes: number;
+  overnight: boolean;
+  normalizeTimeMinutes: (
+    timeMinutes: number,
+    options?: { assumeNextDay?: boolean }
+  ) => number;
+};
 
 function parseIsoDate(value: string) {
   const [year, month, day] = value.split('-').map(Number);
@@ -35,6 +54,104 @@ function isDaySchedule(value: unknown): value is DaySchedule {
   return typeof candidate.start === 'string' && typeof candidate.end === 'string';
 }
 
+export function isValidWorkTime(value: string): boolean {
+  return WORK_TIME_REGEX.test(value);
+}
+
+export function workTimeToMinutes(value: string): number | null {
+  if (!isValidWorkTime(value)) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+export function getNormalizedDayScheduleWindow(
+  schedule: DaySchedule
+): NormalizedDayScheduleWindow | null {
+  const startClockMinutes = workTimeToMinutes(schedule.start);
+  const endClockMinutes = workTimeToMinutes(schedule.end);
+  if (startClockMinutes === null || endClockMinutes === null) return null;
+
+  const overnight = endClockMinutes < startClockMinutes;
+  const endMinutes = overnight ? endClockMinutes + 1440 : endClockMinutes;
+  const durationMinutes = endMinutes - startClockMinutes;
+
+  return {
+    startClockMinutes,
+    endClockMinutes,
+    endMinutes,
+    durationMinutes,
+    overnight,
+    normalizeTimeMinutes: (timeMinutes: number, options) =>
+      overnight && options?.assumeNextDay ? timeMinutes + 1440 : timeMinutes,
+  };
+}
+
+export function getDayScheduleDurationMinutes(schedule: DaySchedule): number | null {
+  return getNormalizedDayScheduleWindow(schedule)?.durationMinutes ?? null;
+}
+
+export function isOvernightDaySchedule(schedule: DaySchedule): boolean {
+  return getNormalizedDayScheduleWindow(schedule)?.overnight ?? false;
+}
+
+export function getDayScheduleValidationIssue(
+  schedule: DaySchedule | undefined
+): { field: 'start' | 'end'; message: string } | null {
+  if (!schedule) return null;
+  if (!schedule.start || !schedule.end) {
+    return { field: 'end', message: 'وقت البداية والنهاية مطلوبان' };
+  }
+  if (!isValidWorkTime(schedule.start)) {
+    return { field: 'start', message: 'وقت البداية غير صالح' };
+  }
+  if (!isValidWorkTime(schedule.end)) {
+    return { field: 'end', message: 'وقت النهاية غير صالح' };
+  }
+
+  const durationMinutes = getDayScheduleDurationMinutes(schedule);
+  if (durationMinutes === null) {
+    return { field: 'end', message: 'الوقت المدخل غير صالح' };
+  }
+  if (durationMinutes === 0) {
+    return { field: 'end', message: 'وقت النهاية يجب أن يختلف عن وقت البداية' };
+  }
+
+  return null;
+}
+
+export function getWorkScheduleValidationIssues(
+  schedule: WorkSchedule | null | undefined
+): WorkScheduleValidationIssue[] {
+  if (!schedule) return [];
+
+  const issues: WorkScheduleValidationIssue[] = [];
+  for (const dayKey of DAY_KEYS) {
+    const issue = getDayScheduleValidationIssue(schedule[dayKey]);
+    if (!issue) continue;
+    issues.push({ dayKey, field: issue.field, message: issue.message });
+  }
+  return issues;
+}
+
+export function assertValidWorkSchedule(schedule: WorkSchedule | null | undefined): void {
+  const [firstIssue] = getWorkScheduleValidationIssues(schedule);
+  if (firstIssue) {
+    throw new Error(firstIssue.message);
+  }
+}
+
+export function isOvertimeForScheduleTime(
+  timeMinutes: number,
+  schedule: DaySchedule,
+  earlyLoginMinutes = 60
+): boolean {
+  const window = getNormalizedDayScheduleWindow(schedule);
+  if (!window) return true;
+  const normalizedTime = window.normalizeTimeMinutes(timeMinutes);
+  const earlyLoginStart = window.startClockMinutes - earlyLoginMinutes;
+  return normalizedTime < earlyLoginStart || normalizedTime > window.endMinutes;
+}
+
 /**
  * Normalizes any JSON-compatible value (including null/undefined) into a
  * WorkSchedule shape. Silently drops malformed entries.
@@ -46,7 +163,7 @@ export function toWorkSchedule(raw: unknown): WorkSchedule {
   const result: WorkSchedule = {};
   for (const key of DAY_KEYS) {
     const day = (raw as Record<string, unknown>)[key];
-    if (isDaySchedule(day)) {
+    if (isDaySchedule(day) && isValidWorkTime(day.start) && isValidWorkTime(day.end)) {
       result[key] = { start: day.start, end: day.end };
     }
   }

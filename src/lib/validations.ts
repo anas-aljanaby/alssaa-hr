@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  WORK_TIME_REGEX,
+  getWorkScheduleValidationIssues,
+} from '@/shared/attendance/workSchedule';
 
 // Shared password rules: 8–128 chars, at least one uppercase, one lowercase, one digit
 const PASSWORD_MIN = 8;
@@ -120,14 +124,24 @@ export const addUserSchema = z.object({
 export type AddUserFormData = z.infer<typeof addUserSchema>;
 
 const daySchedule = z.object({
-  start: z.string().regex(/^\d{2}:\d{2}$/),
-  end: z.string().regex(/^\d{2}:\d{2}$/),
-}).refine(s => s.start < s.end, { message: 'النهاية يجب أن تكون بعد البداية', path: ['end'] });
+  start: z.string().regex(WORK_TIME_REGEX, 'وقت البداية غير صالح'),
+  end: z.string().regex(WORK_TIME_REGEX, 'وقت النهاية غير صالح'),
+});
 
 export const workScheduleSchema = z.partialRecord(
   z.enum(['0', '1', '2', '3', '4', '5', '6']),
   daySchedule
-).default({});
+)
+  .superRefine((value, ctx) => {
+    for (const issue of getWorkScheduleValidationIssues(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: issue.message,
+        path: [issue.dayKey, issue.field],
+      });
+    }
+  })
+  .default({});
 export type WorkScheduleFormData = z.infer<typeof workScheduleSchema>;
 
 export const updateProfileSchema = z.object({

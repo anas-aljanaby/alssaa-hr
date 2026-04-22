@@ -8,7 +8,12 @@ import {
 } from '@/app/components/ui/drawer';
 import { Clock, LogIn, LogOut } from 'lucide-react';
 import type { DayRecord, PunchEntry } from '@/lib/services/attendance.service';
-import { getAttendanceDay, wallTimeToMinutes } from '@/lib/services/attendance.service';
+import {
+  doesCheckOutCrossDay,
+  getAttendanceDay,
+  getLatestCheckOutTime,
+  wallTimeToMinutes,
+} from '@/lib/services/attendance.service';
 import { getStatusTheme } from './attendanceStatusTheme';
 
 export type DayDetailsSheetTone = 'green' | 'amber' | 'red' | 'blue' | 'gray';
@@ -112,11 +117,14 @@ function PunchRow({
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, suffix }: { label: string; value: string; suffix?: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
       <p className="text-[11px] text-gray-500">{label}</p>
-      <p className="mt-1 text-sm font-medium text-gray-800">{value}</p>
+      <div className="mt-1 flex items-center gap-1">
+        <p className="text-sm font-medium text-gray-800">{value}</p>
+        {suffix}
+      </div>
     </div>
   );
 }
@@ -200,10 +208,8 @@ export function DayDetailsSheet({ userId, date, summary = null, onClose }: Props
     a.check_in_time.localeCompare(b.check_in_time)
   );
   const firstCheckIn = record?.summary?.first_check_in ?? orderedSessions[0]?.check_in_time ?? null;
-  const lastCheckOut =
-    record?.summary?.last_check_out ??
-    [...orderedSessions].reverse().find((session) => !!session.check_out_time)?.check_out_time ??
-    null;
+  const lastCheckOut = record?.summary?.last_check_out ?? getLatestCheckOutTime(orderedSessions);
+  const lastCheckOutIsNextDay = doesCheckOutCrossDay(firstCheckIn, lastCheckOut);
   const lateMinutes = useMemo(() => calculateLateMinutes(record), [record]);
   const regularSessions = (record?.sessions ?? []).filter((session) => !session.is_overtime);
   const overtimeSessions = (record?.sessions ?? []).filter((session) => session.is_overtime);
@@ -266,7 +272,19 @@ export function DayDetailsSheet({ userId, date, summary = null, onClose }: Props
 
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <MetricCard label="أول دخول" value={formatTime(firstCheckIn)} />
-                <MetricCard label="آخر خروج" value={formatTime(lastCheckOut)} />
+                <MetricCard
+                  label="آخر خروج"
+                  value={formatTime(lastCheckOut)}
+                  suffix={
+                    lastCheckOutIsNextDay
+                      ? (
+                        <span className="rounded border border-blue-200 bg-blue-50 px-1 py-0.5 text-[10px] font-semibold text-blue-600">
+                          +1 يوم
+                        </span>
+                      )
+                      : undefined
+                  }
+                />
                 <MetricCard label="إجمالي العمل" value={formatMinutes(record.totalMinutesWorked)} />
                 <MetricCard label="جلسات عادية" value={regularSessions.length > 0 ? `${regularSessions.length} • ${formatMinutes(regularMinutes)}` : '—'} />
                 <MetricCard label="جلسات إضافية" value={overtimeSessions.length > 0 ? `${overtimeSessions.length} • ${formatMinutes(overtimeMinutes)}` : '—'} />

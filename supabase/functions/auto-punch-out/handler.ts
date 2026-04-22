@@ -9,6 +9,7 @@ import { resolveCheckoutOvertimeHandling } from '../punch/handler.ts';
 
 type DayScheduleJson = { start: string; end: string };
 type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
+const TIME_24H_REGEX = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 function parseWorkSchedule(raw: unknown): WorkScheduleJson {
   if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -21,7 +22,9 @@ function parseWorkSchedule(raw: unknown): WorkScheduleJson {
       day !== null &&
       typeof day === 'object' &&
       typeof (day as { start?: unknown }).start === 'string' &&
-      typeof (day as { end?: unknown }).end === 'string'
+      typeof (day as { end?: unknown }).end === 'string' &&
+      TIME_24H_REGEX.test((day as DayScheduleJson).start) &&
+      TIME_24H_REGEX.test((day as DayScheduleJson).end)
     ) {
       result[key] = { start: (day as DayScheduleJson).start, end: (day as DayScheduleJson).end };
     }
@@ -60,7 +63,8 @@ function nowToTimeHHMM(d: Date): string {
 function diffMinutes(checkIn: string, checkOut: string): number {
   const inM = timeToMinutes(checkIn);
   const outM = timeToMinutes(checkOut);
-  return Math.max(0, outM - inM);
+  const diff = outM - inM;
+  return diff >= 0 ? diff : diff + 1440;
 }
 
 function parseJwtRole(token: string): string | null {
@@ -152,13 +156,14 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
     const effectiveNow = deps.now?.() ?? new Date();
 
     const today = toDateStr(effectiveNow);
+    const yesterday = toDateStr(new Date(effectiveNow.getTime() - 24 * 3600 * 1000));
     const localNow = toOrgLocalDate(effectiveNow);
     const nowMinutes = localNow.getUTCHours() * 60 + localNow.getUTCMinutes();
 
     const { data: openSessionsRaw, error: sessionsError } = await admin
       .from('attendance_sessions')
       .select('id, user_id, org_id, date, check_in_time, is_overtime')
-      .eq('date', today)
+      .in('date', [today, yesterday])
       .is('check_out_time', null)
       .eq('is_overtime', false);
 
@@ -189,7 +194,6 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       );
     }
 
-    const dayOfWeek = toOrgLocalDate(effectiveNow).getUTCDay();
     // Load notification settings keyed by org_id (lazy cache across sessions)
     const notifSettingsCache: Record<string, {
       title: string;
@@ -240,23 +244,32 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
 
       const userSchedule = parseWorkSchedule(profile?.work_schedule);
       const orgSchedule = parseWorkSchedule(policy?.work_schedule);
-      const dayKey = String(dayOfWeek) as '0' | '1' | '2' | '3' | '4' | '5' | '6';
+      const sessionDayOfWeek = toOrgLocalDate(new Date(session.date + 'T12:00:00.000Z')).getUTCDay();
+      const dayKey = String(sessionDayOfWeek) as '0' | '1' | '2' | '3' | '4' | '5' | '6';
       const effective = userSchedule[dayKey] ?? orgSchedule[dayKey] ?? null;
       const workEndTime = effective?.end ?? null;
+      const workStartTime = effective?.start ?? null;
       const bufferMinutes = policy?.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES;
 
-      // No effective shift for today (off day or no config), skip.
-      if (!effective || !workEndTime) continue;
+      // No effective shift for the session's day (off day or no config), skip.
+      if (!effective || !workEndTime || !workStartTime) continue;
 
-      const shiftEndMinutes = timeToMinutes(workEndTime);
-      const cutoffMinutes = shiftEndMinutes + bufferMinutes;
+      const overnight = timeToMinutes(workEndTime) < timeToMinutes(workStartTime);
+      const normalizeNow = (m: number) => {
+        if (!overnight) return m;
+        return m < timeToMinutes(workStartTime) ? m + 1440 : m;
+      };
+      const normalizedNow = normalizeNow(nowMinutes);
+      const normalizedShiftEnd = overnight ? timeToMinutes(workEndTime) + 1440 : timeToMinutes(workEndTime);
+      const cutoffMinutes = normalizedShiftEnd + bufferMinutes;
 
-      if (nowMinutes <= cutoffMinutes) continue;
+      if (normalizedNow <= cutoffMinutes) continue;
 
       const actualCheckoutTime = nowToTimeHHMM(effectiveNow);
       const checkoutHandling = resolveCheckoutOvertimeHandling({
         hasShift: true,
         isWorkingDay: true,
+        workStartTime,
         workEndTime,
         openSessionIsOvertime: false,
         openSessionCheckInTime: session.check_in_time,

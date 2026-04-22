@@ -84,6 +84,7 @@ export type PunchDeps = {
 
 type DayScheduleJson = { start: string; end: string };
 type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
+const TIME_24H_REGEX = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 type ProfileRow = {
   org_id: string;
@@ -173,7 +174,7 @@ function fromSeconds(sec: number): number {
 
 function diffMinutes(checkInTime: string, checkOutTime: string): number {
   const minutes = toMinutes(checkOutTime) - toMinutes(checkInTime);
-  return minutes > 0 ? minutes : 0;
+  return minutes >= 0 ? minutes : minutes + 1440;
 }
 
 /** Late-stay: regular session extends past shift end → split into regular [check_in, shiftEnd] + OT [shiftEnd, checkout]. */
@@ -194,6 +195,7 @@ export function shouldKeepOvertimeSession(
 export function resolveCheckoutOvertimeHandling(input: {
   hasShift: boolean;
   isWorkingDay: boolean;
+  workStartTime?: string | null;
   workEndTime: string | null;
   openSessionIsOvertime: boolean;
   openSessionCheckInTime: string;
@@ -218,8 +220,17 @@ export function resolveCheckoutOvertimeHandling(input: {
     };
   }
 
-  const shiftEndMinutes = toMinutes(input.workEndTime);
-  if (toMinutes(input.checkoutTime) <= shiftEndMinutes || toMinutes(input.openSessionCheckInTime) >= shiftEndMinutes) {
+  const overnight = !!input.workStartTime && toMinutes(input.workEndTime) < toMinutes(input.workStartTime);
+  const norm = (t: string) => {
+    if (!overnight || !input.workStartTime) return toMinutes(t);
+    const m = toMinutes(t);
+    return m < toMinutes(input.workStartTime) ? m + 1440 : m;
+  };
+  const normShiftEnd = norm(input.workEndTime);
+  const normCheckout = norm(input.checkoutTime);
+  const normCheckIn = norm(input.openSessionCheckInTime);
+
+  if (normCheckout <= normShiftEnd || normCheckIn >= normShiftEnd) {
     return {
       shouldSplitOvertime: false,
       regularCheckOutTime: input.checkoutTime,
@@ -260,7 +271,9 @@ function parseWorkSchedule(raw: unknown): WorkScheduleJson {
       day !== null &&
       typeof day === 'object' &&
       typeof (day as { start?: unknown }).start === 'string' &&
-      typeof (day as { end?: unknown }).end === 'string'
+      typeof (day as { end?: unknown }).end === 'string' &&
+      TIME_24H_REGEX.test((day as DayScheduleJson).start) &&
+      TIME_24H_REGEX.test((day as DayScheduleJson).end)
     ) {
       result[key] = { start: (day as DayScheduleJson).start, end: (day as DayScheduleJson).end };
     }
@@ -307,12 +320,18 @@ function classifySessionCheckIn(
   const shiftStartSeconds = toSecondsHHMM(schedule.workStartTime!);
   const shiftEndSeconds = toSecondsHHMM(schedule.workEndTime!);
   const earlyLoginStartSeconds = fromSeconds(shiftStartSeconds - schedule.earlyLoginMinutes * 60);
+  const overnight = shiftEndSeconds < shiftStartSeconds;
 
-  if (nowSeconds < earlyLoginStartSeconds || nowSeconds > shiftEndSeconds) {
+  const withinWindow = overnight
+    ? nowSeconds >= earlyLoginStartSeconds || nowSeconds <= shiftEndSeconds
+    : nowSeconds >= earlyLoginStartSeconds && nowSeconds <= shiftEndSeconds;
+
+  if (!withinWindow) {
     return { status: 'present', isOvertime: true };
   }
 
-  if (nowSeconds > shiftStartSeconds + schedule.gracePeriodMinutes * 60) {
+  const onStartSide = !overnight || nowSeconds >= shiftStartSeconds;
+  if (onStartSide && nowSeconds > shiftStartSeconds + schedule.gracePeriodMinutes * 60) {
     return { status: 'late', isOvertime: false };
   }
 
@@ -389,9 +408,13 @@ export async function recalculateDailySummary(
   const firstCheckIn = sessions.length ? sessions[0].check_in_time : null;
   const lastCheckOut = sessions
     .filter((s) => !!s.check_out_time)
-    .map((s) => s.check_out_time as string)
-    .sort()
-    .at(-1) ?? null;
+    .map((s) => {
+      const outMin = toMinutes(s.check_out_time as string);
+      const inMin = toMinutes(s.check_in_time);
+      return { time: s.check_out_time as string, sortKey: outMin < inMin ? outMin + 1440 : outMin };
+    })
+    .sort((a, b) => a.sortKey - b.sortKey)
+    .at(-1)?.time ?? null;
   const hasApprovedLeave = await hasApprovedLeaveForDate(admin, userId, dateStr);
   const todayDate = toDateStr(new Date());
   const isPastOrToday = dateStr <= todayDate;
@@ -474,33 +497,56 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const admin = deps.createServiceClient();
 
-    const { data: profileRaw } = await admin
+    const { data: profileRaw, error: profileError } = await admin
       .from('profiles')
       .select('org_id, work_schedule')
       .eq('id', caller.id)
       .single();
 
     const profile = profileRaw as ProfileRow | null;
-    if (!profile) {
+    if (!profile || profileError) {
+      const profileErrorMessage =
+        typeof profileError === 'object' &&
+        profileError !== null &&
+        'message' in profileError &&
+        typeof (profileError as { message?: unknown }).message === 'string'
+          ? (profileError as { message: string }).message
+          : 'لم يتم العثور على الملف الشخصي';
       return new Response(
-        JSON.stringify({ error: 'لم يتم العثور على الملف الشخصي', code: 'NO_PROFILE' }),
+        JSON.stringify({ error: profileErrorMessage, code: 'NO_PROFILE' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const orgId = profile.org_id;
 
-    const { data: openSessionRaw } = await admin
-      .from('attendance_sessions')
-      .select('*')
-      .eq('user_id', caller.id)
-      .eq('date', today)
-      .is('check_out_time', null)
-      .order('check_in_time', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    let openSession: SessionRow | null = null;
+    {
+      const { data: todayRaw } = await admin
+        .from('attendance_sessions')
+        .select('*')
+        .eq('user_id', caller.id)
+        .eq('date', today)
+        .is('check_out_time', null)
+        .order('check_in_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      openSession = todayRaw as SessionRow | null;
+    }
 
-    const openSession = openSessionRaw as SessionRow | null;
+    if (!openSession) {
+      const yesterday = toDateStr(new Date(effectiveNow.getTime() - 24 * 3600 * 1000));
+      const { data: prevRaw } = await admin
+        .from('attendance_sessions')
+        .select('*')
+        .eq('user_id', caller.id)
+        .eq('date', yesterday)
+        .is('check_out_time', null)
+        .order('check_in_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      openSession = prevRaw as SessionRow | null;
+    }
 
     const { data: policyRaw } = await admin
       .from('attendance_policy')
@@ -511,6 +557,9 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const policy = policyRaw as PolicyRow | null;
     const schedule = resolveSchedule(profile, policy, effectiveNow);
+    const sessionSchedule = openSession && openSession.date !== today
+      ? resolveSchedule(profile, policy, new Date(openSession.date + 'T12:00:00.000Z'))
+      : schedule;
 
     if (action === 'check_in') {
       if (openSession) {
@@ -577,11 +626,13 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    const openSessionDate = openSession.date ?? today;
 
     const checkoutHandling = resolveCheckoutOvertimeHandling({
-      hasShift: schedule.hasShift,
-      isWorkingDay: schedule.isWorkingDay,
-      workEndTime: schedule.workEndTime,
+      hasShift: sessionSchedule.hasShift,
+      isWorkingDay: sessionSchedule.isWorkingDay,
+      workStartTime: sessionSchedule.workStartTime,
+      workEndTime: sessionSchedule.workEndTime,
       openSessionIsOvertime: openSession.is_overtime,
       openSessionCheckInTime: openSession.check_in_time,
       checkoutTime: time,
@@ -613,8 +664,8 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         await recalculateDailySummary(admin, {
           orgId,
           userId: caller.id,
-          dateStr: today,
-          schedule,
+          dateStr: openSessionDate,
+          schedule: sessionSchedule,
         });
 
         return new Response(
@@ -657,7 +708,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
         .insert({
           org_id: orgId,
           user_id: caller.id,
-          date: today,
+          date: openSessionDate,
           check_in_time: checkoutHandling.shiftEndTime,
           check_out_time: time,
           status: 'present',
@@ -689,8 +740,8 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       await recalculateDailySummary(admin, {
         orgId,
         userId: caller.id,
-        dateStr: today,
-        schedule,
+        dateStr: openSessionDate,
+        schedule: sessionSchedule,
       });
 
       return new Response(
@@ -703,12 +754,17 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
     }
 
     const durationMinutes = diffMinutes(openSession.check_in_time, time);
-    const isEarlyDeparture =
-      schedule.hasShift &&
-      schedule.isWorkingDay &&
-      !openSession.is_overtime &&
-      schedule.workEndTime != null &&
-      toMinutes(time) < toMinutes(schedule.workEndTime);
+    const isEarlyDeparture = (() => {
+      if (!sessionSchedule.hasShift || !sessionSchedule.isWorkingDay || openSession.is_overtime || !sessionSchedule.workEndTime) return false;
+      const tMin = toMinutes(time);
+      const endMin = toMinutes(sessionSchedule.workEndTime);
+      if (!sessionSchedule.workStartTime) return tMin < endMin;
+      const startMin = toMinutes(sessionSchedule.workStartTime);
+      const isOvernightShift = endMin < startMin;
+      if (!isOvernightShift) return tMin < endMin;
+      // Overnight: not early only when past shift end on day-2 side (tMin >= endMin && tMin < startMin)
+      return !(tMin >= endMin && tMin < startMin);
+    })();
 
     const { data: updated, error } = await admin
       .from('attendance_sessions')
@@ -734,8 +790,8 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
     await recalculateDailySummary(admin, {
       orgId,
       userId: caller.id,
-      dateStr: today,
-      schedule,
+      dateStr: openSessionDate,
+      schedule: sessionSchedule,
     });
 
     return new Response(

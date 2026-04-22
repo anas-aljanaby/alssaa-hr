@@ -1,5 +1,13 @@
 # Todo
 
+## Empty Task Template
+- [ ] Done
+- Commit Head:
+- Title:
+- Explanation:
+
+
+
 ## Task 1
 - [x] Done
 - Commit Head: 7895ed5
@@ -11,7 +19,8 @@ We don't need sick days in this system at all, we just have regular off days and
 - [ ] Done
 - Commit Head:
 - Title: Check what is happening when a user continues to work after 12 am
-- Explanation: Determine the best way to handle post-midnight work, including both overtime and non-overtime cases.
+- Explanation: Determine the best way to handle post-midnight work, including both overtime and non-overtime cases. Some times users cant log in around 12 am.
+
 
 ## Task 3
 - [ ] Done
@@ -33,10 +42,19 @@ We don't need sick days in this system at all, we just have regular off days and
 - Explaination
 also add auto punch out rules component 
 
+## Empty Task Template
+- [ ] Done
+- Commit Head:
+- Title: absent b
+- Explanation:
+
+
 ## Later (Needs Review From Radhwan)
 
 ## Task 5
 - [ ] Done
 - Commit Head:
 - Title: Universal settings
-- Explanation: Add universal settings for 12/24 hour format, number style (Arabic or English), and month names.
+- Explanation: Add universal settings for 12/24 hour format, number style (Arabic or English), and month names. 
+update: he said no need to add settings for it, use 12 hour format, use arabic month names like nisan, and use ensligh numbers
+

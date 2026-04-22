@@ -2,7 +2,11 @@ import {
   DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,
   DEFAULT_MINIMUM_OVERTIME_MINUTES,
 } from '@/shared/attendance/constants';
-import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
+import {
+  assertValidWorkSchedule,
+  toWorkSchedule,
+  type WorkSchedule,
+} from '@/shared/attendance/workSchedule';
 import { supabase } from '../supabase';
 import type { Tables, UpdateTables } from '../database.types';
 
@@ -70,26 +74,35 @@ const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   '4': { start: '08:00', end: '16:00' },
 };
 
-export async function getPolicy(): Promise<AttendancePolicy | null> {
-  const { data, error } = await supabase
+export async function getPolicy(orgId?: string): Promise<AttendancePolicy | null> {
+  let query = supabase
     .from('attendance_policy')
-    .select('*')
-    .limit(1)
-    .maybeSingle();
+    .select('*');
+
+  if (orgId) {
+    query = query.eq('org_id', orgId);
+  }
+
+  const { data, error } = await query.limit(1).maybeSingle();
 
   if (error) throw error;
   return data ? toPolicy(data) : null;
 }
 
 export async function updatePolicy(
-  updates: AttendancePolicyUpdate
+  updates: AttendancePolicyUpdate,
+  orgId?: string
 ): Promise<AttendancePolicy> {
-  const existing = await getPolicy();
+  if (updates.work_schedule !== undefined) {
+    assertValidWorkSchedule(updates.work_schedule);
+  }
+  const existing = await getPolicy(orgId);
 
   if (!existing) {
     const { data, error } = await supabase
       .from('attendance_policy')
       .insert({
+        org_id: orgId,
         grace_period_minutes: updates.grace_period_minutes ?? 15,
         auto_punch_out_buffer_minutes:
           updates.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES,

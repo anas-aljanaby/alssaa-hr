@@ -157,4 +157,45 @@ describe('AttendanceHistoryList', () => {
     expect(screen.getByText('خروج مبكر')).toBeInTheDocument();
     expect(screen.getByTestId('session-card-regular-1')).toBeInTheDocument();
   });
+
+  it('labels next-day checkout explicitly on overnight history rows', () => {
+    render(
+      <AttendanceHistoryList
+        days={[
+          {
+            date: '2026-04-04',
+            primaryState: 'fulfilled_shift',
+            firstCheckIn: '18:00',
+            lastCheckOut: '02:00',
+            totalRegularMinutes: 480,
+            totalOvertimeMinutes: 0,
+            totalWorkedMinutes: 480,
+            sessionCount: 1,
+            hasOvertime: false,
+            hasAutoPunchOut: false,
+            needsReview: false,
+            sessions: [
+              {
+                id: 'overnight-1',
+                checkInTime: '18:00',
+                checkOutTime: '02:00',
+                durationMinutes: 480,
+                classification: 'regular',
+                isEarlyDeparture: false,
+                isAutoPunchOut: false,
+                needsReview: false,
+              },
+            ],
+          },
+        ]}
+        emptyMessage="فارغ"
+      />
+    );
+
+    expect(screen.getByText('+1 يوم')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('day-card-2026-04-04').querySelector('button')!);
+
+    expect(screen.getAllByText('+1 يوم').length).toBeGreaterThan(0);
+  });
 });

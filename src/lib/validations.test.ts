@@ -299,12 +299,28 @@ describe('updateProfileSchema', () => {
     expect(r.success).toBe(true);
   });
 
-  it('rejects work_schedule day with end before start', () => {
+  it('passes overnight work_schedule day that crosses midnight', () => {
     const r = updateProfileSchema.safeParse({
       ...valid,
-      work_schedule: { '0': { start: '16:00', end: '08:00' } },
+      work_schedule: { '0': { start: '15:00', end: '01:00' } },
     });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
+  });
+
+  it('passes short work_schedule day on the same day', () => {
+    const r = updateProfileSchema.safeParse({
+      ...valid,
+      work_schedule: { '0': { start: '13:00', end: '15:00' } },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('passes short overnight work_schedule day', () => {
+    const r = updateProfileSchema.safeParse({
+      ...valid,
+      work_schedule: { '0': { start: '23:00', end: '01:00' } },
+    });
+    expect(r.success).toBe(true);
   });
 
   it('rejects work_schedule day with equal start and end times', () => {
@@ -321,6 +337,7 @@ describe('updateProfileSchema', () => {
       work_schedule: { '0': { start: '25:00', end: '16:00' } },
     });
     expect(r.success).toBe(false);
+    if (!r.success) expect(errorAt(r, 'work_schedule.0.start')).toContain('غير صالح');
   });
 
   it('passes when work_schedule is empty (no schedule constraint)', () => {

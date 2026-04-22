@@ -92,6 +92,52 @@ describe('TodayStatusCard overtime confirmation', () => {
     expect(screen.queryByText('تأكيد عمل إضافي')).not.toBeInTheDocument();
   });
 
+  it('keeps an overnight regular session in normal shift mode before the next-day end time', () => {
+    vi.setSystemTime(new Date('2025-06-10T16:00:00'));
+
+    const today: TodayRecord = {
+      punches: [],
+      shift: {
+        ...defaultShift,
+        workStartTime: '15:00',
+        workEndTime: '01:00',
+      },
+      sessions: [
+        {
+          id: 'overnight-open',
+          org_id: 'o1',
+          user_id: 'u1',
+          date: '2025-06-10',
+          check_in_time: '15:00',
+          check_out_time: null,
+          status: 'present',
+          is_overtime: false,
+          is_auto_punch_out: false,
+          is_early_departure: false,
+          needs_review: false,
+          duration_minutes: 0,
+          last_action_at: '2025-06-10T15:00:00Z',
+          is_dev: false,
+          created_at: '2025-06-10T15:00:00Z',
+          updated_at: '2025-06-10T15:00:00Z',
+        },
+      ],
+    };
+
+    render(
+      <TodayStatusCard
+        today={today}
+        actionLoading={false}
+        onCheckIn={vi.fn()}
+        onCheckOut={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('في العمل')).toBeInTheDocument();
+    expect(screen.queryByText(/بعد نهاية الدوام/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^عمل إضافي:/)).not.toBeInTheDocument();
+  });
+
   it('increments worked hours after check-in when check_in_time is ISO datetime', async () => {
     vi.setSystemTime(new Date('2025-06-10T10:05:00'));
 

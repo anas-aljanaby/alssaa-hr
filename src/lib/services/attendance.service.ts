@@ -10,7 +10,9 @@ import {
   type TeamAttendanceLiveState,
 } from '@/shared/attendance';
 import {
+  getNormalizedDayScheduleWindow,
   getShiftForDate,
+  isOvertimeForScheduleTime,
   isWorkingDay as isWorkingDayFromSchedule,
   resolveEffectiveSchedule,
   type EffectiveSchedule,
@@ -260,9 +262,40 @@ export function wallTimeHHMM(time: string | null | undefined): string | null {
   return time.slice(0, 5);
 }
 
+export function doesCheckOutCrossDay(
+  checkInTime: string | null | undefined,
+  checkOutTime: string | null | undefined
+): boolean {
+  const checkInMinutes = wallTimeToMinutes(checkInTime);
+  const checkOutMinutes = wallTimeToMinutes(checkOutTime);
+  return Number.isFinite(checkInMinutes) && Number.isFinite(checkOutMinutes) && checkOutMinutes < checkInMinutes;
+}
+
+export function getLatestCheckOutTime(
+  sessions: Array<Pick<AttendanceSession, 'check_in_time' | 'check_out_time'>>
+): string | null {
+  return sessions
+    .filter(
+      (session): session is Pick<AttendanceSession, 'check_in_time'> & { check_out_time: string } =>
+        !!session.check_out_time
+    )
+    .map((session) => ({
+      time: session.check_out_time,
+      sortKey: doesCheckOutCrossDay(session.check_in_time, session.check_out_time)
+        ? wallTimeToMinutes(session.check_out_time) + 1440
+        : wallTimeToMinutes(session.check_out_time),
+    }))
+    .sort((a, b) => a.sortKey - b.sortKey)
+    .at(-1)?.time ?? null;
+}
+
 export function shiftDurationMinutes(shift: ShiftInfo): number {
-  const d = toMinutes(shift.workEndTime) - toMinutes(shift.workStartTime);
-  return d > 0 ? d : 0;
+  return (
+    getNormalizedDayScheduleWindow({
+      start: shift.workStartTime,
+      end: shift.workEndTime,
+    })?.durationMinutes ?? 0
+  );
 }
 
 export function totalWorkedMinutesToday(today: TodayRecord): number {
@@ -303,12 +336,30 @@ export interface TodayPunchUiState {
 export function getTodayPunchUiState(today: TodayRecord, at: Date = new Date()): TodayPunchUiState {
   const { shift } = today;
   const currentMinutes = at.getHours() * 60 + at.getMinutes();
+  const activeSession = today.sessions?.find((session) => !session.check_out_time) ?? null;
   // `shift === null` means today is an off day (or no policy found): any
   // punch is overtime.
-  const isOvertimeNow = shift ? isOvertimeTime(currentMinutes, shift) : true;
-  const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
+  const normalizedShift = shift
+    ? getNormalizedDayScheduleWindow({ start: shift.workStartTime, end: shift.workEndTime })
+    : null;
+  const assumeNextDay =
+    normalizedShift?.overnight === true &&
+    !!activeSession?.date &&
+    activeSession.date < todayStr(at);
+  const normalizedCurrentMinutes = normalizedShift
+    ? normalizedShift.normalizeTimeMinutes(currentMinutes, { assumeNextDay })
+    : null;
+  const isOvertimeNow =
+    shift && normalizedShift && normalizedCurrentMinutes !== null
+      ? normalizedCurrentMinutes < normalizedShift.startClockMinutes - 60 ||
+        normalizedCurrentMinutes > normalizedShift.endMinutes
+      : true;
   const canPunchIn =
-    !shift || isOvertimeNow || (shiftStartMinutes !== null && currentMinutes >= shiftStartMinutes - 60);
+    !shift ||
+    isOvertimeNow ||
+    (normalizedShift !== null &&
+      normalizedCurrentMinutes !== null &&
+      normalizedCurrentMinutes >= normalizedShift.startClockMinutes - 60);
   return {
     isCheckedIn: isCheckedInToday(today),
     activeCheckInWallTime: getActiveCheckInWallTime(today),
@@ -348,9 +399,11 @@ export function shouldShowShiftCongrats(today: TodayRecord, _at: Date = new Date
  * auto-punch-out timing.
  */
 export function isOvertimeTime(timeMinutes: number, shift: ShiftInfo): boolean {
-  const startMin = toMinutes(shift.workStartTime);
-  const endMin = toMinutes(shift.workEndTime);
-  return timeMinutes < startMin - 60 || timeMinutes > endMin;
+  return isOvertimeForScheduleTime(
+    timeMinutes,
+    { start: shift.workStartTime, end: shift.workEndTime },
+    60
+  );
 }
 
 function buildPunchesFromSessions(sessions: AttendanceSession[]): PunchEntry[] {
@@ -404,7 +457,6 @@ function buildSummaryFallback(
 
   const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
   const firstCheckIn = sorted[0]?.check_in_time ?? null;
-  const lastClosedSession = [...sorted].reverse().find((session) => !!session.check_out_time);
   const regularSessions = sorted.filter((session) => !session.is_overtime);
   const hasRegularPresent = regularSessions.some((session) => session.status === 'present');
   const hasRegularLate = regularSessions.some((session) => session.status === 'late');
@@ -421,7 +473,7 @@ function buildSummaryFallback(
     user_id: sorted[0]?.user_id ?? '',
     date: sorted[0]?.date ?? '',
     first_check_in: firstCheckIn,
-    last_check_out: lastClosedSession?.check_out_time ?? null,
+    last_check_out: getLatestCheckOutTime(sorted),
     total_work_minutes: computeTotalMinutesFromSessions(sorted),
     total_overtime_minutes: computeOvertimeMinutesFromSessions(sorted),
     effective_status: effectiveStatus,
@@ -505,10 +557,7 @@ function buildHistoryDay(params: {
     date,
     primaryState,
     firstCheckIn: summary?.first_check_in ?? sortedSessions[0]?.check_in_time ?? null,
-    lastCheckOut:
-      summary?.last_check_out ??
-      [...sortedSessions].reverse().find((session) => !!session.check_out_time)?.check_out_time ??
-      null,
+    lastCheckOut: summary?.last_check_out ?? getLatestCheckOutTime(sortedSessions),
     totalRegularMinutes,
     totalOvertimeMinutes,
     totalWorkedMinutes,
@@ -546,7 +595,6 @@ function buildPseudoLog(
   if (!sessions.length && !summary) return null;
   const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
   const first = sorted[0];
-  const last = [...sorted].reverse().find((s) => !!s.check_out_time) ?? sorted[sorted.length - 1];
   const rawStatus = summary?.effective_status ?? first?.status ?? null;
   const status: AttendanceLog['status'] =
     rawStatus === 'late' || rawStatus === 'absent' || rawStatus === 'on_leave'
@@ -559,7 +607,7 @@ function buildPseudoLog(
     user_id: summary?.user_id ?? first?.user_id ?? '',
     date,
     check_in_time: summary?.first_check_in ?? first?.check_in_time ?? null,
-    check_out_time: summary?.last_check_out ?? last?.check_out_time ?? null,
+    check_out_time: summary?.last_check_out ?? getLatestCheckOutTime(sorted),
     check_in_lat: null,
     check_in_lng: null,
     check_out_lat: null,
@@ -664,27 +712,64 @@ export async function getEffectiveShiftForUser(
 
 export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
   const today = todayStr();
-  const sessionsRes = await supabase
-    .from('attendance_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .order('check_in_time', { ascending: true });
-  const shift = await getEffectiveShiftForUser(userId, today);
-  const summaryRes = await supabase
-    .from('attendance_daily_summary')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle();
+  const [sessionsRes, shiftRes, summaryRes] = await Promise.all([
+    supabase
+      .from('attendance_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .order('check_in_time', { ascending: true }),
+    getEffectiveShiftForUser(userId, today),
+    supabase
+      .from('attendance_daily_summary')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .maybeSingle(),
+  ]);
 
   if (sessionsRes.error) throw sessionsRes.error;
   if (summaryRes.error) throw summaryRes.error;
 
-  const sessions = Array.isArray(sessionsRes.data) ? (sessionsRes.data as AttendanceSession[]) : [];
-  const summary = normalizeSummary(summaryRes.data);
-  const punches = buildPunchesFromSessions(sessions);
+  let sessions = Array.isArray(sessionsRes.data) ? (sessionsRes.data as AttendanceSession[]) : [];
+  let shift = shiftRes;
+  let summary = normalizeSummary(summaryRes.data);
 
+  if (sessions.length === 0) {
+    const current = parseDateOnlyStr(today);
+    current.setDate(current.getDate() - 1);
+    const yesterday = todayStr(current);
+    const [carrySessionsRes, carryShiftRes, carrySummaryRes] = await Promise.all([
+      supabase
+        .from('attendance_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', yesterday)
+        .is('check_out_time', null)
+        .order('check_in_time', { ascending: true }),
+      getEffectiveShiftForUser(userId, yesterday),
+      supabase
+        .from('attendance_daily_summary')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', yesterday)
+        .maybeSingle(),
+    ]);
+
+    if (carrySessionsRes.error) throw carrySessionsRes.error;
+    if (carrySummaryRes.error) throw carrySummaryRes.error;
+
+    const carrySessions = Array.isArray(carrySessionsRes.data)
+      ? (carrySessionsRes.data as AttendanceSession[])
+      : [];
+    if (carrySessions.length > 0) {
+      sessions = carrySessions;
+      shift = carryShiftRes;
+      summary = normalizeSummary(carrySummaryRes.data);
+    }
+  }
+
+  const punches = buildPunchesFromSessions(sessions);
   return { punches, shift, sessions, summary };
 }
 

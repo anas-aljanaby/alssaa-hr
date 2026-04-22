@@ -88,7 +88,7 @@ export function RequestsPage() {
     }
 
     const [policy, profile] = await Promise.all([
-      policyService.getPolicy(),
+      policyService.getPolicy(currentUser.org_id),
       profilesService.getUserById(currentUser.uid),
     ]);
 

@@ -53,6 +53,7 @@ type NotificationSetting = {
 
 type DayScheduleJson = { start: string; end: string };
 type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
+const TIME_24H_REGEX = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 type Profile = {
   id: string;
@@ -74,7 +75,9 @@ function parseWorkSchedule(raw: unknown): WorkScheduleJson {
       day !== null &&
       typeof day === 'object' &&
       typeof (day as { start?: unknown }).start === 'string' &&
-      typeof (day as { end?: unknown }).end === 'string'
+      typeof (day as { end?: unknown }).end === 'string' &&
+      TIME_24H_REGEX.test((day as DayScheduleJson).start) &&
+      TIME_24H_REGEX.test((day as DayScheduleJson).end)
     ) {
       result[key] = { start: (day as DayScheduleJson).start, end: (day as DayScheduleJson).end };
     }

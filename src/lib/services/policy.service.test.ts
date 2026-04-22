@@ -54,4 +54,26 @@ describe('policy.service', () => {
     const created = await updatePolicy({ grace_period_minutes: 12 });
     expect(created.id).toBe('pol-1');
   });
+
+  it('updatePolicy accepts short work schedules before saving', async () => {
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({
+      data: {
+        ...policyRow,
+        work_schedule: {
+          '0': { start: '13:00', end: '15:00' },
+        },
+      },
+      error: null,
+    });
+    const { updatePolicy } = await import('./policy.service');
+    const updated = await updatePolicy({
+      work_schedule: {
+        '0': { start: '13:00', end: '15:00' },
+      },
+    });
+    expect(updated.work_schedule).toEqual({
+      '0': { start: '13:00', end: '15:00' },
+    });
+  });
 });

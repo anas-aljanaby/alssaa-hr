@@ -1305,6 +1305,79 @@ Deno.test('part 6.7 daily summary reflects auto punch-out update', async () => {
   assertEquals(summary?.effective_status, 'present');
 });
 
+Deno.test('part 6.8 daily summary keeps overnight checkout as the latest closed session', async () => {
+  const mem = makeDeps();
+
+  await mem.admin
+    .from('attendance_sessions')
+    .insert({
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2025-06-10',
+      check_in_time: '09:00',
+      check_out_time: '12:00',
+      status: 'present',
+      is_overtime: false,
+      duration_minutes: 180,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+    })
+    .single();
+  await mem.admin
+    .from('attendance_sessions')
+    .insert({
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2025-06-10',
+      check_in_time: '13:00',
+      check_out_time: '17:00',
+      status: 'present',
+      is_overtime: false,
+      duration_minutes: 240,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+    })
+    .single();
+  await mem.admin
+    .from('attendance_sessions')
+    .insert({
+      org_id: 'o1',
+      user_id: 'u1',
+      date: '2025-06-10',
+      check_in_time: '18:00',
+      check_out_time: '02:00',
+      status: 'present',
+      is_overtime: false,
+      duration_minutes: 480,
+      is_auto_punch_out: false,
+      is_early_departure: false,
+      needs_review: false,
+    })
+    .single();
+
+  await recalculateDailySummary(mem.admin, {
+    orgId: 'o1',
+    userId: 'u1',
+    dateStr: '2025-06-10',
+    schedule: {
+      hasShift: true,
+      isWorkingDay: true,
+      workStartTime: '09:00',
+      workEndTime: '18:00',
+      gracePeriodMinutes: 15,
+      earlyLoginMinutes: 60,
+      minimumRequiredMinutes: 480,
+    },
+  });
+
+  const summary = mem.summaries.find((s) => s.date === '2025-06-10');
+  assertEquals(summary?.first_check_in, '09:00');
+  assertEquals(summary?.last_check_out, '02:00');
+  assertEquals(summary?.total_work_minutes, 900);
+});
+
 Deno.test('part 7.1 checkout before shift end sets is_early_departure true', async () => {
   const mem = makeDeps();
   await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));

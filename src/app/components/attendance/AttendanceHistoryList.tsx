@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Clock3, LogIn, LogOut } from 'lucide-react';
 import type {
   AttendanceHistoryDay,
   AttendanceHistorySession,
 } from '@/lib/services/attendance.service';
+import { doesCheckOutCrossDay } from '@/lib/services/attendance.service';
 import { getSessionTheme } from './attendanceStatusTheme';
 import { cn } from '@/app/components/ui/utils';
 import { StatusBadge } from '@/shared/components';
@@ -83,6 +84,7 @@ function SessionFlag({
 
 function SessionCard({ session }: { session: AttendanceHistorySession }) {
   const classification = sessionClassificationMeta(session);
+  const checkOutIsNextDay = doesCheckOutCrossDay(session.checkInTime, session.checkOutTime);
 
   return (
     <div
@@ -123,18 +125,26 @@ function SessionCard({ session }: { session: AttendanceHistorySession }) {
             <LogOut className="h-3.5 w-3.5 text-rose-500" />
             <span>خروج</span>
           </div>
-          <p className="mt-1 font-mono text-sm text-gray-900">{formatTime(session.checkOutTime)}</p>
+          <div className="mt-1 flex items-center gap-1">
+            <p className="font-mono text-sm text-gray-900">{formatTime(session.checkOutTime)}</p>
+            {checkOutIsNextDay
+              ? <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1">+1 يوم</span>
+              : null}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function DaySummaryMetric({ label, value }: { label: string; value: string }) {
+function DaySummaryMetric({ label, value, suffix }: { label: string; value: string; suffix?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-slate-50 px-3 py-2">
       <p className="text-[11px] text-gray-500">{label}</p>
-      <p className="mt-1 text-sm font-medium text-gray-900">{value}</p>
+      <div className="mt-1 flex items-center gap-1">
+        <p className="text-sm font-medium text-gray-900">{value}</p>
+        {suffix}
+      </div>
     </div>
   );
 }
@@ -159,6 +169,7 @@ function AttendanceHistoryDayCard({
   onToggle: () => void;
 }) {
   const isExpandable = day.sessions.length > 0;
+  const lastCheckOutIsNextDay = doesCheckOutCrossDay(day.firstCheckIn, day.lastCheckOut);
 
   return (
     <div
@@ -206,7 +217,15 @@ function AttendanceHistoryDayCard({
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           <DaySummaryMetric label="أول دخول" value={formatTime(day.firstCheckIn)} />
-          <DaySummaryMetric label="آخر خروج" value={formatTime(day.lastCheckOut)} />
+          <DaySummaryMetric
+            label="آخر خروج"
+            value={formatTime(day.lastCheckOut)}
+            suffix={
+              lastCheckOutIsNextDay
+                ? <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1">+1 يوم</span>
+                : undefined
+            }
+          />
           <DaySummaryMetric label="عادي" value={formatMinutes(day.totalRegularMinutes)} />
           <DaySummaryMetric label="إضافي" value={formatMinutes(day.totalOvertimeMinutes)} />
           <DaySummaryMetric label="الإجمالي" value={formatMinutes(day.totalWorkedMinutes)} />

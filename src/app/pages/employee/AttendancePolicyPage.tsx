@@ -22,7 +22,10 @@ import {
   DEFAULT_MINIMUM_OVERTIME_MINUTES,
 } from '@/shared/attendance/constants';
 import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
-import type { WorkSchedule } from '@/shared/attendance/workSchedule';
+import {
+  getWorkScheduleValidationIssues,
+  type WorkSchedule,
+} from '@/shared/attendance/workSchedule';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,11 +193,11 @@ export function AttendancePolicyPage() {
   // ── Data loading ───────────────────────────────────────────────────────────
   useEffect(() => {
     policyService
-      .getPolicy()
+      .getPolicy(currentUser?.org_id)
       .then(setPolicy)
       .catch(() => toast.error('فشل تحميل سياسة الحضور'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [currentUser?.org_id]);
 
   if (!currentUser) return null;
   const isAdmin = currentUser.role === 'admin';
@@ -223,6 +226,13 @@ export function AttendancePolicyPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!editPolicy || !activeSection) return;
+    if (activeSection === 'schedule') {
+      const scheduleIssues = getWorkScheduleValidationIssues(editPolicy.work_schedule);
+      if (scheduleIssues.length > 0) {
+        toast.error(scheduleIssues[0].message);
+        return;
+      }
+    }
     try {
       setSavingPolicy(true);
       const updated = await policyService.updatePolicy({
@@ -236,7 +246,7 @@ export function AttendancePolicyPage() {
           editPolicy.minimum_overtime_minutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES,
         max_late_days_before_warning: editPolicy.max_late_days_before_warning,
         annual_leave_per_year: editPolicy.annual_leave_per_year,
-      });
+      }, currentUser.org_id);
       setPolicy(updated);
       toast.success(SECTION_SUCCESS[activeSection]);
       setActiveSection(null);
@@ -261,6 +271,9 @@ export function AttendancePolicyPage() {
         : prev
     );
   }
+
+  const scheduleIssues = editPolicy ? getWorkScheduleValidationIssues(editPolicy.work_schedule) : [];
+  const hasInvalidSchedule = activeSection === 'schedule' && scheduleIssues.length > 0;
 
   function removeRule(id: string) {
     setEditPolicy((prev) =>
@@ -581,7 +594,7 @@ export function AttendancePolicyPage() {
               <div className="pt-3">
                 <button
                   type="submit"
-                  disabled={savingPolicy}
+                  disabled={savingPolicy || hasInvalidSchedule}
                   className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition-colors disabled:opacity-50 text-sm font-semibold"
                 >
                   {savingPolicy ? 'جاري الحفظ...' : 'حفظ'}

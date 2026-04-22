@@ -4,6 +4,7 @@
  * the same day-state and live-presence rules across dashboards and details.
  */
 
+import { getNormalizedDayScheduleWindow } from './workSchedule';
 import {
   resolveAttendanceDayState,
   resolveAttendanceDisplayStatus,
@@ -12,17 +13,20 @@ import {
 import type { DisplayStatus, LivePresence } from './types';
 
 interface TodayShiftLike {
+  workStartTime: string;
   workEndTime: string;
   bufferMinutesAfterShift: number;
 }
 
 interface TodaySummaryLike {
+  date?: string;
   effective_status?: OvertimeAwareAttendanceStatus;
   has_overtime?: boolean | null;
   total_overtime_minutes?: number | null;
 }
 
 interface TodaySessionLike {
+  date?: string;
   check_out_time?: string | null;
   is_overtime?: boolean | null;
 }
@@ -39,18 +43,52 @@ export function getTodayRecordLivePresence(record: TodayRecordStatusLike): LiveP
   return 'no_session';
 }
 
+function dateOnlyString(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+}
+
+function parseDateOnly(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function dayDifference(fromIso: string, toIso: string): number | null {
+  const from = parseDateOnly(fromIso);
+  const to = parseDateOnly(toIso);
+  if (!from || !to) return null;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((to.getTime() - from.getTime()) / msPerDay);
+}
+
+function getRecordDate(record: TodayRecordStatusLike, at: Date): string {
+  return record.summary?.date ?? record.sessions?.[0]?.date ?? dateOnlyString(at);
+}
+
 export function isWithinTodayShiftWindow(record: TodayRecordStatusLike, at: Date): boolean {
   // A null shift means today is an off day — no shift window to be within.
   if (!record.shift) return false;
 
-  const currentMinutes = at.getHours() * 60 + at.getMinutes();
-  const [endHour, endMinute] = record.shift.workEndTime.split(':').map(Number);
-  const shiftEndMinutes =
-    (endHour ?? 0) * 60 +
-    (endMinute ?? 0) +
-    record.shift.bufferMinutesAfterShift;
+  const schedule = getNormalizedDayScheduleWindow({
+    start: record.shift.workStartTime,
+    end: record.shift.workEndTime,
+  });
+  if (!schedule) return false;
 
-  return currentMinutes <= shiftEndMinutes;
+  const currentMinutes = at.getHours() * 60 + at.getMinutes();
+  const currentDate = dateOnlyString(at);
+  const dateOffset = dayDifference(getRecordDate(record, at), currentDate);
+  if (dateOffset === null) return false;
+
+  if (!schedule.overnight) {
+    return dateOffset === 0 && currentMinutes <= schedule.endClockMinutes + record.shift.bufferMinutesAfterShift;
+  }
+
+  if (dateOffset === 0) return true;
+  if (dateOffset === 1) {
+    return currentMinutes <= schedule.endClockMinutes + record.shift.bufferMinutesAfterShift;
+  }
+  return false;
 }
 
 export function resolveTodayRecordDisplayStatus(

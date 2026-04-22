@@ -64,11 +64,9 @@ import { StatCard } from '../../components/shared/StatCard';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import {
   getStatusConfig,
-  resolveAttendanceDayState,
-  resolveAttendanceDisplayStatus,
   type DisplayStatus,
-  type LivePresence,
 } from '@/shared/attendance';
+import { resolveTodayRecordDisplayStatus } from '@/shared/attendance/todayRecord';
 import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
 import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
 import { StatusBadge } from '@/shared/components';
@@ -121,51 +119,8 @@ function getDisplayEmail(email: string | null): string {
   return value && value.length > 0 ? value : '—';
 }
 
-function getLivePresenceForTodayRecord(todayRecord: TodayRecord): LivePresence {
-  if (todayRecord.sessions?.some((session) => !session.check_out_time)) return 'checked_in';
-  if ((todayRecord.sessions?.length ?? 0) > 0) return 'checked_out';
-  return 'no_session';
-}
-
-function getDayStateForTodayRecord(todayRecord: TodayRecord, _at: Date) {
-  // In the new schedule model, shift === null indicates an off day.
-  const isOffDay = todayRecord.shift === null;
-  const hasOvertime =
-    todayRecord.summary?.has_overtime === true ||
-    (todayRecord.summary?.total_overtime_minutes ?? 0) > 0 ||
-    todayRecord.sessions?.some((session) => session.is_overtime) === true;
-
-  if (isOffDay) {
-    return {
-      dayStatus: 'weekend' as const,
-      hasOvertime,
-    };
-  }
-
-  return {
-    ...resolveAttendanceDayState(todayRecord.summary?.effective_status, hasOvertime),
-  };
-}
-
-function isWithinShiftWindow(todayRecord: TodayRecord, at: Date): boolean {
-  if (!todayRecord.shift) return false;
-
-  const currentMinutes = at.getHours() * 60 + at.getMinutes();
-  const [endHour, endMinute] = todayRecord.shift.workEndTime.split(':').map(Number);
-  const shiftEndMinutes =
-    (endHour ?? 0) * 60 +
-    (endMinute ?? 0) +
-    todayRecord.shift.bufferMinutesAfterShift;
-
-  return currentMinutes <= shiftEndMinutes;
-}
-
 function resolveTodayDisplayStatus(todayRecord: TodayRecord, at: Date): DisplayStatus {
-  return resolveAttendanceDisplayStatus(
-    getDayStateForTodayRecord(todayRecord, at),
-    getLivePresenceForTodayRecord(todayRecord),
-    { isWithinShiftWindow: isWithinShiftWindow(todayRecord, at) }
-  );
+  return resolveTodayRecordDisplayStatus(todayRecord, at);
 }
 
 function getTodayFirstCheckIn(todayRecord: TodayRecord | null): string | null {
@@ -291,7 +246,7 @@ export function UserDetailsPage() {
 
   useEffect(() => {
     if (profile && currentUser?.role === 'admin') {
-      policyService.getPolicy().then(setOrgPolicy).catch(() => {});
+      policyService.getPolicy(profile.org_id ?? undefined).then(setOrgPolicy).catch(() => {});
     }
   }, [profile, currentUser?.role]);
 
@@ -1386,7 +1341,12 @@ export function UserDetailsPage() {
                 <p className="text-xs text-gray-500 mb-3">حدّد أيام العمل ووقت كل يوم. الأيام غير المفعّلة تُعامَل كأيام راحة. إذا تُرك الجدول فارغاً بالكامل، تُستخدم إعدادات المنظمة.</p>
                 <WorkScheduleEditor
                   value={editProfileForm.watch('work_schedule') ?? {}}
-                  onChange={(next) => editProfileForm.setValue('work_schedule', next, { shouldDirty: true })}
+                  onChange={(next) =>
+                    editProfileForm.setValue('work_schedule', next, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
                 />
               </div>
 

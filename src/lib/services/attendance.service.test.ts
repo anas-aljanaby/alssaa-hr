@@ -103,7 +103,7 @@ describe('attendance.service', () => {
   });
 
   it('isOvertimeTime detects time outside shift as overtime', async () => {
-    const { isOvertimeTime } = await import('./attendance.service');
+    const { isOvertimeTime, shiftDurationMinutes } = await import('./attendance.service');
     const shift = {
       workStartTime: '08:00',
       workEndTime: '16:00',
@@ -116,6 +116,44 @@ describe('attendance.service', () => {
     expect(isOvertimeTime(17 * 60, shift)).toBe(true);
     // 09:00 is well within the shift window (start 08:00, early-login 07:00).
     expect(isOvertimeTime(9 * 60, shift)).toBe(false);
+    expect(shiftDurationMinutes(shift)).toBe(480);
+  });
+
+  it('handles overnight shift duration and overtime boundaries', async () => {
+    const { getTodayPunchUiState, isOvertimeTime, shiftDurationMinutes } = await import('./attendance.service');
+    const shift = {
+      workStartTime: '15:00',
+      workEndTime: '01:00',
+      gracePeriodMinutes: 15,
+      bufferMinutesAfterShift: 5,
+      minimumOvertimeMinutes: 30,
+      minimumRequiredMinutes: null,
+    };
+
+    expect(shiftDurationMinutes(shift)).toBe(600);
+    expect(isOvertimeTime(14 * 60, shift)).toBe(false);
+    expect(isOvertimeTime(30, shift)).toBe(true);
+    expect(isOvertimeTime(13 * 60, shift)).toBe(true);
+    expect(isOvertimeTime(2 * 60, shift)).toBe(true);
+
+    const ui = getTodayPunchUiState(
+      {
+        punches: [],
+        shift,
+        sessions: [
+          {
+            ...sessionRow,
+            date: '2025-06-10',
+            check_in_time: '15:00',
+            check_out_time: null,
+          },
+        ],
+      },
+      new Date('2025-06-11T00:30:00')
+    );
+    expect(ui.isCheckedIn).toBe(true);
+    expect(ui.isOvertimeNow).toBe(false);
+    expect(ui.canPunchIn).toBe(true);
   });
 
   it('wallTimeToMinutes parses ISO and HH:MM', async () => {
@@ -390,16 +428,60 @@ describe('attendance.service', () => {
   });
 
   it('getAttendanceToday combines summary, sessions, and shift', async () => {
-    sb.queueResult({ data: [sessionRow], error: null });
     sb.queueResult({ data: profileShift, error: null });
-    sb.queueResult({ data: policyRow, error: null });
+    sb.queueResult({ data: [sessionRow], error: null });
     sb.queueResult({ data: summaryRow, error: null });
+    sb.queueResult({ data: policyRow, error: null });
     const { getAttendanceToday, toAttendanceLog } = await import('./attendance.service');
     const rec = await getAttendanceToday('u1');
     expect(toAttendanceLog(rec)?.id).toBe('sum1');
     expect(rec.shift?.workStartTime).toBe('08:00');
     expect(rec.shift?.minimumRequiredMinutes).toBeNull();
     expect(rec.punches.length).toBeGreaterThan(0);
+  });
+
+  it('getAttendanceToday falls back to yesterday open overnight session', async () => {
+    const overnightSession = {
+      ...sessionRow,
+      date: '2025-06-10',
+      check_in_time: '15:00',
+      check_out_time: null,
+    };
+    const overnightSummary = {
+      ...summaryRow,
+      id: 'sum-overnight',
+      date: '2025-06-10',
+      first_check_in: '15:00',
+      last_check_out: null,
+    };
+    const overnightPolicy = {
+      ...policyRow,
+      work_schedule: {
+        '0': { start: '15:00', end: '01:00' },
+        '1': { start: '15:00', end: '01:00' },
+        '2': { start: '15:00', end: '01:00' },
+        '3': { start: '15:00', end: '01:00' },
+        '4': { start: '15:00', end: '01:00' },
+      },
+    };
+
+    vi.setSystemTime(new Date('2025-06-11T00:30:00'));
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: [], error: null });
+    sb.queueResult({ data: null, error: null });
+    sb.queueResult({ data: overnightPolicy, error: null });
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: [overnightSession], error: null });
+    sb.queueResult({ data: overnightSummary, error: null });
+    sb.queueResult({ data: overnightPolicy, error: null });
+
+    const { getAttendanceToday } = await import('./attendance.service');
+    const rec = await getAttendanceToday('u1');
+
+    expect(rec.sessions).toEqual([expect.objectContaining({ date: '2025-06-10', check_in_time: '15:00' })]);
+    expect(rec.summary?.date).toBe('2025-06-10');
+    expect(rec.shift?.workStartTime).toBe('15:00');
+    expect(rec.shift?.workEndTime).toBe('01:00');
   });
 
   it('getEffectiveShiftForUser returns null when profile missing', async () => {
@@ -610,6 +692,50 @@ describe('attendance.service', () => {
     expect(days.some((day) => day.date === '2025-06-07')).toBe(false);
   });
 
+  it('attendance history fallback keeps the overnight checkout when it is the true last session', async () => {
+    sb.queueResult({ data: profileShift, error: null });
+    sb.queueResult({ data: { join_date: '2020-01-01' }, error: null });
+    sb.queueResult({ data: [], error: null });
+    sb.queueResult({
+      data: [
+        {
+          ...sessionRow,
+          id: 'sess-morning',
+          date: '2025-06-10',
+          check_in_time: '09:00',
+          check_out_time: '12:00',
+          duration_minutes: 180,
+        },
+        {
+          ...sessionRow,
+          id: 'sess-afternoon',
+          date: '2025-06-10',
+          check_in_time: '13:00',
+          check_out_time: '17:00',
+          duration_minutes: 240,
+        },
+        {
+          ...sessionRow,
+          id: 'sess-overnight',
+          date: '2025-06-10',
+          check_in_time: '18:00',
+          check_out_time: '02:00',
+          duration_minutes: 480,
+        },
+      ],
+      error: null,
+    });
+    sb.queueResult({ data: policyRow, error: null });
+
+    const { getAttendanceHistoryMonth } = await import('./attendance.service');
+    const days = await getAttendanceHistoryMonth('u1', 2025, 5); // June
+    const day = days.find((entry) => entry.date === '2025-06-10');
+
+    expect(day?.firstCheckIn).toBe('09:00');
+    expect(day?.lastCheckOut).toBe('02:00');
+    expect(day?.totalWorkedMinutes).toBe(900);
+  });
+
   it('calendar does not mark pre-join working days as absent', async () => {
     sb.queueResult({ data: profileShift, error: null });
     sb.queueResult({ data: { join_date: '2025-06-05' }, error: null });
@@ -676,10 +802,10 @@ describe('attendance.service', () => {
     };
 
     function queueGetAttendanceTodayForPunch(sessions: unknown[]) {
-      sb.queueResult({ data: sessions, error: null });
       sb.queueResult({ data: profileShift, error: null });
-      sb.queueResult({ data: policyRow, error: null });
+      sb.queueResult({ data: sessions, error: null });
       sb.queueResult({ data: null, error: null });
+      sb.queueResult({ data: policyRow, error: null });
     }
 
     beforeEach(() => {
@@ -815,10 +941,10 @@ describe('attendance.service', () => {
         is_overtime: true,
         duration_minutes: 60,
       };
-      sb.queueResult({ data: [closedRegular, otSplit], error: null });
       sb.queueResult({ data: profileShift, error: null });
-      sb.queueResult({ data: policyRow, error: null });
+      sb.queueResult({ data: [closedRegular, otSplit], error: null });
       sb.queueResult({ data: null, error: null });
+      sb.queueResult({ data: policyRow, error: null });
 
       const { checkOut } = await import('./attendance.service');
       const r = await checkOut('u1');
@@ -836,10 +962,10 @@ describe('attendance.service', () => {
         },
         error: null,
       } as never);
-      sb.queueResult({ data: [], error: null });
       sb.queueResult({ data: profileShift, error: null });
-      sb.queueResult({ data: policyRow, error: null });
+      sb.queueResult({ data: [], error: null });
       sb.queueResult({ data: null, error: null });
+      sb.queueResult({ data: policyRow, error: null });
 
       const { checkOut } = await import('./attendance.service');
       const r = await checkOut('u1');

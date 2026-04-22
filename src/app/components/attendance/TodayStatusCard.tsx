@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { LogIn, LogOut, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import {
+  doesCheckOutCrossDay,
+  getLatestCheckOutTime,
   isOvertimeTime,
   totalWorkedMinutesToday,
   wallTimeHHMM,
@@ -11,6 +13,7 @@ import { useTodayPunchUi } from '../../hooks/useTodayPunchUi';
 import { getStatusTheme } from './attendanceStatusTheme';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { DEFAULT_MINIMUM_OVERTIME_MINUTES } from '@/shared/attendance/constants';
+import { getNormalizedDayScheduleWindow } from '@/shared/attendance/workSchedule';
 
 interface Props {
   today: TodayRecord;
@@ -25,11 +28,6 @@ interface Props {
   isOffline?: boolean;
 }
 
-function toMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -40,6 +38,31 @@ function formatElapsed(seconds: number): string {
 
 function formatTime(t: string): string {
   return wallTimeHHMM(t) ?? '--:--';
+}
+
+function getSessionCheckInDate(
+  session: NonNullable<TodayRecord['sessions']>[number] | null | undefined
+): Date | null {
+  if (!session) return null;
+
+  const raw = session.check_in_time;
+  if (raw.includes('T')) {
+    const wallTime = wallTimeHHMM(raw);
+    const datePart = raw.slice(0, 10);
+    if (wallTime && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      const [hours, minutes] = wallTime.split(':').map(Number);
+      const base = new Date(`${datePart}T00:00:00`);
+      base.setHours(hours, minutes, 0, 0);
+      return base;
+    }
+  }
+
+  const wallTime = wallTimeHHMM(raw);
+  if (!wallTime) return null;
+  const [hours, minutes] = wallTime.split(':').map(Number);
+  const base = session.date ? new Date(`${session.date}T00:00:00`) : new Date();
+  base.setHours(hours, minutes, 0, 0);
+  return base;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -85,68 +108,81 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
   } = punchUi;
 
   const currentNow = new Date();
+  const currentMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
+  const activeSession = today.sessions?.find((session) => !session.check_out_time) ?? null;
+  const currentDate = `${currentNow.getFullYear()}-${String(currentNow.getMonth() + 1).padStart(2, '0')}-${String(currentNow.getDate()).padStart(2, '0')}`;
+  const normalizedShift = shift
+    ? getNormalizedDayScheduleWindow({ start: shift.workStartTime, end: shift.workEndTime })
+    : null;
+  const assumeNextDay =
+    normalizedShift?.overnight === true &&
+    !!activeSession?.date &&
+    activeSession.date < currentDate;
+  const normalizedCurrentMinutes = normalizedShift
+    ? normalizedShift.normalizeTimeMinutes(currentMinutes, { assumeNextDay })
+    : null;
+  const normalizedCurrentMinutesForShiftDay = normalizedShift
+    ? normalizedShift.normalizeTimeMinutes(currentMinutes)
+    : null;
 
   // Real elapsed since punch-in (for the main clock and "hours worked")
   useEffect(() => {
-    if (!isCheckedIn || !activeCheckInTime) {
+    if (!isCheckedIn || !activeSession) {
       setPunchInElapsedSeconds(0);
       return;
     }
     const computePunchInElapsed = () => {
-      const hm = wallTimeHHMM(activeCheckInTime);
-      if (!hm) return 0;
-      const [h, m] = hm.split(':').map(Number);
       const currentDate = new Date();
-      const inMs = new Date(currentDate).setHours(h, m, 0, 0);
-      return Math.max(0, Math.floor((currentDate.getTime() - inMs) / 1000));
+      const checkInAt = getSessionCheckInDate(activeSession);
+      if (!checkInAt) return 0;
+      return Math.max(0, Math.floor((currentDate.getTime() - checkInAt.getTime()) / 1000));
     };
     setPunchInElapsedSeconds(computePunchInElapsed());
     const id = setInterval(() => setPunchInElapsedSeconds(computePunchInElapsed()), 1000);
     return () => clearInterval(id);
-  }, [isCheckedIn, activeCheckInTime]);
+  }, [activeSession, isCheckedIn]);
 
   // Workday elapsed: for progress bar only, caps at shift duration
   useEffect(() => {
-    if (!isCheckedIn || !shift) {
+    if (!isCheckedIn || !normalizedShift) {
       setWorkdayElapsedSeconds(0);
       return;
     }
-    const startM = toMinutes(shift.workStartTime);
-    const endM = toMinutes(shift.workEndTime);
     const computeWorkdayElapsed = () => {
       const current = new Date();
       const currentMinutes = current.getHours() * 60 + current.getMinutes();
       const currentSeconds = current.getSeconds();
-      if (currentMinutes < startM) return 0;
-      if (currentMinutes >= endM) return (endM - startM) * 60;
-      return (currentMinutes - startM) * 60 + currentSeconds;
+      const normalizedCurrent = normalizedShift.normalizeTimeMinutes(currentMinutes, {
+        assumeNextDay,
+      });
+      if (normalizedCurrent < normalizedShift.startClockMinutes) return 0;
+      if (normalizedCurrent >= normalizedShift.endMinutes) {
+        return normalizedShift.durationMinutes * 60;
+      }
+      return (normalizedCurrent - normalizedShift.startClockMinutes) * 60 + currentSeconds;
     };
     setWorkdayElapsedSeconds(computeWorkdayElapsed());
     const id = setInterval(() => setWorkdayElapsedSeconds(computeWorkdayElapsed()), 1000);
     return () => clearInterval(id);
-  }, [isCheckedIn, shift]);
+  }, [assumeNextDay, isCheckedIn, normalizedShift]);
 
-  const currentMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
-
-  const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
-  const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
+  const shiftEndMinutes = normalizedShift?.endMinutes ?? null;
   const minimumOvertimeMinutes = shift?.minimumOvertimeMinutes ?? DEFAULT_MINIMUM_OVERTIME_MINUTES;
-  const shiftDuration = shiftStartMinutes !== null && shiftEndMinutes !== null
-    ? shiftEndMinutes - shiftStartMinutes
-    : null;
+  const shiftDuration = normalizedShift?.durationMinutes ?? null;
 
   const isWorkingDay = shift !== null;
-  const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
+  const isBeforeShift =
+    normalizedShift !== null &&
+    normalizedCurrentMinutesForShiftDay !== null &&
+    !isOvertime &&
+    normalizedCurrentMinutesForShiftDay < normalizedShift.startClockMinutes;
   const totalWorkedMin = totalWorkedMinutesToday(today);
-  const activeSession = today.sessions?.find((session) => !session.check_out_time) ?? null;
   const orderedSessions = [...(today.sessions ?? [])].sort((a, b) =>
     a.check_in_time.localeCompare(b.check_in_time)
   );
   const firstCheckInTime = today.summary?.first_check_in ?? orderedSessions[0]?.check_in_time ?? null;
-  const lastCheckOutTime =
-    today.summary?.last_check_out ??
-    [...orderedSessions].reverse().find((session) => !!session.check_out_time)?.check_out_time ??
-    null;
+  const lastCheckOutTime = today.summary?.last_check_out ?? getLatestCheckOutTime(orderedSessions);
+  const lastCheckOutIsNextDay = doesCheckOutCrossDay(firstCheckInTime, lastCheckOutTime);
 
   // Progress bar: 0-100%, caps at shift end
   const progressPercent = shiftDuration != null && shiftDuration > 0
@@ -160,9 +196,13 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
       : false);
 
   // Time past shift end for an open regular session on a working day.
-  const isPastShiftEnd = isCheckedIn && shiftEndMinutes !== null && currentMinutes > shiftEndMinutes;
+  const isPastShiftEnd =
+    isCheckedIn &&
+    shiftEndMinutes !== null &&
+    normalizedCurrentMinutes !== null &&
+    normalizedCurrentMinutes > shiftEndMinutes;
   const postShiftElapsedSeconds = isPastShiftEnd
-    ? Math.max(0, (currentMinutes - shiftEndMinutes!) * 60 + currentNow.getSeconds())
+    ? Math.max(0, (normalizedCurrentMinutes! - shiftEndMinutes!) * 60 + currentNow.getSeconds())
     : 0;
   const hasReachedLateStayOvertimeThreshold =
     isCheckedIn &&
@@ -190,8 +230,10 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
       ? isOvertimeTime(wallTimeToMinutes(firstCheckInTime), shift)
       : false;
   const firstPunchIsLate =
-    firstCheckInTime && shift && !firstPunchIsOvertime
-      ? wallTimeToMinutes(firstCheckInTime) > shiftStartMinutes! + shift.gracePeriodMinutes
+    firstCheckInTime && shift && normalizedShift && !firstPunchIsOvertime
+      ? (!normalizedShift.overnight || wallTimeToMinutes(firstCheckInTime) >= normalizedShift.startClockMinutes) &&
+        normalizedShift.normalizeTimeMinutes(wallTimeToMinutes(firstCheckInTime)) >
+          normalizedShift.startClockMinutes + shift.gracePeriodMinutes
       : false;
 
   const handleCheckInClick = () => {
@@ -304,7 +346,14 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
             {lastCheckOutTime && (
               <div className="text-center mr-4">
                 <p className="text-xs text-gray-400">الانصراف</p>
-                <p className="text-gray-800 font-medium">{formatTime(lastCheckOutTime)}</p>
+                <div className="flex items-center justify-center gap-1">
+                  <p className="text-gray-800 font-medium">{formatTime(lastCheckOutTime)}</p>
+                  {lastCheckOutIsNextDay ? (
+                    <span className="rounded border border-blue-200 bg-blue-50 px-1 py-0.5 text-[10px] font-semibold text-blue-600">
+                      +1 يوم
+                    </span>
+                  ) : null}
+                </div>
               </div>
             )}
           </div>
