@@ -180,7 +180,7 @@ export function resolveDaySchedule(
   org: WorkSchedule | null | undefined,
 ): DaySchedule | null {
   const key = String(dow) as DayKey;
-  if (user) return user[key] ?? null;
+  if (user && Object.keys(user).length > 0) return user[key] ?? null;
   if (org) return org[key] ?? null;
   return null;
 }
