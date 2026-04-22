@@ -11,6 +11,8 @@ import * as policyService from '@/lib/services/policy.service';
 import { getAddUserErrorMessage, getProfileUpdateErrorMessage } from '@/lib/errorMessages';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
+import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
+import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { PasswordGenerateCopyRow } from '@/app/components/PasswordGenerateCopyRow';
@@ -56,9 +58,7 @@ export function UsersPage() {
       email: '',
       role: 'employee',
       department_id: '',
-      work_days: undefined,
-      work_start_time: '',
-      work_end_time: '',
+      work_schedule: {},
     },
   });
 
@@ -206,18 +206,18 @@ export function UsersPage() {
   };
 
   const openEditModal = (user: Profile) => {
-    const fallbackWorkDays = orgPolicy?.weekly_off_days
-      ? [0, 1, 2, 3, 4, 5, 6].filter((d) => !orgPolicy.weekly_off_days.includes(d))
-      : undefined;
+    const userSchedule = toWorkSchedule(user.work_schedule);
+    const hasUserSchedule = Object.keys(userSchedule).length > 0;
+    const schedule: WorkSchedule = hasUserSchedule
+      ? userSchedule
+      : (orgPolicy?.work_schedule ?? {});
     setEditingUser(user);
     editUserForm.reset({
       name_ar: user.name_ar,
       email: user.email ?? '',
       role: user.role,
       department_id: user.department_id ?? '',
-      work_days: user.work_days ?? fallbackWorkDays,
-      work_start_time: user.work_start_time ?? orgPolicy?.work_start_time ?? '',
-      work_end_time: user.work_end_time ?? orgPolicy?.work_end_time ?? '',
+      work_schedule: schedule,
     });
   };
 
@@ -235,18 +235,15 @@ export function UsersPage() {
     }
     setEditSubmitting(true);
     try {
-      const hasWorkDays = data.work_days && data.work_days.length > 0;
-      const workStart = data.work_start_time?.trim();
-      const workEnd = data.work_end_time?.trim();
+      const schedule = data.work_schedule ?? {};
+      const hasSchedule = Object.keys(schedule).length > 0;
       await profilesService.updateUser(editingUser.id, {
         name_ar: data.name_ar.trim(),
         // Preserve existing email when form does not provide one.
         email: rawNextEmail && rawNextEmail.length > 0 ? rawNextEmail : (editingUser.email ?? null),
         role: editingUser.role,
         department_id: editingUser.department_id,
-        work_days: hasWorkDays && workStart && workEnd ? data.work_days! : null,
-        work_start_time: hasWorkDays && workStart && workEnd ? workStart : null,
-        work_end_time: hasWorkDays && workStart && workEnd ? workEnd : null,
+        work_schedule: hasSchedule ? schedule : null,
       });
       toast.success('تم تحديث المستخدم');
       setEditingUser(null);
@@ -562,64 +559,11 @@ export function UsersPage() {
 
               <div className="border-t border-gray-100 pt-4">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
-                <p className="text-xs text-gray-500 mb-3">اختر أيام العمل ووقت البداية والنهاية (نفس التوقيت لجميع الأيام). إن لم تختر أي أيام تُستخدم إعدادات المنظمة.</p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {[
-                    { d: 0, label: 'الأحد' },
-                    { d: 1, label: 'الإثنين' },
-                    { d: 2, label: 'الثلاثاء' },
-                    { d: 3, label: 'الأربعاء' },
-                    { d: 4, label: 'الخميس' },
-                    { d: 5, label: 'الجمعة' },
-                    { d: 6, label: 'السبت' },
-                  ].map(({ d, label }) => {
-                    const workDays = editUserForm.watch('work_days') ?? [];
-                    const checked = workDays.includes(d);
-                    return (
-                      <label
-                        key={d}
-                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${
-                          checked ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            const prev = editUserForm.getValues('work_days') ?? [];
-                            const next = prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b);
-                            editUserForm.setValue('work_days', next);
-                          }}
-                          className="rounded border-gray-300"
-                        />
-                        {label}
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">وقت البداية</label>
-                    <input
-                      type="time"
-                      {...editUserForm.register('work_start_time')}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                      dir="ltr"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">وقت النهاية</label>
-                    <input
-                      type="time"
-                      {...editUserForm.register('work_end_time')}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
-                {editUserForm.formState.errors.work_end_time && (
-                  <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.work_end_time.message}</p>
-                )}
+                <p className="text-xs text-gray-500 mb-3">حدد أيام وساعات عمل هذا المستخدم. الأيام غير المحددة تُعتبر راحة.</p>
+                <WorkScheduleEditor
+                  value={editUserForm.watch('work_schedule') ?? {}}
+                  onChange={(next) => editUserForm.setValue('work_schedule', next, { shouldDirty: true })}
+                />
               </div>
 
               <button

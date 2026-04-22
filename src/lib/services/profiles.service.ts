@@ -3,7 +3,7 @@ import type { Tables, InsertTables, UpdateTables } from '../database.types';
 
 /** Columns fetched in the app — excludes `phone` (not shown in the UI). */
 export const PROFILE_SELECT_COLUMNS =
-  'id, org_id, employee_id, name, name_ar, email, role, department_id, avatar_url, join_date, work_days, work_start_time, work_end_time';
+  'id, org_id, employee_id, name, name_ar, email, role, department_id, avatar_url, join_date, work_schedule';
 
 export type Profile = Tables<'profiles'>;
 export type ProfileInsert = InsertTables<'profiles'>;

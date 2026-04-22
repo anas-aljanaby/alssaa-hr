@@ -359,9 +359,7 @@ export type Database = {
           minimum_overtime_minutes: number
           minimum_required_minutes: number | null
           org_id: string
-          weekly_off_days: number[]
-          work_end_time: string
-          work_start_time: string
+          work_schedule: Json
         }
         Insert: {
           absent_cutoff_time?: string
@@ -377,9 +375,7 @@ export type Database = {
           minimum_overtime_minutes?: number
           minimum_required_minutes?: number | null
           org_id: string
-          weekly_off_days?: number[]
-          work_end_time?: string
-          work_start_time?: string
+          work_schedule?: Json
         }
         Update: {
           absent_cutoff_time?: string
@@ -395,9 +391,7 @@ export type Database = {
           minimum_overtime_minutes?: number
           minimum_required_minutes?: number | null
           org_id?: string
-          weekly_off_days?: number[]
-          work_end_time?: string
-          work_start_time?: string
+          work_schedule?: Json
         }
         Relationships: [
           {
@@ -957,9 +951,7 @@ export type Database = {
           phone: string
           role: string
           updated_at: string
-          work_days: number[] | null
-          work_end_time: string | null
-          work_start_time: string | null
+          work_schedule: Json
         }
         Insert: {
           avatar_url?: string | null
@@ -975,9 +967,7 @@ export type Database = {
           phone?: string
           role?: string
           updated_at?: string
-          work_days?: number[] | null
-          work_end_time?: string | null
-          work_start_time?: string | null
+          work_schedule?: Json
         }
         Update: {
           avatar_url?: string | null
@@ -993,9 +983,7 @@ export type Database = {
           phone?: string
           role?: string
           updated_at?: string
-          work_days?: number[] | null
-          work_end_time?: string | null
-          work_start_time?: string | null
+          work_schedule?: Json
         }
         Relationships: [
           {
@@ -1122,6 +1110,14 @@ export type Database = {
       current_user_department: { Args: never; Returns: string }
       current_user_org_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
+      get_effective_shift: {
+        Args: { p_date: string; p_user_id: string }
+        Returns: {
+          start_time: string | null
+          end_time: string | null
+          is_working_day: boolean
+        }[]
+      }
       get_redacted_department_availability: {
         Args: { p_department_id?: string }
         Returns: {

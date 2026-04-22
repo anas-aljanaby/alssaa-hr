@@ -79,10 +79,9 @@ describe('mockData structural integrity', () => {
   });
 
   it('attendancePolicy has expected shape', () => {
-    expect(attendancePolicy.workStartTime).toBeTruthy();
-    expect(attendancePolicy.workEndTime).toBeTruthy();
+    expect(attendancePolicy.workSchedule).toBeDefined();
+    expect(Object.keys(attendancePolicy.workSchedule).length).toBeGreaterThan(0);
     expect(attendancePolicy.gracePeriodMinutes).toBeGreaterThanOrEqual(0);
-    expect(attendancePolicy.weeklyOffDays).toBeInstanceOf(Array);
   });
 });
 

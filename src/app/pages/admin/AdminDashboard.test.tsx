@@ -79,9 +79,7 @@ describe('AdminDashboard', () => {
         department_id: 'dept-1',
         avatar_url: null,
         join_date: '2024-01-01',
-        work_days: null,
-        work_start_time: null,
-        work_end_time: null,
+        work_schedule: null,
       },
       {
         id: 'emp-2',
@@ -94,9 +92,7 @@ describe('AdminDashboard', () => {
         department_id: 'dept-1',
         avatar_url: null,
         join_date: '2024-01-01',
-        work_days: null,
-        work_start_time: null,
-        work_end_time: null,
+        work_schedule: null,
       },
       {
         id: 'emp-3',
@@ -109,9 +105,7 @@ describe('AdminDashboard', () => {
         department_id: 'dept-1',
         avatar_url: null,
         join_date: '2024-01-01',
-        work_days: null,
-        work_start_time: null,
-        work_end_time: null,
+        work_schedule: null,
       },
       {
         id: 'emp-4',
@@ -124,9 +118,7 @@ describe('AdminDashboard', () => {
         department_id: 'dept-1',
         avatar_url: null,
         join_date: '2024-01-01',
-        work_days: null,
-        work_start_time: null,
-        work_end_time: null,
+        work_schedule: null,
       },
     ] as any);
 

@@ -127,7 +127,6 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
   }, [isCheckedIn, shift]);
 
   const currentMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
-  const dayOfWeek = currentNow.getDay();
 
   const shiftStartMinutes = shift ? toMinutes(shift.workStartTime) : null;
   const shiftEndMinutes = shift ? toMinutes(shift.workEndTime) : null;
@@ -136,7 +135,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
     ? shiftEndMinutes - shiftStartMinutes
     : null;
 
-  const isWorkingDay = shift ? !(shift.weeklyOffDays ?? [5, 6]).includes(dayOfWeek) : true;
+  const isWorkingDay = shift !== null;
   const isBeforeShift = shiftStartMinutes !== null && currentMinutes < shiftStartMinutes;
   const totalWorkedMin = totalWorkedMinutesToday(today);
   const activeSession = today.sessions?.find((session) => !session.check_out_time) ?? null;
@@ -157,7 +156,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
   const activeSessionIsOvertime =
     activeSession?.is_overtime ??
     (isCheckedIn && !!activeCheckInTime && shift
-      ? isOvertimeTime(wallTimeToMinutes(activeCheckInTime), shift, dayOfWeek)
+      ? isOvertimeTime(wallTimeToMinutes(activeCheckInTime), shift)
       : false);
 
   // Time past shift end for an open regular session on a working day.
@@ -188,7 +187,7 @@ export function TodayStatusCard({ today, actionLoading, onCheckIn, onCheckOut, i
   // Badge logic for first punch: check overtime first (matches service logic), then late
   const firstPunchIsOvertime =
     firstCheckInTime && shift
-      ? isOvertimeTime(wallTimeToMinutes(firstCheckInTime), shift, dayOfWeek)
+      ? isOvertimeTime(wallTimeToMinutes(firstCheckInTime), shift)
       : false;
   const firstPunchIsLate =
     firstCheckInTime && shift && !firstPunchIsOvertime

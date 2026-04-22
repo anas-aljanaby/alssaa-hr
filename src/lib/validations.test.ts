@@ -291,51 +291,40 @@ describe('updateProfileSchema', () => {
   it('passes with valid work schedule', () => {
     const r = updateProfileSchema.safeParse({
       ...valid,
-      work_days: [0, 1, 2, 3, 4],
-      work_start_time: '08:00',
-      work_end_time: '16:00',
+      work_schedule: {
+        '0': { start: '08:00', end: '16:00' },
+        '1': { start: '08:00', end: '16:00' },
+      },
     });
     expect(r.success).toBe(true);
   });
 
-  it('rejects work_days without start/end times', () => {
-    const r = updateProfileSchema.safeParse({ ...valid, work_days: [0, 1] });
-    expect(r.success).toBe(false);
-    if (!r.success) expect(errorPaths(r)).toContain('work_end_time');
-  });
-
-  it('rejects work_end_time before start_time', () => {
+  it('rejects work_schedule day with end before start', () => {
     const r = updateProfileSchema.safeParse({
       ...valid,
-      work_days: [0],
-      work_start_time: '16:00',
-      work_end_time: '08:00',
+      work_schedule: { '0': { start: '16:00', end: '08:00' } },
     });
     expect(r.success).toBe(false);
   });
 
-  it('rejects equal start and end times', () => {
+  it('rejects work_schedule day with equal start and end times', () => {
     const r = updateProfileSchema.safeParse({
       ...valid,
-      work_days: [0],
-      work_start_time: '10:00',
-      work_end_time: '10:00',
+      work_schedule: { '0': { start: '10:00', end: '10:00' } },
     });
     expect(r.success).toBe(false);
   });
 
-  it('rejects invalid time format in work_start_time', () => {
+  it('rejects invalid time format in work_schedule', () => {
     const r = updateProfileSchema.safeParse({
       ...valid,
-      work_days: [0],
-      work_start_time: '25:00',
-      work_end_time: '16:00',
+      work_schedule: { '0': { start: '25:00', end: '16:00' } },
     });
     expect(r.success).toBe(false);
   });
 
-  it('passes when work_days is empty (no schedule constraint)', () => {
-    const r = updateProfileSchema.safeParse({ ...valid, work_days: [] });
+  it('passes when work_schedule is empty (no schedule constraint)', () => {
+    const r = updateProfileSchema.safeParse({ ...valid, work_schedule: {} });
     expect(r.success).toBe(true);
   });
 
@@ -351,12 +340,10 @@ describe('updateProfileSchema', () => {
     if (!r.success) expect(errorPaths(r)).toContain('email');
   });
 
-  it('rejects work_day outside 0-6', () => {
+  it('rejects work_schedule day key outside 0-6', () => {
     const r = updateProfileSchema.safeParse({
       ...valid,
-      work_days: [7],
-      work_start_time: '08:00',
-      work_end_time: '16:00',
+      work_schedule: { '7': { start: '08:00', end: '16:00' } },
     });
     expect(r.success).toBe(false);
   });

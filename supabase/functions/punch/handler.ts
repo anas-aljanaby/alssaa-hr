@@ -82,11 +82,12 @@ export type PunchDeps = {
   now?: () => Date;
 };
 
+type DayScheduleJson = { start: string; end: string };
+type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
+
 type ProfileRow = {
   org_id: string;
-  work_days?: number[] | null;
-  work_start_time?: string | null;
-  work_end_time?: string | null;
+  work_schedule?: unknown | null;
 };
 
 type SessionRow = {
@@ -120,10 +121,8 @@ type DailySummaryRow = {
 };
 
 type PolicyRow = {
-  work_start_time?: string | null;
-  work_end_time?: string | null;
+  work_schedule?: unknown | null;
   grace_period_minutes?: number | null;
-  weekly_off_days?: number[] | null;
   early_login_minutes?: number | null;
   minimum_overtime_minutes?: number | null;
   minimum_required_minutes?: number | null;
@@ -250,27 +249,38 @@ export function resolveCheckoutOvertimeHandling(input: {
   };
 }
 
+function parseWorkSchedule(raw: unknown): WorkScheduleJson {
+  if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const result: WorkScheduleJson = {};
+  for (const key of ['0', '1', '2', '3', '4', '5', '6'] as const) {
+    const day = (raw as Record<string, unknown>)[key];
+    if (
+      day !== null &&
+      typeof day === 'object' &&
+      typeof (day as { start?: unknown }).start === 'string' &&
+      typeof (day as { end?: unknown }).end === 'string'
+    ) {
+      result[key] = { start: (day as DayScheduleJson).start, end: (day as DayScheduleJson).end };
+    }
+  }
+  return result;
+}
+
 function resolveSchedule(profile: ProfileRow, policy: PolicyRow | null, date: Date): ResolvedSchedule {
-  const hasCustomSchedule =
-    Array.isArray(profile.work_days) &&
-    profile.work_days.length > 0 &&
-    !!profile.work_start_time &&
-    !!profile.work_end_time;
-
-  const workStartTime = hasCustomSchedule
-    ? profile.work_start_time ?? null
-    : policy?.work_start_time ?? null;
-  const workEndTime = hasCustomSchedule
-    ? profile.work_end_time ?? null
-    : policy?.work_end_time ?? null;
-
-  const hasShift = !!workStartTime && !!workEndTime;
+  const userSchedule = parseWorkSchedule(profile.work_schedule);
+  const orgSchedule = parseWorkSchedule(policy?.work_schedule);
+  const hasAnyConfig =
+    Object.keys(userSchedule).length > 0 || Object.keys(orgSchedule).length > 0;
   const weekday = toOrgLocalDate(date).getUTCDay();
-  const weeklyOffDays = hasCustomSchedule
-    ? [0, 1, 2, 3, 4, 5, 6].filter((d) => !(profile.work_days ?? []).includes(d))
-    : policy?.weekly_off_days ?? [5, 6];
+  const key = String(weekday) as '0' | '1' | '2' | '3' | '4' | '5' | '6';
+  const effective = userSchedule[key] ?? orgSchedule[key] ?? null;
 
-  const isWorkingDay = hasShift ? !weeklyOffDays.includes(weekday) : true;
+  const workStartTime = effective?.start ?? null;
+  const workEndTime = effective?.end ?? null;
+  const hasShift = hasAnyConfig;
+  const isWorkingDay = !!effective;
 
   return {
     hasShift,
@@ -466,7 +476,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const { data: profileRaw } = await admin
       .from('profiles')
-      .select('org_id, work_days, work_start_time, work_end_time')
+      .select('org_id, work_schedule')
       .eq('id', caller.id)
       .single();
 
@@ -494,7 +504,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
 
     const { data: policyRaw } = await admin
       .from('attendance_policy')
-      .select('work_start_time, work_end_time, grace_period_minutes, weekly_off_days, early_login_minutes, minimum_overtime_minutes, minimum_required_minutes')
+      .select('work_schedule, grace_period_minutes, early_login_minutes, minimum_overtime_minutes, minimum_required_minutes')
       .eq('org_id', orgId)
       .limit(1)
       .maybeSingle();
