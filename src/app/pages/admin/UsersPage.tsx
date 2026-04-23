@@ -4,16 +4,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addUserSchema, updateProfileSchema, type AddUserFormData, type UpdateProfileFormData } from '@/lib/validations';
 import { toast } from 'sonner';
-import { useAuth } from '../../contexts/AuthContext';
 import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
-import * as policyService from '@/lib/services/policy.service';
 import { getAddUserErrorMessage, getProfileUpdateErrorMessage } from '@/lib/errorMessages';
 import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
-import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
-import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { PasswordGenerateCopyRow } from '@/app/components/PasswordGenerateCopyRow';
@@ -33,7 +29,6 @@ type UserRole = Profile['role'];
 const PAGE_SIZE = 15;
 
 export function UsersPage() {
-  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -43,7 +38,6 @@ export function UsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
-  const [orgPolicy, setOrgPolicy] = useState<Awaited<ReturnType<typeof policyService.getPolicy>>>(null);
   const [showAddUserPassword, setShowAddUserPassword] = useState(false);
   const navigate = useNavigate();
   useBodyScrollLock(showForm || !!editingUser);
@@ -71,14 +65,12 @@ export function UsersPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [profs, depts, policy] = await Promise.all([
+      const [profs, depts] = await Promise.all([
         profilesService.listUsers(),
         departmentsService.listDepartments(),
-        policyService.getPolicy(currentUser?.org_id),
       ]);
       setProfiles(profs);
       setDepartments(depts);
-      setOrgPolicy(policy);
     } catch {
       toast.error('فشل تحميل البيانات');
     } finally {
@@ -171,6 +163,9 @@ export function UsersPage() {
     []
   );
 
+  const addUserPasswordValue = addUserForm.watch('password') ?? '';
+  const addUserPasswordHasValue = addUserPasswordValue.trim().length > 0;
+
   useAppTopBar({
     title: 'إدارة المستخدمين',
     meta: `${filteredUsers.length} مستخدم`,
@@ -208,18 +203,12 @@ export function UsersPage() {
   };
 
   const openEditModal = (user: Profile) => {
-    const userSchedule = toWorkSchedule(user.work_schedule);
-    const hasUserSchedule = Object.keys(userSchedule).length > 0;
-    const schedule: WorkSchedule = hasUserSchedule
-      ? userSchedule
-      : (orgPolicy?.work_schedule ?? {});
     setEditingUser(user);
     editUserForm.reset({
       name_ar: user.name_ar,
       email: user.email ?? '',
       role: user.role,
       department_id: user.department_id ?? '',
-      work_schedule: schedule,
     });
   };
 
@@ -237,15 +226,12 @@ export function UsersPage() {
     }
     setEditSubmitting(true);
     try {
-      const schedule = data.work_schedule ?? {};
-      const hasSchedule = Object.keys(schedule).length > 0;
       await profilesService.updateUser(editingUser.id, {
         name_ar: data.name_ar.trim(),
         // Preserve existing email when form does not provide one.
         email: rawNextEmail && rawNextEmail.length > 0 ? rawNextEmail : (editingUser.email ?? null),
         role: editingUser.role,
         department_id: editingUser.department_id,
-        work_schedule: hasSchedule ? schedule : null,
       });
       toast.success('تم تحديث المستخدم');
       setEditingUser(null);
@@ -392,7 +378,7 @@ export function UsersPage() {
 
       {showForm && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-4 sm:px-4"
+          className="fixed inset-0 z-[80] flex min-h-[100dvh] items-end justify-center overflow-y-auto bg-black/50 px-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-4 sm:z-50 sm:min-h-[100svh] sm:items-center sm:px-4 sm:py-4"
           onClick={() => {
             setShowForm(false);
             addUserForm.reset();
@@ -404,12 +390,14 @@ export function UsersPage() {
           aria-labelledby="add-user-title"
         >
           <div
-            className="relative mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100svh-2rem)] sm:my-6 sm:max-w-lg"
+            className="relative flex w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl max-h-[calc(100dvh-6.5rem)] sm:mx-auto sm:max-h-[calc(100svh-2rem)] sm:max-w-lg sm:rounded-2xl sm:my-6"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
-              <h2 id="add-user-title" className="text-gray-800">إضافة مستخدم جديد</h2>
+            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
+              <h2 id="add-user-title" className="px-12 text-center text-gray-800">
+                إضافة مستخدم جديد
+              </h2>
               <button
                 type="button"
                 onClick={() => {
@@ -417,14 +405,14 @@ export function UsersPage() {
                   addUserForm.reset();
                   setShowAddUserPassword(false);
                 }}
-                className="rounded-full p-2 hover:bg-gray-100"
+                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-2 hover:bg-gray-100 sm:left-4"
                 aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <div className="overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+            <div className="overflow-y-auto overscroll-contain px-5 py-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
               <form className="space-y-4" onSubmit={addUserForm.handleSubmit(onAddUser)}>
                 <div>
                   <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
@@ -448,7 +436,8 @@ export function UsersPage() {
                     placeholder="example@alssaa.tv"
                     className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       addUserForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
-                    }`}
+                    } text-left`}
+                    dir="ltr"
                   />
                   {addUserForm.formState.errors.email && (
                     <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.email.message}</p>
@@ -458,25 +447,28 @@ export function UsersPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-gray-700">كلمة المرور</label>
+                  <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <label className="text-gray-700">كلمة المرور</label>
+                    <PasswordGenerateCopyRow
+                      variant="inline"
+                      onGenerated={(pw) => {
+                        addUserForm.setValue('password', pw, { shouldValidate: true });
+                        setShowAddUserPassword(true);
+                      }}
+                      valueToCopy={addUserPasswordValue}
+                      passwordVisible={showAddUserPassword}
+                      onTogglePasswordVisible={() => setShowAddUserPassword((v) => !v)}
+                      className="justify-start sm:justify-end"
+                    />
+                  </div>
                   <input
                     type={showAddUserPassword ? 'text' : 'password'}
                     {...addUserForm.register('password')}
                     placeholder="أدخل كلمة مرور قوية"
                     className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       addUserForm.formState.errors.password ? 'border-red-400' : 'border-gray-200'
-                    }`}
-                    dir="ltr"
-                  />
-                  <PasswordGenerateCopyRow
-                    className="mt-2"
-                    onGenerated={(pw) => {
-                      addUserForm.setValue('password', pw, { shouldValidate: true });
-                      setShowAddUserPassword(true);
-                    }}
-                    valueToCopy={addUserForm.watch('password') ?? ''}
-                    passwordVisible={showAddUserPassword}
-                    onTogglePasswordVisible={() => setShowAddUserPassword((v) => !v)}
+                    } ${addUserPasswordHasValue ? 'text-left' : 'text-right'}`}
+                    dir={addUserPasswordHasValue ? 'ltr' : 'rtl'}
                   />
                   {addUserForm.formState.errors.password && (
                     <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.password.message}</p>
@@ -516,7 +508,7 @@ export function UsersPage() {
 
       {editingUser && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-4 sm:px-4"
+          className="fixed inset-0 z-[80] flex min-h-[100dvh] items-end justify-center overflow-y-auto bg-black/50 px-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-4 sm:z-50 sm:min-h-[100svh] sm:items-center sm:px-4 sm:py-4"
           onClick={() => { setEditingUser(null); editUserForm.reset(); }}
           onKeyDown={handleModalKeyDown}
           role="dialog"
@@ -524,23 +516,25 @@ export function UsersPage() {
           aria-labelledby="edit-user-title"
         >
           <div
-            className="relative mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100svh-2rem)] sm:my-6 sm:max-w-lg"
+            className="relative flex w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl max-h-[calc(100dvh-6.5rem)] sm:mx-auto sm:max-h-[calc(100svh-2rem)] sm:max-w-lg sm:rounded-2xl sm:my-6"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
-              <h2 id="edit-user-title" className="text-gray-800">تعديل الملف الشخصي</h2>
+            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
+              <h2 id="edit-user-title" className="px-12 text-center text-gray-800">
+                تعديل الملف الشخصي
+              </h2>
               <button
                 type="button"
                 onClick={() => { setEditingUser(null); editUserForm.reset(); }}
-                className="rounded-full p-2 hover:bg-gray-100"
+                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-2 hover:bg-gray-100 sm:left-4"
                 aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <div className="overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+            <div className="overflow-y-auto overscroll-contain px-5 py-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
               <form className="space-y-4" onSubmit={editUserForm.handleSubmit(onEditUser)}>
                 <div>
                   <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
@@ -559,22 +553,26 @@ export function UsersPage() {
                 <p className="text-gray-500 text-xs -mt-2">
                   الدور والقسم يُعدّلان من صفحة الأقسام.
                 </p>
+                <div>
+                  <label className="block mb-1.5 text-gray-700">اسم المستخدم</label>
+                  <input
+                    type="email"
+                    {...editUserForm.register('email')}
+                    placeholder="example@alssaa.tv"
+                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      editUserForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                    dir="ltr"
+                  />
+                  {editUserForm.formState.errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.email.message}</p>
+                  )}
+                  <p className="text-gray-500 text-xs mt-1">
+                    يُستخدم هذا البريد كاسم المستخدم لتسجيل الدخول.
+                  </p>
+                </div>
                 <input type="hidden" {...editUserForm.register('role')} />
                 <input type="hidden" {...editUserForm.register('department_id')} />
-
-                <div className="border-t border-gray-100 pt-4">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
-                  <p className="text-xs text-gray-500 mb-3">حدد أيام وساعات عمل هذا المستخدم. الأيام غير المحددة تُعتبر راحة.</p>
-                  <WorkScheduleEditor
-                    value={editUserForm.watch('work_schedule') ?? {}}
-                    onChange={(next) =>
-                      editUserForm.setValue('work_schedule', next, {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
-                    }
-                  />
-                </div>
 
                 <button
                   type="submit"

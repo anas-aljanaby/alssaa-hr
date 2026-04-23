@@ -334,4 +334,14 @@ describe('UserDetailsPage', () => {
     expect(await screen.findByText('جدول العمل')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'أكمل الدوام' })).toBeInTheDocument();
   });
+
+  it('opens work schedule editor from the profile header action', async () => {
+    renderPage();
+
+    const scheduleEditButton = await screen.findByRole('button', { name: 'تعديل جدول العمل' });
+    fireEvent.click(scheduleEditButton);
+
+    expect(await screen.findByRole('heading', { name: 'تعديل جدول العمل' })).toBeInTheDocument();
+    expect(screen.getByText(/حدّد أيام العمل ووقت كل يوم/i)).toBeInTheDocument();
+  });
 });

@@ -2,15 +2,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAppTopBar } from '../../contexts/AppTopBarContext';
 import { toast } from 'sonner';
 import * as profilesService from '@/lib/services/profiles.service';
 import * as departmentsService from '@/lib/services/departments.service';
-import { updateProfileSchema, type UpdateProfileFormData } from '@/lib/validations';
+import { workScheduleSchema } from '@/lib/validations';
 import { getDeleteUserErrorMessage, getProfileUpdateErrorMessage } from '@/lib/errorMessages';
 import * as attendanceService from '@/lib/services/attendance.service';
-import * as policyService from '@/lib/services/policy.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
 import * as auditService from '@/lib/services/audit.service';
@@ -81,20 +81,6 @@ const DAY_LABELS_AR: Record<string, string> = {
   '6': 'السبت',
 };
 
-function renderScheduleSummary(schedule: WorkSchedule): string {
-  const parts: string[] = [];
-  for (const key of ['0', '1', '2', '3', '4', '5', '6'] as const) {
-    const day = schedule[key];
-    const label = DAY_LABELS_AR[key];
-    if (day) {
-      parts.push(`${label}: ${day.start}–${day.end}`);
-    } else {
-      parts.push(`${label}: راحة`);
-    }
-  }
-  return parts.join(' · ');
-}
-
 type AttendanceFilter =
   | 'all'
   | 'fulfilled_shift'
@@ -133,6 +119,27 @@ function getTodayFirstCheckIn(todayRecord: TodayRecord | null): string | null {
   );
 }
 
+const identityEditSchema = z.object({
+  name_ar: z.string().min(2, 'الاسم يجب أن يكون حرفين على الأقل'),
+  email: z
+    .string()
+    .optional()
+    .refine(
+      (value) => !value || z.string().email().safeParse(value).success,
+      'البريد الإلكتروني غير صالح'
+    ),
+});
+type IdentityEditFormData = z.infer<typeof identityEditSchema>;
+
+const scheduleEditSchema = z.object({
+  work_schedule: workScheduleSchema,
+});
+type ScheduleEditFormData = z.infer<typeof scheduleEditSchema>;
+
+function getCurrentWorkSchedule(profile: Profile): WorkSchedule {
+  return toWorkSchedule(profile.work_schedule);
+}
+
 export function UserDetailsPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -163,28 +170,33 @@ export function UserDetailsPage() {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
   });
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [showIdentityEditModal, setShowIdentityEditModal] = useState(false);
+  const [showScheduleEditModal, setShowScheduleEditModal] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
   const [showLeaveBalanceModal, setShowLeaveBalanceModal] = useState(false);
   const [updatingLeaveBalance, setUpdatingLeaveBalance] = useState(false);
   const [editAnnualTotal, setEditAnnualTotal] = useState('');
-  const [orgPolicy, setOrgPolicy] = useState<Awaited<ReturnType<typeof policyService.getPolicy>>>(null);
   useBodyScrollLock(
-    showEditModal ||
+    showIdentityEditModal ||
+    showScheduleEditModal ||
     showDeleteConfirm ||
     showAuditLog ||
     showLeaveBalanceModal
   );
 
-  const editProfileForm = useForm<UpdateProfileFormData>({
-    resolver: zodResolver(updateProfileSchema),
+  const identityEditForm = useForm<IdentityEditFormData>({
+    resolver: zodResolver(identityEditSchema),
     defaultValues: {
       name_ar: '',
       email: '',
-      role: 'employee',
-      department_id: '',
+    },
+  });
+
+  const scheduleEditForm = useForm<ScheduleEditFormData>({
+    resolver: zodResolver(scheduleEditSchema),
+    defaultValues: {
       work_schedule: {},
     },
   });
@@ -244,41 +256,42 @@ export function UserDetailsPage() {
     return () => clearTimeout(t);
   }, [requestFromUrl, loading, activeTab, userRequests.length]);
 
-  useEffect(() => {
-    if (profile && currentUser?.role === 'admin') {
-      policyService.getPolicy(profile.org_id ?? undefined).then(setOrgPolicy).catch(() => {});
-    }
-  }, [profile, currentUser?.role]);
-
-  const openEditModal = useCallback(() => {
+  const openIdentityEditModal = useCallback(() => {
     if (!profile) return;
-    const userSchedule = toWorkSchedule(profile.work_schedule);
-    const hasUserSchedule = Object.keys(userSchedule).length > 0;
-    const initialSchedule: WorkSchedule = hasUserSchedule
-      ? userSchedule
-      : toWorkSchedule(orgPolicy?.work_schedule);
-    setShowEditModal(true);
-    editProfileForm.reset({
+    setShowIdentityEditModal(true);
+    identityEditForm.reset({
       name_ar: profile.name_ar,
       email: profile.email ?? '',
-      role: profile.role,
-      department_id: profile.department_id ?? '',
-      work_schedule: initialSchedule,
     });
-  }, [profile, orgPolicy, editProfileForm]);
+  }, [profile, identityEditForm]);
+
+  const openScheduleEditModal = useCallback(() => {
+    if (!profile) return;
+    setShowScheduleEditModal(true);
+    scheduleEditForm.reset({
+      work_schedule: getCurrentWorkSchedule(profile),
+    });
+  }, [profile, scheduleEditForm]);
 
   useEffect(() => {
     if (searchParams.get('edit') !== '1') return;
     if (!profile || currentUser?.role !== 'admin') return;
-    openEditModal();
-  }, [searchParams, profile, currentUser?.role, openEditModal]);
+    openIdentityEditModal();
+  }, [searchParams, profile, currentUser?.role, openIdentityEditModal]);
  
-  const handleEditModalKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleIdentityEditModalKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      setShowEditModal(false);
-      editProfileForm.reset();
+      setShowIdentityEditModal(false);
+      identityEditForm.reset();
     }
-  }, [editProfileForm]);
+  }, [identityEditForm]);
+
+  const handleScheduleEditModalKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setShowScheduleEditModal(false);
+      scheduleEditForm.reset();
+    }
+  }, [scheduleEditForm]);
 
   const handleDeleteModalKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape' && !deletingUser) {
@@ -416,7 +429,7 @@ export function UserDetailsPage() {
             ? day.hasOvertime
             : day.primaryState === attendanceFilter
         );
-  const onEditProfileSubmit = async (data: UpdateProfileFormData) => {
+  const onIdentityEditSubmit = async (data: IdentityEditFormData) => {
     if (!profile) return;
     const oldEmail = (profile.email ?? '').trim().toLowerCase();
     const nextEmail = (data.email ?? '').trim().toLowerCase();
@@ -434,14 +447,36 @@ export function UserDetailsPage() {
         email: data.email?.trim() || null,
         role: profile.role,
         department_id: profile.department_id,
-        work_schedule: (data.work_schedule ?? {}) as never,
+        work_schedule: profile.work_schedule,
       });
       toast.success('تم تحديث المستخدم');
-      setShowEditModal(false);
-      editProfileForm.reset();
+      setShowIdentityEditModal(false);
+      identityEditForm.reset();
       await loadData();
     } catch (err) {
       toast.error(getProfileUpdateErrorMessage(err, 'فشل تحديث المستخدم'));
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const onScheduleEditSubmit = async (data: ScheduleEditFormData) => {
+    if (!profile) return;
+    setEditSubmitting(true);
+    try {
+      await profilesService.updateUser(profile.id, {
+        name_ar: profile.name_ar,
+        email: profile.email?.trim() || null,
+        role: profile.role,
+        department_id: profile.department_id,
+        work_schedule: (data.work_schedule ?? {}) as never,
+      });
+      toast.success('تم تحديث جدول العمل');
+      setShowScheduleEditModal(false);
+      scheduleEditForm.reset();
+      await loadData();
+    } catch (err) {
+      toast.error(getProfileUpdateErrorMessage(err, 'فشل تحديث جدول العمل'));
     } finally {
       setEditSubmitting(false);
     }
@@ -507,14 +542,6 @@ export function UserDetailsPage() {
           >
             <History className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={openEditModal}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
-            aria-label="تعديل الملف الشخصي"
-          >
-            <Edit2 className="h-4 w-4" />
-          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -539,7 +566,7 @@ export function UserDetailsPage() {
           </DropdownMenu>
         </div>
       ) : null,
-    [canDeleteTopBarUser, currentUser?.role, deletingUser, openEditModal]
+    [canDeleteTopBarUser, currentUser?.role, deletingUser]
   );
 
   useAppTopBar(
@@ -619,43 +646,56 @@ export function UserDetailsPage() {
     <div className="mx-auto max-w-lg space-y-3 px-4 pb-20 pt-3">
       {/* Profile Header */}
       <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-        <div className="flex items-start gap-4">
-          <div
-            className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-xl ${
-              profile.role === 'admin'
-                ? 'bg-purple-100 text-purple-600'
-                : profile.role === 'manager'
-                  ? 'bg-emerald-100 text-emerald-600'
-                  : 'bg-blue-100 text-blue-600'
-            }`}
-          >
-            {profile.name_ar.charAt(0)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-gray-800">{profile.name_ar}</h2>
-            <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-600 min-w-0">
-              <Building2 className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden />
-              <span className="truncate">{department?.name_ar ?? 'بدون قسم'}</span>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-4 min-w-0 flex-1">
+            <div
+              className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-xl ${
+                profile.role === 'admin'
+                  ? 'bg-purple-100 text-purple-600'
+                  : profile.role === 'manager'
+                    ? 'bg-emerald-100 text-emerald-600'
+                    : 'bg-blue-100 text-blue-600'
+              }`}
+            >
+              {profile.name_ar.charAt(0)}
             </div>
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${roleColor(profile.role)}`}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-gray-800">{profile.name_ar}</h2>
+              <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-600 min-w-0">
+                <Building2 className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden />
+                <span className="truncate">{department?.name_ar ?? 'بدون قسم'}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${roleColor(profile.role)}`}
+                >
+                  {roleIcon(profile.role)}
+                  {roleLabel(profile.role)}
+                </span>
+              </div>
+            </div>
+          </div>
+          {currentUser?.role === 'admin' && (
+            <div className="shrink-0 flex min-w-[8.75rem] flex-col items-stretch gap-2">
+              <button
+                type="button"
+                onClick={openIdentityEditModal}
+                className="self-end rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100"
+                aria-label="تعديل الاسم واسم المستخدم"
               >
-                {roleIcon(profile.role)}
-                {roleLabel(profile.role)}
-              </span>
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={openScheduleEditModal}
+                className="flex items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm font-medium text-blue-700 shadow-sm shadow-blue-100/50 transition-colors hover:bg-blue-100"
+                aria-label="تعديل جدول العمل"
+              >
+                <Clock className="h-4 w-4" />
+                <span>تعديل جدول العمل</span>
+              </button>
             </div>
-            {(() => {
-              const schedule = toWorkSchedule(profile.work_schedule);
-              const hasSchedule = Object.keys(schedule).length > 0;
-              if (!hasSchedule) return null;
-              return (
-                <p className="text-[11px] text-gray-500 mt-2 leading-relaxed" dir="rtl">
-                  {renderScheduleSummary(schedule)}
-                </p>
-              );
-            })()}
-          </div>
+          )}
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-100">
@@ -804,7 +844,7 @@ export function UserDetailsPage() {
               {currentUser?.role === 'admin' && (
                 <button
                   type="button"
-                  onClick={openEditModal}
+                  onClick={openScheduleEditModal}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   aria-label="تعديل جدول العمل"
                 >
@@ -1270,15 +1310,15 @@ export function UserDetailsPage() {
         </div>
       )}
 
-      {/* Edit Profile Modal */}
-      {showEditModal && profile && currentUser.role === 'admin' && (
+      {/* Identity Edit Modal */}
+      {showIdentityEditModal && profile && currentUser.role === 'admin' && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-          onClick={() => { setShowEditModal(false); editProfileForm.reset(); }}
-          onKeyDown={handleEditModalKeyDown}
+          onClick={() => { setShowIdentityEditModal(false); identityEditForm.reset(); }}
+          onKeyDown={handleIdentityEditModalKeyDown}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="edit-profile-title"
+          aria-labelledby="edit-identity-title"
         >
           <div
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
@@ -1286,10 +1326,10 @@ export function UserDetailsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 id="edit-profile-title" className="text-gray-800">تعديل الملف الشخصي</h2>
+              <h2 id="edit-identity-title" className="text-gray-800">تعديل الاسم واسم المستخدم</h2>
               <button
                 type="button"
-                onClick={() => { setShowEditModal(false); editProfileForm.reset(); }}
+                onClick={() => { setShowIdentityEditModal(false); identityEditForm.reset(); }}
                 className="p-2 hover:bg-gray-100 rounded-full"
                 aria-label="إغلاق"
               >
@@ -1297,52 +1337,90 @@ export function UserDetailsPage() {
               </button>
             </div>
 
-            <form className="space-y-4" onSubmit={editProfileForm.handleSubmit(onEditProfileSubmit)}>
+            <form className="space-y-4" onSubmit={identityEditForm.handleSubmit(onIdentityEditSubmit)}>
               <div>
                 <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
                 <input
                   type="text"
-                  {...editProfileForm.register('name_ar')}
+                  {...identityEditForm.register('name_ar')}
                   placeholder="أدخل الاسم الكامل"
                   className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    editProfileForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
+                    identityEditForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
                   }`}
                 />
-                {editProfileForm.formState.errors.name_ar && (
-                  <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.name_ar.message}</p>
+                {identityEditForm.formState.errors.name_ar && (
+                  <p className="text-red-500 text-sm mt-1">{identityEditForm.formState.errors.name_ar.message}</p>
                 )}
               </div>
               <div>
-                <label className="block mb-1.5 text-gray-700">البريد الإلكتروني</label>
+                <label className="block mb-1.5 text-gray-700">اسم المستخدم</label>
                 <input
                   type="email"
-                  {...editProfileForm.register('email')}
+                  {...identityEditForm.register('email')}
                   placeholder="example@alssaa.tv"
                   className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    editProfileForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
+                    identityEditForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
                   }`}
                   dir="ltr"
                 />
-                {editProfileForm.formState.errors.email && (
-                  <p className="text-red-500 text-sm mt-1">{editProfileForm.formState.errors.email.message}</p>
+                {identityEditForm.formState.errors.email && (
+                  <p className="text-red-500 text-sm mt-1">{identityEditForm.formState.errors.email.message}</p>
                 )}
                 <p className="text-amber-700 text-xs mt-1">
-                  تنبيه: تغيير البريد الإلكتروني إجراء حساس وقد يؤثر على تسجيل الدخول.
+                  يُستخدم هذا البريد كاسم المستخدم لتسجيل الدخول، وتغييره إجراء حساس.
                 </p>
                 <p className="text-gray-500 text-xs mt-2">
                   الدور والقسم يُعدّلان من صفحة الأقسام.
                 </p>
               </div>
-              <input type="hidden" {...editProfileForm.register('role')} />
-              <input type="hidden" {...editProfileForm.register('department_id')} />
 
-              <div className="border-t border-gray-100 pt-4">
+              <button
+                type="submit"
+                disabled={editSubmitting}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
+                {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Edit Modal */}
+      {showScheduleEditModal && profile && currentUser.role === 'admin' && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => { setShowScheduleEditModal(false); scheduleEditForm.reset(); }}
+          onKeyDown={handleScheduleEditModalKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-schedule-title"
+        >
+          <div
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 id="edit-schedule-title" className="text-gray-800">تعديل جدول العمل</h2>
+              <button
+                type="button"
+                onClick={() => { setShowScheduleEditModal(false); scheduleEditForm.reset(); }}
+                className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={scheduleEditForm.handleSubmit(onScheduleEditSubmit)}>
+              <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
                 <p className="text-xs text-gray-500 mb-3">حدّد أيام العمل ووقت كل يوم. الأيام غير المفعّلة تُعامَل كأيام راحة. إذا تُرك الجدول فارغاً بالكامل، تُستخدم إعدادات المنظمة.</p>
                 <WorkScheduleEditor
-                  value={editProfileForm.watch('work_schedule') ?? {}}
+                  value={scheduleEditForm.watch('work_schedule') ?? {}}
                   onChange={(next) =>
-                    editProfileForm.setValue('work_schedule', next, {
+                    scheduleEditForm.setValue('work_schedule', next, {
                       shouldDirty: true,
                       shouldValidate: true,
                     })
