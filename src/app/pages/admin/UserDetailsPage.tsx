@@ -58,6 +58,8 @@ import {
   Download,
   TimerReset,
   ClipboardList,
+  LayoutDashboard,
+  Umbrella,
 } from 'lucide-react';
 import { AttendanceHistoryList } from '../../components/attendance/AttendanceHistoryList';
 import { StatCard } from '../../components/shared/StatCard';
@@ -747,8 +749,8 @@ export function UserDetailsPage() {
             <span dir="ltr">{getDisplayEmail(profile.email)}</span>
           </div>
           {/* Tabs */}
-          <div className="w-full mt-3 border-t border-gray-100">
-            <div className="grid grid-cols-4">
+          <div className="w-full mt-3 px-4 pb-3">
+            <div className="flex gap-2 border-t border-gray-100 pt-3">
               {(
                 [
                   { key: 'overview', label: 'نظرة عامة' },
@@ -760,10 +762,10 @@ export function UserDetailsPage() {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`py-3 text-xs transition-colors border-b-2 ${
+                  className={`flex-1 py-2 text-xs rounded-xl border transition-all duration-200 ${
                     activeTab === tab.key
-                      ? 'border-blue-600 text-blue-600 font-medium'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'bg-white text-blue-600 font-semibold border-blue-100 shadow-md -translate-y-0.5'
+                      : 'bg-gray-50 text-gray-400 border-transparent hover:bg-white hover:shadow-sm hover:text-gray-600'
                   }`}
                 >
                   {tab.label}
