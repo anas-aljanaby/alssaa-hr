@@ -12,7 +12,7 @@ import type { Profile } from '@/lib/services/profiles.service';
 import type { Department } from '@/lib/services/departments.service';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Pagination, usePagination } from '../../components/Pagination';
-import { PasswordGenerateCopyRow } from '@/app/components/PasswordGenerateCopyRow';
+import { generateStrongPassword } from '@/lib/generatePassword';
 import { UsersPageSkeleton } from '../../components/skeletons';
 import {
   Plus,
@@ -23,6 +23,8 @@ import {
   Users as UsersIcon,
   User as UserIcon,
   Building2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 type UserRole = Profile['role'];
@@ -171,6 +173,23 @@ export function UsersPage() {
     meta: `${filteredUsers.length} مستخدم`,
     action: topBarAction,
   });
+
+  const handleGeneratePassword = () => {
+    const pw = generateStrongPassword();
+    addUserForm.setValue('password', pw, { shouldValidate: true });
+    setShowAddUserPassword(true);
+  };
+
+  const handleCopyPassword = async () => {
+    const value = addUserPasswordValue.trim();
+    if (!value) { toast.message('لا يوجد نص لنسخه'); return; }
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('تم نسخ كلمة المرور');
+    } catch {
+      toast.error('تعذر النسخ');
+    }
+  };
 
   if (loading) {
     return <UsersPageSkeleton />;
@@ -378,7 +397,7 @@ export function UsersPage() {
 
       {showForm && (
         <div
-          className="fixed inset-0 z-[80] flex min-h-[100dvh] items-end justify-center overflow-y-auto bg-black/50 px-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-4 sm:z-50 sm:min-h-[100svh] sm:items-center sm:px-4 sm:py-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4 sm:z-50 sm:px-4"
           onClick={() => {
             setShowForm(false);
             addUserForm.reset();
@@ -390,12 +409,12 @@ export function UsersPage() {
           aria-labelledby="add-user-title"
         >
           <div
-            className="relative flex w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl max-h-[calc(100dvh-6.5rem)] sm:mx-auto sm:max-h-[calc(100svh-2rem)] sm:max-w-lg sm:rounded-2xl sm:my-6"
+            className="relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100dvh-8rem)] sm:mx-auto sm:max-h-[calc(100svh-4rem)] sm:max-w-sm"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
-              <h2 id="add-user-title" className="px-12 text-center text-gray-800">
+            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-4 py-3 sm:px-6 sm:py-4">
+              <h2 id="add-user-title" className="px-12 text-center text-base text-gray-800">
                 إضافة مستخدم جديد
               </h2>
               <button
@@ -412,73 +431,90 @@ export function UsersPage() {
               </button>
             </div>
 
-            <div className="overflow-y-auto overscroll-contain px-5 py-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
-              <form className="space-y-4" onSubmit={addUserForm.handleSubmit(onAddUser)}>
+            <div className="overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+              <form className="space-y-2.5" onSubmit={addUserForm.handleSubmit(onAddUser)}>
                 <div>
-                  <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
+                  <label className="block mb-1 text-sm text-gray-700">الاسم الكامل</label>
                   <input
                     type="text"
                     {...addUserForm.register('name')}
                     placeholder="أدخل الاسم الكامل"
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    className={`w-full px-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       addUserForm.formState.errors.name ? 'border-red-400' : 'border-gray-200'
                     }`}
                   />
                   {addUserForm.formState.errors.name && (
-                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.name.message}</p>
+                    <p className="text-red-500 text-xs mt-1">{addUserForm.formState.errors.name.message}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-gray-700">بريد تسجيل الدخول</label>
+                  <label className="block mb-1 text-sm text-gray-700">بريد تسجيل الدخول</label>
                   <input
                     type="email"
                     {...addUserForm.register('email')}
                     placeholder="example@alssaa.tv"
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    className={`w-full px-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       addUserForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
                     } text-left`}
                     dir="ltr"
                   />
                   {addUserForm.formState.errors.email && (
-                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.email.message}</p>
+                    <p className="text-red-500 text-xs mt-1">{addUserForm.formState.errors.email.message}</p>
                   )}
                   <p className="text-amber-700 text-xs mt-1">
                     سيتم استخدام هذا البريد لتسجيل الدخول، يرجى التأكد من كتابته بشكل صحيح.
                   </p>
                 </div>
                 <div>
-                  <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <label className="text-gray-700">كلمة المرور</label>
-                    <PasswordGenerateCopyRow
-                      variant="inline"
-                      onGenerated={(pw) => {
-                        addUserForm.setValue('password', pw, { shouldValidate: true });
-                        setShowAddUserPassword(true);
-                      }}
-                      valueToCopy={addUserPasswordValue}
-                      passwordVisible={showAddUserPassword}
-                      onTogglePasswordVisible={() => setShowAddUserPassword((v) => !v)}
-                      className="justify-start sm:justify-end"
-                    />
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-sm text-gray-700">كلمة المرور</label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleGeneratePassword}
+                        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 transition-colors"
+                      >
+                        توليد
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyPassword}
+                        disabled={!addUserPasswordHasValue}
+                        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-teal-700 hover:bg-teal-50 disabled:pointer-events-none disabled:opacity-40 transition-colors"
+                      >
+                        نسخ
+                      </button>
+                    </div>
                   </div>
-                  <input
-                    type={showAddUserPassword ? 'text' : 'password'}
-                    {...addUserForm.register('password')}
-                    placeholder="أدخل كلمة مرور قوية"
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      addUserForm.formState.errors.password ? 'border-red-400' : 'border-gray-200'
-                    } ${addUserPasswordHasValue ? 'text-left' : 'text-right'}`}
-                    dir={addUserPasswordHasValue ? 'ltr' : 'rtl'}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showAddUserPassword ? 'text' : 'password'}
+                      {...addUserForm.register('password')}
+                      placeholder="أدخل كلمة مرور قوية"
+                      className={`w-full pr-10 pl-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                        addUserForm.formState.errors.password ? 'border-red-400' : 'border-gray-200'
+                      } ${addUserPasswordHasValue ? 'text-left' : 'text-right'}`}
+                      dir={addUserPasswordHasValue ? 'ltr' : 'rtl'}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAddUserPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      tabIndex={-1}
+                      aria-label={showAddUserPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                    >
+                      {showAddUserPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {addUserForm.formState.errors.password && (
-                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.password.message}</p>
+                    <p className="text-red-500 text-xs mt-1">{addUserForm.formState.errors.password.message}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-gray-700">القسم</label>
+                  <label className="block mb-1 text-sm text-gray-700">القسم</label>
                   <select
                     {...addUserForm.register('department_id')}
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    className={`w-full px-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       addUserForm.formState.errors.department_id ? 'border-red-400' : 'border-gray-200'
                     }`}
                   >
@@ -490,13 +526,13 @@ export function UsersPage() {
                     ))}
                   </select>
                   {addUserForm.formState.errors.department_id && (
-                    <p className="text-red-500 text-sm mt-1">{addUserForm.formState.errors.department_id.message}</p>
+                    <p className="text-red-500 text-xs mt-1">{addUserForm.formState.errors.department_id.message}</p>
                   )}
                 </div>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+                  className="w-full py-2.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
                 >
                   {submitting ? 'جاري الإضافة...' : 'إضافة المستخدم'}
                 </button>
@@ -508,7 +544,7 @@ export function UsersPage() {
 
       {editingUser && (
         <div
-          className="fixed inset-0 z-[80] flex min-h-[100dvh] items-end justify-center overflow-y-auto bg-black/50 px-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-4 sm:z-50 sm:min-h-[100svh] sm:items-center sm:px-4 sm:py-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4 sm:z-50 sm:px-4"
           onClick={() => { setEditingUser(null); editUserForm.reset(); }}
           onKeyDown={handleModalKeyDown}
           role="dialog"
@@ -516,56 +552,56 @@ export function UsersPage() {
           aria-labelledby="edit-user-title"
         >
           <div
-            className="relative flex w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl max-h-[calc(100dvh-6.5rem)] sm:mx-auto sm:max-h-[calc(100svh-2rem)] sm:max-w-lg sm:rounded-2xl sm:my-6"
+            className="relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100dvh-8rem)] sm:mx-auto sm:max-h-[calc(100svh-4rem)] sm:max-w-sm"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
-              <h2 id="edit-user-title" className="px-12 text-center text-gray-800">
+            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-4 py-3">
+              <h2 id="edit-user-title" className="px-12 text-center text-base text-gray-800">
                 تعديل الملف الشخصي
               </h2>
               <button
                 type="button"
                 onClick={() => { setEditingUser(null); editUserForm.reset(); }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-2 hover:bg-gray-100 sm:left-4"
+                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-2 hover:bg-gray-100"
                 aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <div className="overflow-y-auto overscroll-contain px-5 py-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
-              <form className="space-y-4" onSubmit={editUserForm.handleSubmit(onEditUser)}>
+            <div className="overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <form className="space-y-2.5" onSubmit={editUserForm.handleSubmit(onEditUser)}>
                 <div>
-                  <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
+                  <label className="block mb-1 text-sm text-gray-700">الاسم الكامل</label>
                   <input
                     type="text"
                     {...editUserForm.register('name_ar')}
                     placeholder="أدخل الاسم الكامل"
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    className={`w-full px-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       editUserForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
                     }`}
                   />
                   {editUserForm.formState.errors.name_ar && (
-                    <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.name_ar.message}</p>
+                    <p className="text-red-500 text-xs mt-1">{editUserForm.formState.errors.name_ar.message}</p>
                   )}
                 </div>
-                <p className="text-gray-500 text-xs -mt-2">
+                <p className="text-gray-500 text-xs -mt-1">
                   الدور والقسم يُعدّلان من صفحة الأقسام.
                 </p>
                 <div>
-                  <label className="block mb-1.5 text-gray-700">اسم المستخدم</label>
+                  <label className="block mb-1 text-sm text-gray-700">اسم المستخدم</label>
                   <input
                     type="email"
                     {...editUserForm.register('email')}
                     placeholder="example@alssaa.tv"
-                    className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                    className={`w-full px-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       editUserForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
                     }`}
                     dir="ltr"
                   />
                   {editUserForm.formState.errors.email && (
-                    <p className="text-red-500 text-sm mt-1">{editUserForm.formState.errors.email.message}</p>
+                    <p className="text-red-500 text-xs mt-1">{editUserForm.formState.errors.email.message}</p>
                   )}
                   <p className="text-gray-500 text-xs mt-1">
                     يُستخدم هذا البريد كاسم المستخدم لتسجيل الدخول.
@@ -577,7 +613,7 @@ export function UsersPage() {
                 <button
                   type="submit"
                   disabled={editSubmitting}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+                  className="w-full py-2.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
                 >
                   {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
                 </button>

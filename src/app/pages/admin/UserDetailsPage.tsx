@@ -69,7 +69,6 @@ import {
 import { resolveTodayRecordDisplayStatus } from '@/shared/attendance/todayRecord';
 import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
 import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
-import { StatusBadge } from '@/shared/components';
 
 const DAY_LABELS_AR: Record<string, string> = {
   '0': 'الأحد',
@@ -80,6 +79,30 @@ const DAY_LABELS_AR: Record<string, string> = {
   '5': 'الجمعة',
   '6': 'السبت',
 };
+
+const DAY_LABELS_SHORT: Record<string, string> = {
+  '0': 'أحد',
+  '1': 'إثن',
+  '2': 'ثلا',
+  '3': 'أرب',
+  '4': 'خمي',
+  '5': 'جمع',
+  '6': 'سبت',
+};
+
+function calcWeeklyHours(schedule: WorkSchedule): number {
+  let total = 0;
+  for (const key of Object.keys(schedule)) {
+    const day = schedule[key as keyof WorkSchedule];
+    if (!day) continue;
+    const [sh, sm] = day.start.split(':').map(Number);
+    const [eh, em] = day.end.split(':').map(Number);
+    let mins = (eh * 60 + em) - (sh * 60 + sm);
+    if (mins < 0) mins += 24 * 60;
+    total += mins / 60;
+  }
+  return Math.round(total);
+}
 
 type AttendanceFilter =
   | 'all'
@@ -645,117 +668,208 @@ export function UserDetailsPage() {
   return (
     <div className="mx-auto max-w-lg space-y-3 px-4 pb-20 pt-3">
       {/* Profile Header */}
-      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-4 min-w-0 flex-1">
-            <div
-              className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-xl ${
-                profile.role === 'admin'
-                  ? 'bg-purple-100 text-purple-600'
-                  : profile.role === 'manager'
-                    ? 'bg-emerald-100 text-emerald-600'
-                    : 'bg-blue-100 text-blue-600'
-              }`}
-            >
-              {profile.name_ar.charAt(0)}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {/* Top status row */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          {todayDisplayStatus && todayStatusConfig ? (
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${todayStatusConfig.bgColor} ${todayStatusConfig.borderColor}`}>
+              <span className={`w-2 h-2 rounded-full ${todayStatusConfig.dotColor}`} />
+              {todayFirstCheckIn && (
+                <span dir="ltr" className={todayStatusConfig.color}>{todayFirstCheckIn}</span>
+              )}
+              {todayFirstCheckIn && <span className={todayStatusConfig.color}>·</span>}
+              <span className={todayStatusConfig.color}>{todayStatusConfig.label}</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-gray-800">{profile.name_ar}</h2>
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-600 min-w-0">
-                <Building2 className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden />
-                <span className="truncate">{department?.name_ar ?? 'بدون قسم'}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${roleColor(profile.role)}`}
-                >
-                  {roleIcon(profile.role)}
-                  {roleLabel(profile.role)}
-                </span>
-              </div>
-            </div>
-          </div>
+          ) : (
+            <div />
+          )}
           {currentUser?.role === 'admin' && (
-            <div className="shrink-0 flex min-w-[8.75rem] flex-col items-stretch gap-2">
-              <button
-                type="button"
-                onClick={openIdentityEditModal}
-                className="self-end rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100"
-                aria-label="تعديل الاسم واسم المستخدم"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={openScheduleEditModal}
-                className="flex items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm font-medium text-blue-700 shadow-sm shadow-blue-100/50 transition-colors hover:bg-blue-100"
-                aria-label="تعديل جدول العمل"
-              >
-                <Clock className="h-4 w-4" />
-                <span>تعديل جدول العمل</span>
-              </button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+                  aria-label="خيارات الملف الشخصي"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={openIdentityEditModal} className="cursor-pointer">
+                  <Edit2 className="w-4 h-4" />
+                  تعديل الملف الشخصي
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
 
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Mail className="w-4 h-4 text-gray-400" />
-            <span className="truncate" dir="ltr">
-              {getDisplayEmail(profile.email)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="bg-white rounded-2xl p-1 border border-gray-100 shadow-sm">
-        <div className="grid grid-cols-4 gap-1">
-          {(
-            [
-              { key: 'overview', label: 'نظرة عامة' },
-              { key: 'attendance', label: 'الحضور' },
-              { key: 'leaves', label: 'الإجازات' },
-              { key: 'requests', label: 'الطلبات' },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-3 py-2 rounded-xl text-sm transition-colors ${
-                activeTab === tab.key
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
+        {/* Avatar and info */}
+        <div className="flex flex-col items-center text-center px-4 pb-4">
+          <div className="relative">
+            <div className={`rounded-full flex items-center justify-center text-2xl font-semibold ${
+              profile.role === 'admin'
+                ? 'bg-purple-100 text-purple-600'
+                : profile.role === 'manager'
+                  ? 'bg-emerald-100 text-emerald-600'
+                  : 'bg-blue-100 text-blue-600'
+            }`}
+              style={{
+                width: 72,
+                height: 72,
+                outline: `2px solid ${(todayStatusConfig?.hexColor ?? '#D1D5DB') + '66'}`,
+                outlineOffset: '3px',
+              }}
             >
-              {tab.label}
-            </button>
-          ))}
+              {profile.name_ar.charAt(0)}
+            </div>
+            {todayDisplayStatus && todayStatusConfig && (
+              <span
+                className={`absolute bottom-0 left-0 w-3.5 h-3.5 rounded-full border-2 border-white ${todayStatusConfig.dotColor}`}
+              />
+            )}
+          </div>
+          <h2 className="text-gray-800 mt-3">{profile.name_ar}</h2>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap justify-center">
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${roleColor(profile.role)}`}
+            >
+              {roleIcon(profile.role)}
+              {roleLabel(profile.role)}
+            </span>
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <Building2 className="w-3 h-3 text-gray-400" aria-hidden />
+              <span>{department?.name_ar ?? 'بدون قسم'}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500">
+            <Mail className="w-3.5 h-3.5 text-gray-400" />
+            <span dir="ltr">{getDisplayEmail(profile.email)}</span>
+          </div>
+          {/* Tabs */}
+          <div className="w-full mt-3 border-t border-gray-100">
+            <div className="grid grid-cols-4">
+              {(
+                [
+                  { key: 'overview', label: 'نظرة عامة' },
+                  { key: 'attendance', label: 'الحضور' },
+                  { key: 'leaves', label: 'الإجازات' },
+                  { key: 'requests', label: 'الطلبات' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`py-3 text-xs transition-colors border-b-2 ${
+                    activeTab === tab.key
+                      ? 'border-blue-600 text-blue-600 font-medium'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
         <div className="space-y-3">
-          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-            <h3 className="text-sm text-gray-600 mb-3">حالة اليوم</h3>
-            {todayDisplayStatus && todayStatusConfig ? (
-              <div
-                className={`p-3 rounded-xl border ${todayStatusConfig.bgColor} ${todayStatusConfig.borderColor}`}
-              >
-                <div className="flex items-center justify-between">
-                  <StatusBadge status={todayDisplayStatus} />
-                  {todayFirstCheckIn && (
-                    <span className="text-xs text-gray-600" dir="ltr">
-                      دخول: {todayFirstCheckIn}
-                    </span>
+          {/* Work Schedule */}
+          {(() => {
+            const schedule = toWorkSchedule(profile.work_schedule);
+            const todayDow = String(new Date().getDay());
+            const weeklyHours = calcWeeklyHours(schedule);
+            const hasSchedule = Object.keys(schedule).length > 0;
+            return (
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between mb-0.5">
+                  <h3 className="text-sm text-gray-700">جدول العمل</h3>
+                  {currentUser?.role === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={openScheduleEditModal}
+                      className="text-xs text-blue-600 hover:text-blue-700 transition-colors"
+                    >
+                      تعديل
+                    </button>
                   )}
                 </div>
+                {hasSchedule && (
+                  <p className="text-xs text-gray-400 mb-3">{weeklyHours} س/أسبوع</p>
+                )}
+                {hasSchedule ? (
+                  <div className="flex gap-1.5" dir="rtl">
+                    {(['0', '1', '2', '3', '4', '5', '6'] as const).map((key) => {
+                      const day = schedule[key];
+                      const isToday = key === todayDow;
+                      return (
+                        <div
+                          key={key}
+                          className={`flex-1 flex flex-col items-center rounded-xl py-2 px-0.5 min-w-0 ${
+                            isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <span className="text-[10px] font-medium leading-tight">
+                            {DAY_LABELS_SHORT[key]}
+                          </span>
+                          {day ? (
+                            <>
+                              <span className={`text-[9px] leading-tight mt-1 ${isToday ? 'text-blue-100' : 'text-gray-500'}`}>
+                                {day.start}
+                              </span>
+                              <span className={`text-[9px] leading-tight ${isToday ? 'text-blue-100' : 'text-gray-500'}`}>
+                                {day.end}
+                              </span>
+                            </>
+                          ) : (
+                            <span className={`text-[9px] leading-tight mt-1 ${isToday ? 'text-blue-200' : 'text-gray-400'}`}>
+                              راحة
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">حسب إعدادات المنظمة</p>
+                )}
               </div>
-            ) : (
-              <p className="text-xs text-gray-400 text-center py-2">لا توجد بيانات لليوم</p>
-            )}
-          </div>
+            );
+          })()}
+
+
+          {/* Recent Activity */}
+          {currentUser?.role === 'admin' && (
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm text-gray-700">النشاط الأخير</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAuditLog(true)}
+                  className="text-xs text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  عرض الكل
+                </button>
+              </div>
+              {userAuditLogs.length > 0 ? (
+                <div className="space-y-2">
+                  {userAuditLogs.slice(0, 3).map((log) => (
+                    <div key={log.id} className="flex items-start justify-between gap-2">
+                      <p className="text-xs text-gray-700 flex-1">{log.action_ar}</p>
+                      <p className="text-xs text-gray-400 whitespace-nowrap">
+                        {new Date(log.created_at).toLocaleDateString('ar-IQ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-2">لا توجد سجلات نشاط</p>
+              )}
+            </div>
+          )}
 
           {allTimeStats && (
             <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
@@ -837,47 +951,6 @@ export function UserDetailsPage() {
       {/* Attendance Tab */}
       {activeTab === 'attendance' && (
         <div className="space-y-3">
-          {/* Work schedule card: show days and times; admin can edit */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-700">جدول العمل</h3>
-              {currentUser?.role === 'admin' && (
-                <button
-                  type="button"
-                  onClick={openScheduleEditModal}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="تعديل جدول العمل"
-                >
-                  <Edit2 className="w-4 h-4 text-gray-500" />
-                </button>
-              )}
-            </div>
-            {(() => {
-              const schedule = toWorkSchedule(profile.work_schedule);
-              const hasSchedule = Object.keys(schedule).length > 0;
-              if (!hasSchedule) {
-                return <p className="text-sm text-gray-500">حسب إعدادات المنظمة</p>;
-              }
-              return (
-                <div className="text-xs text-gray-700 space-y-1" dir="rtl">
-                  {(['0', '1', '2', '3', '4', '5', '6'] as const).map((key) => {
-                    const day = schedule[key];
-                    return (
-                      <div key={key} className="flex justify-between border-b border-dashed border-gray-100 last:border-0 py-1">
-                        <span className="text-gray-500">{DAY_LABELS_AR[key]}</span>
-                        {day ? (
-                          <span dir="ltr" className="text-gray-800 font-medium">{day.start}–{day.end}</span>
-                        ) : (
-                          <span className="text-gray-400">راحة</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-          </div>
-
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-gray-700">عرض السجل</h3>
@@ -1313,7 +1386,7 @@ export function UserDetailsPage() {
       {/* Identity Edit Modal */}
       {showIdentityEditModal && profile && currentUser.role === 'admin' && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4"
           onClick={() => { setShowIdentityEditModal(false); identityEditForm.reset(); }}
           onKeyDown={handleIdentityEditModalKeyDown}
           role="dialog"
@@ -1321,67 +1394,71 @@ export function UserDetailsPage() {
           aria-labelledby="edit-identity-title"
         >
           <div
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            className="relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100dvh-8rem)] sm:mx-auto sm:max-w-sm"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-6">
-              <h2 id="edit-identity-title" className="text-gray-800">تعديل الاسم واسم المستخدم</h2>
+            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-4 py-3">
+              <h2 id="edit-identity-title" className="px-12 text-center text-base text-gray-800">
+                تعديل الملف الشخصي
+              </h2>
               <button
                 type="button"
                 onClick={() => { setShowIdentityEditModal(false); identityEditForm.reset(); }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-2 hover:bg-gray-100"
                 aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <form className="space-y-4" onSubmit={identityEditForm.handleSubmit(onIdentityEditSubmit)}>
-              <div>
-                <label className="block mb-1.5 text-gray-700">الاسم الكامل</label>
-                <input
-                  type="text"
-                  {...identityEditForm.register('name_ar')}
-                  placeholder="أدخل الاسم الكامل"
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    identityEditForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                />
-                {identityEditForm.formState.errors.name_ar && (
-                  <p className="text-red-500 text-sm mt-1">{identityEditForm.formState.errors.name_ar.message}</p>
-                )}
-              </div>
-              <div>
-                <label className="block mb-1.5 text-gray-700">اسم المستخدم</label>
-                <input
-                  type="email"
-                  {...identityEditForm.register('email')}
-                  placeholder="example@alssaa.tv"
-                  className={`w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                    identityEditForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                  dir="ltr"
-                />
-                {identityEditForm.formState.errors.email && (
-                  <p className="text-red-500 text-sm mt-1">{identityEditForm.formState.errors.email.message}</p>
-                )}
-                <p className="text-amber-700 text-xs mt-1">
-                  يُستخدم هذا البريد كاسم المستخدم لتسجيل الدخول، وتغييره إجراء حساس.
-                </p>
-                <p className="text-gray-500 text-xs mt-2">
-                  الدور والقسم يُعدّلان من صفحة الأقسام.
-                </p>
-              </div>
+            <div className="overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <form className="space-y-2.5" onSubmit={identityEditForm.handleSubmit(onIdentityEditSubmit)}>
+                <div>
+                  <label className="block mb-1 text-sm text-gray-700">الاسم الكامل</label>
+                  <input
+                    type="text"
+                    {...identityEditForm.register('name_ar')}
+                    placeholder="أدخل الاسم الكامل"
+                    className={`w-full px-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      identityEditForm.formState.errors.name_ar ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  />
+                  {identityEditForm.formState.errors.name_ar && (
+                    <p className="text-red-500 text-xs mt-1">{identityEditForm.formState.errors.name_ar.message}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm text-gray-700">اسم المستخدم</label>
+                  <input
+                    type="email"
+                    {...identityEditForm.register('email')}
+                    placeholder="example@alssaa.tv"
+                    className={`w-full px-3 py-2 text-sm border rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      identityEditForm.formState.errors.email ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                    dir="ltr"
+                  />
+                  {identityEditForm.formState.errors.email && (
+                    <p className="text-red-500 text-xs mt-1">{identityEditForm.formState.errors.email.message}</p>
+                  )}
+                  <p className="text-amber-700 text-xs mt-1">
+                    يُستخدم هذا البريد كاسم المستخدم لتسجيل الدخول، وتغييره إجراء حساس.
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    الدور والقسم يُعدّلان من صفحة الأقسام.
+                  </p>
+                </div>
 
-              <button
-                type="submit"
-                disabled={editSubmitting}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
-              >
-                {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="w-full py-2.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+                >
+                  {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -1389,7 +1466,7 @@ export function UserDetailsPage() {
       {/* Schedule Edit Modal */}
       {showScheduleEditModal && profile && currentUser.role === 'admin' && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4"
           onClick={() => { setShowScheduleEditModal(false); scheduleEditForm.reset(); }}
           onKeyDown={handleScheduleEditModalKeyDown}
           role="dialog"
@@ -1397,45 +1474,48 @@ export function UserDetailsPage() {
           aria-labelledby="edit-schedule-title"
         >
           <div
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            className="relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100dvh-10rem)] sm:mx-auto sm:max-w-sm"
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-6">
-              <h2 id="edit-schedule-title" className="text-gray-800">تعديل جدول العمل</h2>
+            <div className="sticky top-0 z-10 border-b border-gray-100 bg-white px-4 py-3">
+              <h2 id="edit-schedule-title" className="px-12 text-center text-base text-gray-800">
+                تعديل جدول العمل
+              </h2>
               <button
                 type="button"
                 onClick={() => { setShowScheduleEditModal(false); scheduleEditForm.reset(); }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full p-2 hover:bg-gray-100"
                 aria-label="إغلاق"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <form className="space-y-4" onSubmit={scheduleEditForm.handleSubmit(onScheduleEditSubmit)}>
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">جدول العمل</h3>
-                <p className="text-xs text-gray-500 mb-3">حدّد أيام العمل ووقت كل يوم. الأيام غير المفعّلة تُعامَل كأيام راحة. إذا تُرك الجدول فارغاً بالكامل، تُستخدم إعدادات المنظمة.</p>
-                <WorkScheduleEditor
-                  value={scheduleEditForm.watch('work_schedule') ?? {}}
-                  onChange={(next) =>
-                    scheduleEditForm.setValue('work_schedule', next, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                />
-              </div>
+            <div className="overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <form className="space-y-2.5" onSubmit={scheduleEditForm.handleSubmit(onScheduleEditSubmit)}>
+                <div>
+                  <p className="text-xs text-gray-500 mb-3">حدّد أيام العمل ووقت كل يوم. الأيام غير المفعّلة تُعامَل كأيام راحة. إذا تُرك الجدول فارغاً بالكامل، تُستخدم إعدادات المنظمة.</p>
+                  <WorkScheduleEditor
+                    value={scheduleEditForm.watch('work_schedule') ?? {}}
+                    onChange={(next) =>
+                      scheduleEditForm.setValue('work_schedule', next, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                  />
+                </div>
 
-              <button
-                type="submit"
-                disabled={editSubmitting}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
-              >
-                {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="w-full py-2.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+                >
+                  {editSubmitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}

@@ -25,7 +25,7 @@ const FIELD_LABELS = {
 } as const;
 
 const TIME_INPUT_CLASS =
-  'w-24 max-w-full px-2.5 py-1.5 border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none text-sm font-medium transition-all text-center';
+  'w-[4.5rem] px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none text-xs font-medium transition-all text-center';
 
 function isInvalid(schedule: DaySchedule | undefined): boolean {
   return getDayScheduleValidationIssue(schedule) !== null;
@@ -89,7 +89,7 @@ export function WorkScheduleEditor({ value, onChange, disabled = false }: WorkSc
   const workingDayCount = DAY_LABELS.filter(({ key }) => value[key]).length;
 
   return (
-    <div dir="rtl" className="space-y-2">
+    <div dir="rtl" className="space-y-1.5">
       {DAY_LABELS.map(({ key, label }) => {
         const day = value[key];
         const active = Boolean(day);
@@ -99,66 +99,50 @@ export function WorkScheduleEditor({ value, onChange, disabled = false }: WorkSc
         return (
           <div
             key={key}
-            role={active ? 'button' : undefined}
-            tabIndex={active && !disabled ? 0 : undefined}
             data-testid={`schedule-row-${key}`}
             data-selected={isSelectedDay ? 'true' : 'false'}
-            onClick={() => {
-              if (!active || disabled) return;
-              setSelectedDayKey(key);
-            }}
-            onKeyDown={(event) => {
-              if (!active || disabled) return;
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                setSelectedDayKey(key);
-              }
-            }}
-            className={`flex flex-wrap items-center gap-x-3 gap-y-2 p-3 rounded-2xl border transition-all ${
+            className={`flex flex-col px-3 py-2 rounded-xl border transition-all ${
               active
                 ? isSelectedDay
-                  ? 'border-blue-200 bg-gradient-to-l from-blue-50/80 via-white to-white shadow-[0_10px_25px_rgba(59,130,246,0.08)]'
+                  ? 'border-blue-200 bg-blue-50/40'
                   : 'bg-white border-gray-200'
                 : 'bg-gray-50 border-gray-100'
-            } ${invalid ? 'ring-2 ring-red-300' : isSelectedDay ? 'ring-2 ring-blue-100' : ''} ${
-              active && !disabled ? 'cursor-pointer' : ''
-            }`}
+            } ${invalid ? 'ring-2 ring-red-300' : ''}`}
           >
-            <label className="flex items-center gap-2 shrink-0 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={active}
-                disabled={disabled}
-                onClick={(event) => event.stopPropagation()}
-                onChange={() => toggleDay(key)}
-                className="w-4 h-4 accent-blue-600"
-              />
-              <span
-                className={`text-sm font-semibold ${
-                  active ? 'text-gray-800' : 'text-gray-400'
-                }`}
-              >
-                {label}
-              </span>
-            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 shrink-0 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  disabled={disabled}
+                  onChange={() => toggleDay(key)}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                <span
+                  className={`text-sm w-[4.5rem] ${
+                    active ? 'text-gray-800 font-medium' : 'text-gray-400'
+                  }`}
+                >
+                  {label}
+                </span>
+              </label>
 
-            <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:flex-1 sm:w-auto">
-              {active && day ? (
-                <>
-                  <input
-                    type="time"
-                    dir="ltr"
-                    disabled={disabled}
-                    value={day.start}
-                    step={600}
-                    aria-label={`${label} ${FIELD_LABELS.start}`}
-                    data-testid={`schedule-${key}-start`}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(e) => updateDay(key, 'start', e.target.value)}
-                    className={TIME_INPUT_CLASS}
-                  />
-                  <span className="text-xs text-gray-400 font-medium">–</span>
-                  <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5 mr-auto">
+                {active && day ? (
+                  <>
+                    <input
+                      type="time"
+                      dir="ltr"
+                      disabled={disabled}
+                      value={day.start}
+                      step={600}
+                      aria-label={`${label} ${FIELD_LABELS.start}`}
+                      data-testid={`schedule-${key}-start`}
+                      onClick={() => setSelectedDayKey(key)}
+                      onChange={(e) => updateDay(key, 'start', e.target.value)}
+                      className={TIME_INPUT_CLASS}
+                    />
+                    <span className="text-xs text-gray-400">–</span>
                     <input
                       type="time"
                       dir="ltr"
@@ -167,7 +151,7 @@ export function WorkScheduleEditor({ value, onChange, disabled = false }: WorkSc
                       step={600}
                       aria-label={`${label} ${FIELD_LABELS.end}`}
                       data-testid={`schedule-${key}-end`}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={() => setSelectedDayKey(key)}
                       onChange={(e) => updateDay(key, 'end', e.target.value)}
                       className={TIME_INPUT_CLASS}
                     />
@@ -176,15 +160,15 @@ export function WorkScheduleEditor({ value, onChange, disabled = false }: WorkSc
                         +1
                       </span>
                     )}
-                  </div>
-                </>
-              ) : (
-                <span className="text-xs text-gray-400 font-medium">راحة</span>
-              )}
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-400">راحة</span>
+                )}
+              </div>
             </div>
 
             {invalid && (
-              <p className="w-full text-xs text-red-500 font-medium sm:pr-6">
+              <p className="text-xs text-red-500 mt-1 pr-6">
                 {issue?.message}
               </p>
             )}

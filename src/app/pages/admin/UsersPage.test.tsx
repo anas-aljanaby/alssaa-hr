@@ -95,8 +95,8 @@ describe('UsersPage', () => {
     expect(addUserTitle).toHaveClass('text-center');
 
     const passwordFieldHeader = screen.getByText('كلمة المرور').parentElement;
-    expect(passwordFieldHeader).toHaveClass('flex-col');
-    expect(passwordFieldHeader).toHaveClass('sm:flex-row');
+    expect(passwordFieldHeader).toHaveClass('flex');
+    expect(passwordFieldHeader).toHaveClass('justify-between');
 
     const emailInput = screen.getByPlaceholderText('example@alssaa.tv');
     expect(emailInput).toHaveAttribute('dir', 'ltr');
