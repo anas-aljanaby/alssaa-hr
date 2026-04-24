@@ -13,7 +13,6 @@ import { getDeleteUserErrorMessage, getProfileUpdateErrorMessage } from '@/lib/e
 import * as attendanceService from '@/lib/services/attendance.service';
 import * as leaveBalanceService from '@/lib/services/leave-balance.service';
 import * as requestsService from '@/lib/services/requests.service';
-import * as auditService from '@/lib/services/audit.service';
 import {
   formatRequestCalendarDate,
   formatRequestDateTime,
@@ -37,7 +36,6 @@ import type {
 } from '@/lib/services/attendance.service';
 import type { LeaveBalance } from '@/lib/services/leave-balance.service';
 import type { LeaveRequest } from '@/lib/services/requests.service';
-import type { AuditLog } from '@/lib/services/audit.service';
 import {
   Mail,
   Calendar,
@@ -52,7 +50,6 @@ import {
   Edit2,
   MoreVertical,
   FileText,
-  History,
   Trash2,
   X,
   Download,
@@ -179,12 +176,10 @@ export function UserDetailsPage() {
   const [allTimeHistory, setAllTimeHistory] = useState<AttendanceHistoryDay[]>([]);
   const [rangeHistory, setRangeHistory] = useState<AttendanceHistoryDay[]>([]);
   const [allTimeStats, setAllTimeStats] = useState<AttendanceHistoryStats | null>(null);
-  const [userAuditLogs, setUserAuditLogs] = useState<AuditLog[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'leaves' | 'requests'>(
     'overview'
   );
   const [requestFilter, setRequestFilter] = useState<'all' | LeaveRequest['status']>('all');
-  const [showAuditLog, setShowAuditLog] = useState(false);
   const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>('all');
   const [attendanceViewMode, setAttendanceViewMode] = useState<'all_time' | 'range'>('all_time');
   const [dateFrom, setDateFrom] = useState(() => {
@@ -207,7 +202,6 @@ export function UserDetailsPage() {
     showIdentityEditModal ||
     showScheduleEditModal ||
     showDeleteConfirm ||
-    showAuditLog ||
     showLeaveBalanceModal
   );
 
@@ -372,12 +366,11 @@ export function UserDetailsPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const [prof, today, balance, reqs, audit, allHistory, rangeDays] = await Promise.all([
+      const [prof, today, balance, reqs, allHistory, rangeDays] = await Promise.all([
         profilesService.getUserById(userId),
         attendanceService.getAttendanceToday(userId),
         leaveBalanceService.getUserBalance(userId),
         requestsService.getUserRequests(userId),
-        auditService.getAuditLogsForTarget(userId),
         attendanceService.getAttendanceHistoryAllTime(userId),
         attendanceService.getAttendanceHistoryRange(userId, dateFrom, dateTo),
       ]);
@@ -385,7 +378,6 @@ export function UserDetailsPage() {
       setTodayRecord(today);
       setLeaveBalance(balance);
       setUserRequests(reqs);
-      setUserAuditLogs(audit.slice(0, 10));
       setAllTimeHistory(allHistory);
       setRangeHistory(rangeDays);
       setAllTimeStats(attendanceService.calculateAttendanceHistoryStats(allHistory));
@@ -550,57 +542,12 @@ export function UserDetailsPage() {
     const name = `حضور_${profile.name_ar}_${dateFrom}_إلى_${dateTo}.xlsx`;
     XLSX.writeFile(wb, name);
   };
-  const canDeleteTopBarUser =
-    currentUser?.role === 'admin' &&
-    !!profile &&
-    currentUser.uid !== profile.id &&
-    profile.role !== 'admin';
-  const topBarAction = useMemo(
-    () =>
-      currentUser?.role === 'admin' ? (
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setShowAuditLog(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
-            aria-label="سجل النشاط"
-          >
-            <History className="h-4 w-4" />
-          </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
-                aria-label="خيارات إضافية"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                disabled={!canDeleteTopBarUser || deletingUser}
-                variant="destructive"
-                onSelect={() => setShowDeleteConfirm(true)}
-                className="cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                حذف المستخدم
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ) : null,
-    [canDeleteTopBarUser, currentUser?.role, deletingUser]
-  );
-
   useAppTopBar(
     currentUser
       ? {
           title: currentUser.uid === userId ? 'الملف الشخصي' : 'تفاصيل الموظف',
           meta: profile?.name_ar,
           backPath,
-          action: topBarAction,
         }
       : null
   );
@@ -696,10 +643,24 @@ export function UserDetailsPage() {
                   <MoreVertical className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent
+                side="bottom"
+                align="start"
+                sideOffset={8}
+                collisionPadding={16}
+              >
                 <DropdownMenuItem onSelect={openIdentityEditModal} className="cursor-pointer">
                   <Edit2 className="w-4 h-4" />
                   تعديل الملف الشخصي
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canDeleteUser || deletingUser}
+                  variant="destructive"
+                  onSelect={() => setShowDeleteConfirm(true)}
+                  className="cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  حذف المستخدم
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -749,8 +710,8 @@ export function UserDetailsPage() {
             <span dir="ltr">{getDisplayEmail(profile.email)}</span>
           </div>
           {/* Tabs */}
-          <div className="w-full mt-3 px-4 pb-3">
-            <div className="flex gap-2 border-t border-gray-100 pt-3">
+          <div className="w-full mt-3 border-t border-gray-100">
+            <div className="flex">
               {(
                 [
                   { key: 'overview', label: 'نظرة عامة' },
@@ -762,10 +723,10 @@ export function UserDetailsPage() {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex-1 py-2 text-xs rounded-xl border transition-all duration-200 ${
+                  className={`flex-1 py-2.5 text-xs transition-all duration-200 border-b-2 ${
                     activeTab === tab.key
-                      ? 'bg-white text-blue-600 font-semibold border-blue-100 shadow-md -translate-y-0.5'
-                      : 'bg-gray-50 text-gray-400 border-transparent hover:bg-white hover:shadow-sm hover:text-gray-600'
+                      ? 'border-blue-600 text-blue-600 font-medium'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {tab.label}
@@ -787,8 +748,15 @@ export function UserDetailsPage() {
             const hasSchedule = Object.keys(schedule).length > 0;
             return (
               <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-                <div className="flex items-center justify-between mb-0.5">
-                  <h3 className="text-sm text-gray-700">جدول العمل</h3>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-baseline gap-2">
+                    <h3 className="text-sm text-gray-700">جدول العمل</h3>
+                    {hasSchedule && (
+                      <span className="text-[11px] text-gray-400">
+                        <span className="tabular-nums text-gray-600">{weeklyHours}</span> س/أسبوع
+                      </span>
+                    )}
+                  </div>
                   {currentUser?.role === 'admin' && (
                     <button
                       type="button"
@@ -799,41 +767,48 @@ export function UserDetailsPage() {
                     </button>
                   )}
                 </div>
-                {hasSchedule && (
-                  <p className="text-xs text-gray-400 mb-3">{weeklyHours} س/أسبوع</p>
-                )}
                 {hasSchedule ? (
-                  <div className="flex gap-1.5" dir="rtl">
-                    {(['0', '1', '2', '3', '4', '5', '6'] as const).map((key) => {
-                      const day = schedule[key];
-                      const isToday = key === todayDow;
-                      return (
-                        <div
-                          key={key}
-                          className={`flex-1 flex flex-col items-center rounded-xl py-2 px-0.5 min-w-0 ${
-                            isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700'
-                          }`}
-                        >
-                          <span className="text-[10px] font-medium leading-tight">
-                            {DAY_LABELS_SHORT[key]}
-                          </span>
-                          {day ? (
-                            <>
-                              <span className={`text-[9px] leading-tight mt-1 ${isToday ? 'text-blue-100' : 'text-gray-500'}`}>
-                                {day.start}
-                              </span>
-                              <span className={`text-[9px] leading-tight ${isToday ? 'text-blue-100' : 'text-gray-500'}`}>
-                                {day.end}
-                              </span>
-                            </>
-                          ) : (
-                            <span className={`text-[9px] leading-tight mt-1 ${isToday ? 'text-blue-200' : 'text-gray-400'}`}>
-                              راحة
+                  <div className="overflow-x-auto -mx-1 px-1 pb-1" dir="rtl">
+                    <div className="flex gap-1.5 w-max">
+                      {(['0', '1', '2', '3', '4', '5', '6'] as const).map((key) => {
+                        const day = schedule[key];
+                        const isToday = key === todayDow;
+                        const base = 'flex flex-col items-center rounded-xl px-2.5 py-2 min-w-[56px] transition-colors';
+                        const stateClasses = isToday
+                          ? 'bg-blue-600 shadow-sm shadow-blue-600/20'
+                          : day
+                            ? 'bg-gray-50'
+                            : 'bg-[repeating-linear-gradient(135deg,theme(colors.gray.50)_0_6px,theme(colors.gray.100)_6px_7px)]';
+                        return (
+                          <div key={key} className={`${base} ${stateClasses}`}>
+                            <span
+                              className={`mb-1 text-xs font-medium ${
+                                isToday
+                                  ? 'text-white'
+                                  : day
+                                    ? 'text-gray-700'
+                                    : 'text-gray-400'
+                              }`}
+                            >
+                              {DAY_LABELS_SHORT[key]}
                             </span>
-                          )}
-                        </div>
-                      );
-                    })}
+                            {day ? (
+                              <div
+                                dir="ltr"
+                                className={`flex flex-col items-center text-[11px] leading-tight tabular-nums ${
+                                  isToday ? 'text-blue-50' : 'text-gray-500'
+                                }`}
+                              >
+                                <span>{day.start}</span>
+                                <span>{day.end}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-gray-400">راحة</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500">حسب إعدادات المنظمة</p>
@@ -841,38 +816,6 @@ export function UserDetailsPage() {
               </div>
             );
           })()}
-
-
-          {/* Recent Activity */}
-          {currentUser?.role === 'admin' && (
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm text-gray-700">النشاط الأخير</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowAuditLog(true)}
-                  className="text-xs text-blue-600 hover:text-blue-700 transition-colors"
-                >
-                  عرض الكل
-                </button>
-              </div>
-              {userAuditLogs.length > 0 ? (
-                <div className="space-y-2">
-                  {userAuditLogs.slice(0, 3).map((log) => (
-                    <div key={log.id} className="flex items-start justify-between gap-2">
-                      <p className="text-xs text-gray-700 flex-1">{log.action_ar}</p>
-                      <p className="text-xs text-gray-400 whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleDateString('ar-IQ')}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-gray-400 text-center py-2">لا توجد سجلات نشاط</p>
-              )}
-            </div>
-          )}
-
           {allTimeStats && (
             <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
               <h3 className="text-sm text-gray-600 mb-3">إحصائيات كل الوقت</h3>
@@ -1298,47 +1241,6 @@ export function UserDetailsPage() {
               >
                 {updatingLeaveBalance ? 'جاري الحفظ...' : 'حفظ التعديلات'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Audit Log Modal */}
-      {showAuditLog && currentUser.role === 'admin' && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowAuditLog(false)}
-        >
-          <div
-            className="bg-white rounded-2xl w-full max-w-lg mx-auto p-6 max-h-[80vh] overflow-auto"
-            dir="rtl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-gray-800">سجل التغييرات</h2>
-              <button
-                onClick={() => setShowAuditLog(false)}
-                className="p-2 hover:bg-gray-100 rounded-full"
-              >
-                <XCircle className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {userAuditLogs.length > 0 ? (
-                userAuditLogs.map((log) => (
-                  <div key={log.id} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                    <p className="text-sm text-gray-800">{log.action_ar}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(log.created_at).toLocaleString('ar-IQ')}
-                    </p>
-                    {log.details && (
-                      <p className="text-xs text-gray-600 mt-2">{log.details}</p>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-gray-500 text-center py-4">لا توجد سجلات</p>
-              )}
             </div>
           </div>
         </div>

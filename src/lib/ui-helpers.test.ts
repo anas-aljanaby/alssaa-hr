@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getStatusColor, getTimeAgoLabel } from '@/lib/ui-helpers';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { copyTextToClipboard, getStatusColor, getTimeAgoLabel } from '@/lib/ui-helpers';
 
 // ---------------------------------------------------------------------------
 // getStatusColor
@@ -84,5 +84,51 @@ describe('getTimeAgoLabel', () => {
     setNow('2025-06-16T09:00:00Z');
     const result = getTimeAgoLabel('2025-06-15T10:00:00Z');
     expect(result).toBe('منذ 23 ساعة');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// copyTextToClipboard
+// ---------------------------------------------------------------------------
+
+describe('copyTextToClipboard', () => {
+  let clipboardWriteText: ReturnType<typeof vi.fn> | undefined;
+  const docWithExec = document as Document & { execCommand?: (commandId: string) => boolean };
+
+  beforeEach(() => {
+    clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, 'clipboard');
+    delete docWithExec.execCommand;
+  });
+
+  it('uses Clipboard API when writeText succeeds', async () => {
+    await copyTextToClipboard('secret');
+    expect(clipboardWriteText).toHaveBeenCalledWith('secret');
+  });
+
+  it('falls back to execCommand when writeText rejects', async () => {
+    clipboardWriteText!.mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'));
+    const execCommand = vi.fn().mockReturnValue(true);
+    docWithExec.execCommand = execCommand;
+
+    await copyTextToClipboard('fallback-text');
+
+    expect(clipboardWriteText).toHaveBeenCalledWith('fallback-text');
+    expect(execCommand).toHaveBeenCalledWith('copy');
+  });
+
+  it('throws when execCommand returns false', async () => {
+    clipboardWriteText!.mockRejectedValueOnce(new Error('fail'));
+    docWithExec.execCommand = vi.fn().mockReturnValue(false);
+
+    await expect(copyTextToClipboard('x')).rejects.toThrow('copy failed');
   });
 });

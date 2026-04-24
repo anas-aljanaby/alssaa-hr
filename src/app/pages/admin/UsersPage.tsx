@@ -13,6 +13,7 @@ import type { Department } from '@/lib/services/departments.service';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { generateStrongPassword } from '@/lib/generatePassword';
+import { copyTextToClipboard } from '@/lib/ui-helpers';
 import { UsersPageSkeleton } from '../../components/skeletons';
 import {
   Plus,
@@ -184,7 +185,7 @@ export function UsersPage() {
     const value = addUserPasswordValue.trim();
     if (!value) { toast.message('لا يوجد نص لنسخه'); return; }
     try {
-      await navigator.clipboard.writeText(value);
+      await copyTextToClipboard(value);
       toast.success('تم نسخ كلمة المرور');
     } catch {
       toast.error('تعذر النسخ');
@@ -472,7 +473,7 @@ export function UsersPage() {
                       <button
                         type="button"
                         onClick={handleGeneratePassword}
-                        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 transition-colors"
+                        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50 active:bg-blue-100 active:text-blue-800 transition-colors"
                       >
                         توليد
                       </button>
@@ -480,7 +481,7 @@ export function UsersPage() {
                         type="button"
                         onClick={handleCopyPassword}
                         disabled={!addUserPasswordHasValue}
-                        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-teal-700 hover:bg-teal-50 disabled:pointer-events-none disabled:opacity-40 transition-colors"
+                        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50 active:bg-blue-100 active:text-blue-800 disabled:pointer-events-none disabled:text-gray-400 disabled:hover:bg-transparent disabled:active:bg-transparent transition-colors"
                       >
                         نسخ
                       </button>
