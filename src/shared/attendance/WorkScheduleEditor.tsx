@@ -101,11 +101,12 @@ export function WorkScheduleEditor({ value, onChange, disabled = false }: WorkSc
             key={key}
             data-testid={`schedule-row-${key}`}
             data-selected={isSelectedDay ? 'true' : 'false'}
+            onClick={() => active && !disabled && setSelectedDayKey(key)}
             className={`flex flex-col px-3 py-2 rounded-xl border transition-all ${
               active
                 ? isSelectedDay
                   ? 'border-blue-200 bg-blue-50/40'
-                  : 'bg-white border-gray-200'
+                  : 'bg-white border-gray-200 hover:border-blue-100 hover:bg-blue-50/20 cursor-pointer'
                 : 'bg-gray-50 border-gray-100'
             } ${invalid ? 'ring-2 ring-red-300' : ''}`}
           >
