@@ -25,8 +25,8 @@ describe('WorkScheduleEditor', () => {
     expect(applyButton).toBeDisabled();
 
     fireEvent.click(screen.getByTestId('schedule-row-2'));
-    expect(screen.getByTestId('schedule-row-2')).toHaveAttribute('data-selected', 'false');
-    expect(applyButton).toBeDisabled();
+    expect(screen.getByTestId('schedule-row-2')).toHaveAttribute('data-selected', 'true');
+    expect(applyButton).not.toBeDisabled();
 
     fireEvent.change(screen.getByLabelText('الاثنين وقت النهاية'), {
       target: { value: '18:30' },
