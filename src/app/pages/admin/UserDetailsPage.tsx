@@ -80,13 +80,13 @@ const DAY_LABELS_AR: Record<string, string> = {
 };
 
 const DAY_LABELS_SHORT: Record<string, string> = {
-  '0': 'أحد',
-  '1': 'إثن',
-  '2': 'ثلا',
-  '3': 'أرب',
-  '4': 'خمي',
-  '5': 'جمع',
-  '6': 'سبت',
+  '0': 'الأحد',
+  '1': 'الإثنين',
+  '2': 'الثلاثاء',
+  '3': 'الأربعاء',
+  '4': 'الخميس',
+  '5': 'الجمعة',
+  '6': 'السبت',
 };
 
 function calcWeeklyHours(schedule: WorkSchedule): number {
@@ -761,19 +761,20 @@ export function UserDetailsPage() {
                     <button
                       type="button"
                       onClick={openScheduleEditModal}
-                      className="text-xs text-blue-600 hover:text-blue-700 transition-colors"
+                      aria-label="تعديل جدول العمل"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-blue-600 bg-blue-50 hover:bg-blue-100 active:scale-95 transition-all"
                     >
-                      تعديل
+                      <Edit2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
                 {hasSchedule ? (
-                  <div className="overflow-x-auto -mx-1 px-1 pb-1" dir="rtl">
-                    <div className="flex gap-1.5 w-max">
+                  <div dir="rtl">
+                    <div className="flex flex-wrap justify-center gap-1.5">
                       {(['0', '1', '2', '3', '4', '5', '6'] as const).map((key) => {
                         const day = schedule[key];
                         const isToday = key === todayDow;
-                        const base = 'flex flex-col items-center rounded-xl px-2.5 py-2 min-w-[56px] transition-colors';
+                        const base = 'flex flex-col items-center rounded-xl px-1 py-2.5 basis-[calc((100%-1.125rem)/4)] transition-colors';
                         const stateClasses = isToday
                           ? 'bg-blue-600 shadow-sm shadow-blue-600/20'
                           : day

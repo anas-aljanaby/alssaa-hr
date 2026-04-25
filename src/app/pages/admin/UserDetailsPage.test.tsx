@@ -328,7 +328,7 @@ describe('UserDetailsPage', () => {
   it('opens work schedule editor from the overview schedule card', async () => {
     renderPage();
 
-    const scheduleEditButton = await screen.findByRole('button', { name: 'تعديل' });
+    const scheduleEditButton = await screen.findByRole('button', { name: 'تعديل جدول العمل' });
     fireEvent.click(scheduleEditButton);
 
     expect(await screen.findByRole('heading', { name: 'تعديل جدول العمل' })).toBeInTheDocument();
