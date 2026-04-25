@@ -32,6 +32,12 @@ let state: PwaSnapshot = {
 let initialized = false;
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null = null;
+let idleApplyTimer: ReturnType<typeof setTimeout> | null = null;
+
+// How often to poll the server for a new service worker while the app is open.
+const SW_UPDATE_POLL_MS = 30 * 60 * 1000;
+// After an update is detected, wait this long with no user input before silently applying.
+const IDLE_AUTO_APPLY_MS = 30 * 1000;
 
 function isLocalhostHost(hostname: string) {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
@@ -95,6 +101,15 @@ export async function applyPwaUpdate() {
   await updateServiceWorker(true);
 }
 
+// Call this from "safe" route boundaries (e.g. arriving at a login screen, a
+// dashboard root, or just after a successful save) to silently apply a pending
+// update without interrupting whatever the user is doing.
+export async function applyUpdateIfPending() {
+  if (!state.updateAvailable || !updateServiceWorker) return false;
+  await updateServiceWorker(true);
+  return true;
+}
+
 export function refreshPwaApp() {
   if (typeof window === 'undefined') return;
   window.location.reload();
@@ -144,10 +159,62 @@ export function initializePwa() {
       immediate: true,
       onNeedRefresh() {
         setState({ updateAvailable: true });
+        scheduleIdleAutoApply();
       },
-      onRegisteredSW() {
+      onRegisteredSW(_swUrl, registration) {
         setState({ updateAvailable: false });
+        if (registration) setupAutoUpdateTriggers(registration);
       },
     });
   }
+}
+
+function clearIdleApplyTimer() {
+  if (idleApplyTimer) {
+    clearTimeout(idleApplyTimer);
+    idleApplyTimer = null;
+  }
+}
+
+// Reset on every user input. If the user is idle for IDLE_AUTO_APPLY_MS while
+// an update is waiting, apply silently — the reload happens during dead time
+// rather than mid-flow.
+function scheduleIdleAutoApply() {
+  if (!state.updateAvailable) return;
+  clearIdleApplyTimer();
+  idleApplyTimer = setTimeout(() => {
+    if (state.updateAvailable && updateServiceWorker) {
+      void updateServiceWorker(true);
+    }
+  }, IDLE_AUTO_APPLY_MS);
+}
+
+function setupAutoUpdateTriggers(registration: ServiceWorkerRegistration) {
+  const checkForUpdate = () => {
+    void registration.update().catch(() => {});
+  };
+
+  // Poll periodically. The browser only checks for a new SW on navigation by
+  // default, which never fires for installed PWAs that just sit in the
+  // background — this is the main fix for "users still on yesterday's bundle".
+  setInterval(checkForUpdate, SW_UPDATE_POLL_MS);
+
+  // Also check whenever the user comes back to the app.
+  window.addEventListener('focus', checkForUpdate);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkForUpdate();
+    } else if (state.updateAvailable && updateServiceWorker) {
+      // Tab/PWA went to background with an update waiting — safest moment to
+      // apply, since nothing the user sees gets disrupted.
+      void updateServiceWorker(true);
+    }
+  });
+
+  // Reset the idle timer on any user input so we only auto-apply during true idle.
+  const resetIdle = () => scheduleIdleAutoApply();
+  document.addEventListener('pointerdown', resetIdle, { passive: true, capture: true });
+  document.addEventListener('keydown', resetIdle, { capture: true });
+  document.addEventListener('touchstart', resetIdle, { passive: true, capture: true });
+  document.addEventListener('scroll', resetIdle, { passive: true, capture: true });
 }

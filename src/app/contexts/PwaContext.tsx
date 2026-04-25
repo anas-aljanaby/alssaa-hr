@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useSyncExternalSt
 import { toast } from 'sonner';
 import {
   applyPwaUpdate,
+  applyUpdateIfPending,
   canPromptInstall,
   getPwaSnapshot,
   initializePwa,
@@ -42,6 +43,9 @@ function usePwaValue() {
       },
       applyUpdate: async () => {
         await applyPwaUpdate();
+      },
+      applyUpdateIfPending: async () => {
+        return applyUpdateIfPending();
       },
       refreshApp: () => {
         refreshPwaApp();
