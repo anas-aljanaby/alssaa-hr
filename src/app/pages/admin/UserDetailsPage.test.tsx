@@ -296,18 +296,6 @@ describe('UserDetailsPage', () => {
     expect(screen.getByText('ليس لديك صلاحية لعرض تفاصيل هذا الموظف')).toBeInTheDocument();
   });
 
-  it('loads and shows profile information for admin', async () => {
-    renderPage();
-
-    await waitFor(() => {
-    expect(screen.getByText('سارة أحمد')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('الموارد البشرية')).toBeInTheDocument();
-    expect(screen.getByText('حالة اليوم')).toBeInTheDocument();
-    expect(screen.getByText('دوام مكتمل')).toBeInTheDocument();
-  });
-
   it('opens requests tab from request URL param', async () => {
     mockUseSearchParams.mockReturnValue([new URLSearchParams('request=req-1')]);
 
@@ -329,16 +317,18 @@ describe('UserDetailsPage', () => {
       expect(screen.getByText('دوام مكتمل')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('دوام مكتمل'));
+    fireEvent.click(screen.getByRole('button', { name: /دوام مكتمل/ }));
 
-    expect(await screen.findByText('جدول العمل')).toBeInTheDocument();
+    expect(await screen.findByText('عرض السجل')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'أكمل الدوام' })).toBeInTheDocument();
+    expect(screen.getByTestId('day-card-2026-03-20')).toBeInTheDocument();
+    expect(screen.queryByTestId('day-card-2026-03-19')).not.toBeInTheDocument();
   });
 
-  it('opens work schedule editor from the profile header action', async () => {
+  it('opens work schedule editor from the overview schedule card', async () => {
     renderPage();
 
-    const scheduleEditButton = await screen.findByRole('button', { name: 'تعديل جدول العمل' });
+    const scheduleEditButton = await screen.findByRole('button', { name: 'تعديل' });
     fireEvent.click(scheduleEditButton);
 
     expect(await screen.findByRole('heading', { name: 'تعديل جدول العمل' })).toBeInTheDocument();

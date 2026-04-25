@@ -10,7 +10,7 @@ function Harness({ initialValue }: { initialValue: WorkSchedule }) {
 }
 
 describe('WorkScheduleEditor', () => {
-  it('keeps apply-all disabled until a day is selected, then uses the selected or edited day', () => {
+  it('keeps apply-all disabled until a day is edited, then uses the edited day', () => {
     render(
       <Harness
         initialValue={{
@@ -25,14 +25,15 @@ describe('WorkScheduleEditor', () => {
     expect(applyButton).toBeDisabled();
 
     fireEvent.click(screen.getByTestId('schedule-row-2'));
-    expect(screen.getByTestId('schedule-row-2')).toHaveAttribute('data-selected', 'true');
-    expect(applyButton).not.toBeDisabled();
+    expect(screen.getByTestId('schedule-row-2')).toHaveAttribute('data-selected', 'false');
+    expect(applyButton).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText('الاثنين وقت النهاية'), {
       target: { value: '18:30' },
     });
 
     expect(screen.getByTestId('schedule-row-1')).toHaveAttribute('data-selected', 'true');
+    expect(applyButton).not.toBeDisabled();
 
     fireEvent.click(applyButton);
 
