@@ -311,8 +311,8 @@ export function AttendancePolicyPage() {
               onClick={() => setActiveTab(key)}
               className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${
                 activeTab === key
-                  ? 'bg-gray-900 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-500 hover:text-blue-700'
               }`}
             >
               {label}
@@ -548,9 +548,16 @@ export function AttendancePolicyPage() {
                               <button
                                 type="button"
                                 onClick={() => updateRule(rule.id, { enabled: !rule.enabled })}
-                                className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${rule.enabled ? 'bg-gray-700' : 'bg-gray-200'}`}
+                                dir="ltr"
+                                className={`relative inline-flex h-5 w-10 rounded-full transition-colors ${
+                                  rule.enabled ? 'bg-blue-600' : 'bg-blue-100 border border-blue-200'
+                                }`}
                               >
-                                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${rule.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                <span
+                                  className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                                    rule.enabled ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                />
                               </button>
                             </div>
                           </div>
@@ -595,7 +602,7 @@ export function AttendancePolicyPage() {
                 <button
                   type="submit"
                   disabled={savingPolicy || hasInvalidSchedule}
-                  className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition-colors disabled:opacity-50 text-sm font-semibold"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors disabled:opacity-50 text-sm font-semibold"
                 >
                   {savingPolicy ? 'جاري الحفظ...' : 'حفظ'}
                 </button>

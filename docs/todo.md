@@ -29,7 +29,7 @@ We don't need sick days in this system at all, we just have regular off days and
 - Explanation: Define what should happen when a user starts work very early and continues, or stays after work assuming auto punch-out did not run. In both cases, sessions need to be segmented correctly based on their type and logged properly.
 
 ## Task 4
-- [ ] Done
+- [x] Done
 - Commit Head:
 - Title: Support different shift allocations for the same user
 - Explanation:
@@ -41,12 +41,6 @@ We don't need sick days in this system at all, we just have regular off days and
 - Title: Rework attendance policy page
 - Explaination
 also add auto punch out rules component 
-
-## Empty Task Template
-- [ ] Done
-- Commit Head:
-- Title: absent b
-- Explanation:
 
 
 ## Later (Needs Review From Radhwan)
