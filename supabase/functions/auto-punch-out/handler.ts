@@ -5,11 +5,65 @@ import { corsHeaders } from '../_shared/cors.ts';
 /** Keep in sync with `src/shared/attendance/constants.ts`. */
 const DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES = 5;
 import type { PunchServiceClient } from '../punch/handler.ts';
-import { resolveCheckoutOvertimeHandling } from '../punch/handler.ts';
+import { resolveCheckoutOvertimeHandling, resolveOvertimeSessionSplit } from '../punch/handler.ts';
 
 type DayScheduleJson = { start: string; end: string };
 type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
 const TIME_24H_REGEX = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+type AutoPunchOutRule = {
+  id: string;
+  title: string;
+  time: string;
+  sessionType: 'all' | 'overtime' | 'regular';
+  enabled: boolean;
+};
+
+function parseRules(raw: unknown): AutoPunchOutRule[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (r): r is AutoPunchOutRule =>
+      r !== null &&
+      typeof r === 'object' &&
+      typeof (r as AutoPunchOutRule).id === 'string' &&
+      typeof (r as AutoPunchOutRule).title === 'string' &&
+      typeof (r as AutoPunchOutRule).time === 'string' &&
+      TIME_24H_REGEX.test((r as AutoPunchOutRule).time) &&
+      ((r as AutoPunchOutRule).sessionType === 'all' ||
+        (r as AutoPunchOutRule).sessionType === 'overtime' ||
+        (r as AutoPunchOutRule).sessionType === 'regular') &&
+      typeof (r as AutoPunchOutRule).enabled === 'boolean'
+  );
+}
+
+/**
+ * Returns the UTC instant of the next occurrence of `ruleTime` (org-local HH:MM)
+ * strictly after the session's check-in moment.
+ */
+function computeRuleDeadline(
+  sessionDate: string,
+  checkInTime: string,
+  ruleTime: string,
+  offsetHours = 3
+): Date {
+  const [y, mo, d] = sessionDate.split('-').map(Number);
+  const [ch, cm] = checkInTime.split(':').map(Number);
+  const [rh, rm] = ruleTime.split(':').map(Number);
+
+  const ruleSameDayUtcMs =
+    Date.UTC(y, mo - 1, d, rh, rm, 0, 0) - offsetHours * 3600 * 1000;
+  const checkInUtcMs =
+    Date.UTC(y, mo - 1, d, ch, cm, 0, 0) - offsetHours * 3600 * 1000;
+
+  if (ruleSameDayUtcMs > checkInUtcMs) return new Date(ruleSameDayUtcMs);
+  return new Date(ruleSameDayUtcMs + 24 * 3600 * 1000);
+}
+
+function ruleMatchesSession(rule: AutoPunchOutRule, isOvertimeSession: boolean): boolean {
+  if (rule.sessionType === 'all') return true;
+  if (rule.sessionType === 'overtime') return isOvertimeSession;
+  return !isOvertimeSession;
+}
 
 function parseWorkSchedule(raw: unknown): WorkScheduleJson {
   if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -164,8 +218,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       .from('attendance_sessions')
       .select('id, user_id, org_id, date, check_in_time, is_overtime')
       .in('date', [today, yesterday])
-      .is('check_out_time', null)
-      .eq('is_overtime', false);
+      .is('check_out_time', null);
 
     const openSessions = openSessionsRaw as {
       id: string;
@@ -231,7 +284,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
 
       const { data: policyRaw } = await admin
         .from('attendance_policy')
-        .select('work_schedule, auto_punch_out_buffer_minutes, minimum_overtime_minutes')
+        .select('work_schedule, auto_punch_out_buffer_minutes, minimum_overtime_minutes, auto_punch_out_rules')
         .eq('org_id', session.org_id)
         .limit(1)
         .maybeSingle();
@@ -240,6 +293,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         work_schedule?: unknown | null;
         auto_punch_out_buffer_minutes?: number | null;
         minimum_overtime_minutes?: number | null;
+        auto_punch_out_rules?: unknown | null;
       } | null;
 
       const userSchedule = parseWorkSchedule(profile?.work_schedule);
@@ -250,28 +304,130 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       const workEndTime = effective?.end ?? null;
       const workStartTime = effective?.start ?? null;
       const bufferMinutes = policy?.auto_punch_out_buffer_minutes ?? DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES;
+      const rules = parseRules(policy?.auto_punch_out_rules).filter((r) => r.enabled);
+      const isOvertimeSession = !!session.is_overtime;
 
-      // No effective shift for the session's day (off day or no config), skip.
-      if (!effective || !workEndTime || !workStartTime) continue;
+      // Determine the trigger: buffer (only for regular sessions on a working day)
+      // or any enabled rule whose sessionType matches and whose deadline has passed.
+      let trigger: 'buffer' | 'rule' | null = null;
+      let actualCheckoutTime: string | null = null;
 
-      const overnight = timeToMinutes(workEndTime) < timeToMinutes(workStartTime);
-      const normalizeNow = (m: number) => {
-        if (!overnight) return m;
-        return m < timeToMinutes(workStartTime) ? m + 1440 : m;
-      };
-      const normalizedNow = normalizeNow(nowMinutes);
-      const normalizedShiftEnd = overnight ? timeToMinutes(workEndTime) + 1440 : timeToMinutes(workEndTime);
-      const cutoffMinutes = normalizedShiftEnd + bufferMinutes;
+      if (!isOvertimeSession && effective && workEndTime && workStartTime) {
+        const overnight = timeToMinutes(workEndTime) < timeToMinutes(workStartTime);
+        const normalizeNow = (m: number) => {
+          if (!overnight) return m;
+          return m < timeToMinutes(workStartTime) ? m + 1440 : m;
+        };
+        const normalizedNow = normalizeNow(nowMinutes);
+        const normalizedShiftEnd = overnight
+          ? timeToMinutes(workEndTime) + 1440
+          : timeToMinutes(workEndTime);
+        const cutoffMinutes = normalizedShiftEnd + bufferMinutes;
 
-      if (normalizedNow <= cutoffMinutes) continue;
+        if (normalizedNow > cutoffMinutes) {
+          trigger = 'buffer';
+          actualCheckoutTime = nowToTimeHHMM(effectiveNow);
+        }
+      }
 
-      const actualCheckoutTime = nowToTimeHHMM(effectiveNow);
+      if (!trigger) {
+        for (const rule of rules) {
+          if (!ruleMatchesSession(rule, isOvertimeSession)) continue;
+          const deadline = computeRuleDeadline(
+            session.date,
+            session.check_in_time,
+            rule.time
+          );
+          if (effectiveNow.getTime() >= deadline.getTime()) {
+            trigger = 'rule';
+            actualCheckoutTime = formatTimeHHMM(rule.time);
+            break;
+          }
+        }
+      }
+
+      if (!trigger || !actualCheckoutTime) continue;
+
+      // Overtime session that overlapped a regular shift: rebuild the day as
+      // pre-shift OT + regular + post-shift OT segments.
+      if (isOvertimeSession && effective && workStartTime && workEndTime) {
+        const segments = resolveOvertimeSessionSplit({
+          checkIn: session.check_in_time,
+          checkOut: actualCheckoutTime,
+          workStartTime,
+          workEndTime,
+          minimumOvertimeMinutes: policy?.minimum_overtime_minutes,
+        });
+
+        if (segments.length > 1 && segments.some((s) => s.type === 'regular')) {
+          await admin.from('overtime_requests').delete().eq('session_id', session.id);
+          const { error: delErr } = await admin
+            .from('attendance_sessions')
+            .delete()
+            .eq('id', session.id);
+          if (delErr) continue;
+
+          let inserted = 0;
+          for (const seg of segments) {
+            const isOt = seg.type === 'overtime';
+            const { data: insertedRow } = await admin
+              .from('attendance_sessions')
+              .insert({
+                org_id: session.org_id,
+                user_id: session.user_id,
+                date: session.date,
+                check_in_time: seg.checkIn,
+                check_out_time: seg.checkOut,
+                status: 'present',
+                is_overtime: isOt,
+                duration_minutes: seg.durationMinutes,
+                is_auto_punch_out: true,
+                needs_review: true,
+                is_early_departure: false,
+                last_action_at: effectiveNow.toISOString(),
+                updated_at: effectiveNow.toISOString(),
+              })
+              .select('id')
+              .single();
+
+            if (isOt && (insertedRow as { id?: string } | null)?.id) {
+              await admin.from('overtime_requests').upsert({
+                org_id: session.org_id,
+                user_id: session.user_id,
+                session_id: (insertedRow as { id: string }).id,
+                status: 'pending',
+              }, { onConflict: 'session_id' });
+            }
+            inserted++;
+          }
+
+          if (inserted > 0) {
+            const notifSetting = await getAutoPunchOutNotifSetting(session.org_id);
+            await admin.from('notifications').insert({
+              org_id: session.org_id,
+              user_id: session.user_id,
+              title: notifSetting?.title ?? 'Forgot to punch out',
+              title_ar: notifSetting?.title_ar ?? 'نسيت تسجيل الانصراف',
+              message: notifSetting
+                ? `${notifSetting.message} (${actualCheckoutTime})`
+                : `The system recorded your departure at ${actualCheckoutTime}. If this is incorrect, submit a correction request.`,
+              message_ar: notifSetting
+                ? `${notifSetting.message_ar} (الساعة ${actualCheckoutTime})`
+                : `تم تسجيل انصرافك تلقائياً الساعة ${actualCheckoutTime}. إن كان ذلك غير صحيح، قدم طلب تصحيح.`,
+              type: 'attendance',
+            });
+            processed++;
+          }
+          continue;
+        }
+      }
+
       const checkoutHandling = resolveCheckoutOvertimeHandling({
-        hasShift: true,
-        isWorkingDay: true,
+        hasShift: !!effective,
+        isWorkingDay: !!effective,
         workStartTime,
         workEndTime,
-        openSessionIsOvertime: false,
+        openSessionIsOvertime: isOvertimeSession,
         openSessionCheckInTime: session.check_in_time,
         checkoutTime: actualCheckoutTime,
         minimumOvertimeMinutes: policy?.minimum_overtime_minutes,

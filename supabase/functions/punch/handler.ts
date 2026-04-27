@@ -192,6 +192,96 @@ export function shouldKeepOvertimeSession(
   return durationMinutes >= normalizeMinimumOvertimeMinutes(minimumOvertimeMinutes);
 }
 
+function fromMinutesHHMM(min: number): string {
+  const wrapped = ((min % 1440) + 1440) % 1440;
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export type OvertimeSegment = {
+  type: 'overtime' | 'regular';
+  checkIn: string;
+  checkOut: string;
+  durationMinutes: number;
+};
+
+/**
+ * Splits a closed overtime session that overlaps a regular shift on its date
+ * into the pre-shift OT, regular shift, and post-shift OT segments.
+ *
+ * Returns a single-element array (the original OT) when no split applies:
+ * - shift unset, or shift is overnight (end <= start in minutes)
+ * - session crosses midnight (checkOut <= checkIn in minutes)
+ * - session does not overlap the shift window
+ */
+export function resolveOvertimeSessionSplit(input: {
+  checkIn: string;
+  checkOut: string;
+  workStartTime: string | null;
+  workEndTime: string | null;
+  minimumOvertimeMinutes?: number | null;
+}): OvertimeSegment[] {
+  const original: OvertimeSegment[] = [
+    {
+      type: 'overtime',
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      durationMinutes: diffMinutes(input.checkIn, input.checkOut),
+    },
+  ];
+
+  if (!input.workStartTime || !input.workEndTime) return original;
+
+  const shiftStartM = toMinutes(input.workStartTime);
+  const shiftEndM = toMinutes(input.workEndTime);
+  if (shiftEndM <= shiftStartM) return original; // overnight shift — out of scope
+
+  const checkInM = toMinutes(input.checkIn);
+  const checkOutM = toMinutes(input.checkOut);
+  if (checkOutM <= checkInM) return original; // session crosses midnight — out of scope
+
+  if (checkOutM <= shiftStartM || checkInM >= shiftEndM) return original; // no overlap
+
+  const minOt = normalizeMinimumOvertimeMinutes(input.minimumOvertimeMinutes);
+  const segments: OvertimeSegment[] = [];
+
+  if (checkInM < shiftStartM) {
+    const dur = shiftStartM - checkInM;
+    if (dur >= minOt) {
+      segments.push({
+        type: 'overtime',
+        checkIn: input.checkIn,
+        checkOut: input.workStartTime,
+        durationMinutes: dur,
+      });
+    }
+  }
+
+  const regStart = Math.max(checkInM, shiftStartM);
+  const regEnd = Math.min(checkOutM, shiftEndM);
+  segments.push({
+    type: 'regular',
+    checkIn: fromMinutesHHMM(regStart),
+    checkOut: fromMinutesHHMM(regEnd),
+    durationMinutes: regEnd - regStart,
+  });
+
+  if (checkOutM > shiftEndM) {
+    const dur = checkOutM - shiftEndM;
+    if (dur >= minOt) {
+      segments.push({
+        type: 'overtime',
+        checkIn: input.workEndTime,
+        checkOut: input.checkOut,
+        durationMinutes: dur,
+      });
+    }
+  }
+
+  return segments.length > 1 ? segments : original;
+}
+
 export function resolveCheckoutOvertimeHandling(input: {
   hasShift: boolean;
   isWorkingDay: boolean;
@@ -675,6 +765,106 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      // Overtime session that overlapped a regular shift: split into the
+      // pre-shift OT, in-shift regular, and post-shift OT segments so the
+      // worker doesn't end up with a single 16h-OT block and an "absent" day.
+      if (sessionSchedule.hasShift && sessionSchedule.isWorkingDay) {
+        const segments = resolveOvertimeSessionSplit({
+          checkIn: openSession.check_in_time,
+          checkOut: time,
+          workStartTime: sessionSchedule.workStartTime,
+          workEndTime: sessionSchedule.workEndTime,
+          minimumOvertimeMinutes: policy?.minimum_overtime_minutes,
+        });
+
+        if (segments.length > 1 && segments.some((s) => s.type === 'regular')) {
+          await admin
+            .from('overtime_requests')
+            .delete()
+            .eq('session_id', openSession.id);
+
+          const { error: delErr } = await admin
+            .from('attendance_sessions')
+            .delete()
+            .eq('id', openSession.id);
+
+          if (delErr) {
+            return new Response(
+              JSON.stringify({ error: errMsg(delErr), code: 'DELETE_FAILED' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          const grace = policy?.grace_period_minutes ?? 15;
+          const shiftStartM = sessionSchedule.workStartTime
+            ? toMinutes(sessionSchedule.workStartTime)
+            : 0;
+          const insertedSegments: SessionRow[] = [];
+
+          for (const seg of segments) {
+            const isOt = seg.type === 'overtime';
+            const segStartM = toMinutes(seg.checkIn);
+            const segStatus: 'present' | 'late' = isOt
+              ? 'present'
+              : segStartM > shiftStartM + grace
+                ? 'late'
+                : 'present';
+
+            const { data: inserted, error: insErr } = await admin
+              .from('attendance_sessions')
+              .insert({
+                org_id: orgId,
+                user_id: caller.id,
+                date: openSessionDate,
+                check_in_time: seg.checkIn,
+                check_out_time: seg.checkOut,
+                status: segStatus,
+                is_overtime: isOt,
+                duration_minutes: seg.durationMinutes,
+                last_action_at: effectiveNow.toISOString(),
+              })
+              .select()
+              .single();
+
+            if (insErr) {
+              return new Response(
+                JSON.stringify({ error: errMsg(insErr), code: 'INSERT_FAILED' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+
+            const insertedSession = inserted as SessionRow;
+            insertedSegments.push(insertedSession);
+
+            if (isOt) {
+              await admin
+                .from('overtime_requests')
+                .upsert({
+                  org_id: orgId,
+                  user_id: caller.id,
+                  session_id: insertedSession.id,
+                  status: 'pending',
+                }, { onConflict: 'session_id' });
+            }
+          }
+
+          await recalculateDailySummary(admin, {
+            orgId,
+            userId: caller.id,
+            dateStr: openSessionDate,
+            schedule: sessionSchedule,
+          });
+
+          return new Response(
+            JSON.stringify({
+              split_overtime_session_id: openSession.id,
+              segments: insertedSegments,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
     }
 

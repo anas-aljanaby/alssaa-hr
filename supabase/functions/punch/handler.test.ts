@@ -1,5 +1,5 @@
 import { assertEquals } from 'jsr:@std/assert';
-import { handlePunch, recalculateDailySummary, toDateStr, type PunchDeps, type PunchEnv, type PunchServiceClient } from './handler.ts';
+import { handlePunch, recalculateDailySummary, resolveOvertimeSessionSplit, toDateStr, type PunchDeps, type PunchEnv, type PunchServiceClient } from './handler.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
 type Session = {
@@ -382,6 +382,77 @@ async function punch(deps: PunchDeps, action: 'check_in' | 'check_out', iso: str
     depsWithClock
   );
 }
+
+Deno.test('resolveOvertimeSessionSplit: 02:00 OT through 18:00 with 10-18 shift splits into OT+regular', () => {
+  const segs = resolveOvertimeSessionSplit({
+    checkIn: '02:00',
+    checkOut: '18:00',
+    workStartTime: '10:00',
+    workEndTime: '18:00',
+    minimumOvertimeMinutes: 30,
+  });
+  assertEquals(segs.length, 2);
+  assertEquals(segs[0].type, 'overtime');
+  assertEquals(segs[0].checkIn, '02:00');
+  assertEquals(segs[0].checkOut, '10:00');
+  assertEquals(segs[0].durationMinutes, 480);
+  assertEquals(segs[1].type, 'regular');
+  assertEquals(segs[1].checkIn, '10:00');
+  assertEquals(segs[1].checkOut, '18:00');
+  assertEquals(segs[1].durationMinutes, 480);
+});
+
+Deno.test('resolveOvertimeSessionSplit: OT spanning past shift end produces three segments', () => {
+  const segs = resolveOvertimeSessionSplit({
+    checkIn: '08:00',
+    checkOut: '20:00',
+    workStartTime: '10:00',
+    workEndTime: '18:00',
+    minimumOvertimeMinutes: 30,
+  });
+  assertEquals(segs.length, 3);
+  assertEquals(segs[0].type, 'overtime');
+  assertEquals(segs[0].durationMinutes, 120);
+  assertEquals(segs[1].type, 'regular');
+  assertEquals(segs[1].durationMinutes, 480);
+  assertEquals(segs[2].type, 'overtime');
+  assertEquals(segs[2].durationMinutes, 120);
+});
+
+Deno.test('resolveOvertimeSessionSplit: OT not overlapping shift returns single segment', () => {
+  const segs = resolveOvertimeSessionSplit({
+    checkIn: '04:00',
+    checkOut: '08:00',
+    workStartTime: '10:00',
+    workEndTime: '18:00',
+    minimumOvertimeMinutes: 30,
+  });
+  assertEquals(segs.length, 1);
+  assertEquals(segs[0].type, 'overtime');
+});
+
+Deno.test('resolveOvertimeSessionSplit: pre-shift OT below threshold is dropped', () => {
+  const segs = resolveOvertimeSessionSplit({
+    checkIn: '09:50',
+    checkOut: '18:00',
+    workStartTime: '10:00',
+    workEndTime: '18:00',
+    minimumOvertimeMinutes: 30,
+  });
+  // The 10-min pre-shift OT is below threshold → falls back to single OT block.
+  assertEquals(segs.length, 1);
+});
+
+Deno.test('resolveOvertimeSessionSplit: overnight shift returns single segment (out of scope)', () => {
+  const segs = resolveOvertimeSessionSplit({
+    checkIn: '21:00',
+    checkOut: '23:00',
+    workStartTime: '22:00',
+    workEndTime: '06:00',
+    minimumOvertimeMinutes: 30,
+  });
+  assertEquals(segs.length, 1);
+});
 
 Deno.test('preflight OPTIONS returns ok with CORS headers', async () => {
   const mem = makeDeps();

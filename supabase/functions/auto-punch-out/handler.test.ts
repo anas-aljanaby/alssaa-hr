@@ -411,6 +411,199 @@ Deno.test('part 6.1b delayed auto punch-out splits when overtime reaches the min
   assertEquals(b.total, 1);
 });
 
+Deno.test('rule fires for overtime session past rule time (3am overtime)', async () => {
+  // Overtime session opened at 22:00 yesterday (org local UTC+3); now is 03:30 next day local
+  // = 00:30 UTC. Rule '03:00' overtime should fire.
+  const log = {
+    id: 'l-ot',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '22:00',
+    is_overtime: true,
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_schedule: null }, error: null },
+    {
+      data: {
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+          '5': { start: '09:00', end: '18:00' },
+          '6': { start: '09:00', end: '18:00' },
+        },
+        auto_punch_out_buffer_minutes: 5,
+        auto_punch_out_rules: [
+          {
+            id: 'r1',
+            title: '3am overtime',
+            time: '03:00',
+            sessionType: 'overtime',
+            enabled: true,
+          },
+        ],
+      },
+      error: null,
+    },
+    { data: null, error: null }, // update session
+    { data: null, error: null }, // notif settings
+    { data: null, error: null }, // insert notification
+  ];
+  const res = await handleAutoPunchOut(
+    post(),
+    // 03:30 org local on 2025-06-05 = 00:30 UTC
+    makeDeps(q, '2025-06-05T00:30:00.000Z')
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 1);
+  assertEquals(b.total, 1);
+});
+
+Deno.test('rule does not fire before its deadline', async () => {
+  const log = {
+    id: 'l-ot-early',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '22:00',
+    is_overtime: true,
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_schedule: null }, error: null },
+    {
+      data: {
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+          '5': { start: '09:00', end: '18:00' },
+          '6': { start: '09:00', end: '18:00' },
+        },
+        auto_punch_out_buffer_minutes: 5,
+        auto_punch_out_rules: [
+          {
+            id: 'r1',
+            title: '3am overtime',
+            time: '03:00',
+            sessionType: 'overtime',
+            enabled: true,
+          },
+        ],
+      },
+      error: null,
+    },
+  ];
+  const res = await handleAutoPunchOut(
+    post(),
+    // 02:30 org local on 2025-06-05 = 23:30 UTC on 2025-06-04
+    makeDeps(q, '2025-06-04T23:30:00.000Z')
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 0);
+  assertEquals(b.total, 1);
+});
+
+Deno.test('disabled rule is ignored', async () => {
+  const log = {
+    id: 'l-ot-dis',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '22:00',
+    is_overtime: true,
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_schedule: null }, error: null },
+    {
+      data: {
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+          '5': { start: '09:00', end: '18:00' },
+          '6': { start: '09:00', end: '18:00' },
+        },
+        auto_punch_out_buffer_minutes: 5,
+        auto_punch_out_rules: [
+          {
+            id: 'r1',
+            title: '3am overtime',
+            time: '03:00',
+            sessionType: 'overtime',
+            enabled: false,
+          },
+        ],
+      },
+      error: null,
+    },
+  ];
+  const res = await handleAutoPunchOut(
+    post(),
+    makeDeps(q, '2025-06-05T00:30:00.000Z')
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number; total: number };
+  assertEquals(b.processed, 0);
+});
+
+Deno.test('rule sessionType regular does not fire for overtime session', async () => {
+  const log = {
+    id: 'l-ot-mismatch',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '22:00',
+    is_overtime: true,
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_schedule: null }, error: null },
+    {
+      data: {
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+          '5': { start: '09:00', end: '18:00' },
+          '6': { start: '09:00', end: '18:00' },
+        },
+        auto_punch_out_buffer_minutes: 5,
+        auto_punch_out_rules: [
+          {
+            id: 'r1',
+            title: '3am regular',
+            time: '03:00',
+            sessionType: 'regular',
+            enabled: true,
+          },
+        ],
+      },
+      error: null,
+    },
+  ];
+  const res = await handleAutoPunchOut(
+    post(),
+    makeDeps(q, '2025-06-05T00:30:00.000Z')
+  );
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number };
+  assertEquals(b.processed, 0);
+});
+
 Deno.test('no configured shift does not auto punch out when org policy is missing', async () => {
   const log = {
     id: 'l-no-shift',
