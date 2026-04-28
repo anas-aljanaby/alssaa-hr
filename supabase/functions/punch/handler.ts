@@ -6,7 +6,7 @@
 import { corsHeaders } from '../_shared/cors.ts';
 
 /** Keep in sync with `src/shared/attendance/constants.ts`. */
-const DEFAULT_MINIMUM_OVERTIME_MINUTES = 30;
+const DEFAULT_MINIMUM_OVERTIME_MINUTES = 60;
 
 export interface PunchBody {
   action: 'check_in' | 'check_out';

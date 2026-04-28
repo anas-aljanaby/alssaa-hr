@@ -1103,13 +1103,6 @@ export async function checkIn(userId: string): Promise<CheckInResult> {
           .eq('session_id', session.id)
           .maybeSingle();
         overtimeRequest = (req ?? null) as OvertimeRequest | null;
-        if (overtimeRequest) {
-          void emitOvertimeRequestSubmitted({
-            request_id: overtimeRequest.id,
-            requester_id: overtimeRequest.user_id,
-            org_id: overtimeRequest.org_id,
-          });
-        }
       } catch {
         overtimeRequest = null;
       }
@@ -1212,7 +1205,7 @@ export async function checkOut(userId: string): Promise<CheckOutResult> {
           .eq('session_id', otSessionId)
           .maybeSingle();
         overtimeRequest = (req ?? null) as OvertimeRequest | null;
-        if (checkoutPayload.lateStayOvertimeSessionId && overtimeRequest) {
+        if (overtimeRequest) {
           void emitOvertimeRequestSubmitted({
             request_id: overtimeRequest.id,
             requester_id: overtimeRequest.user_id,
