@@ -153,15 +153,22 @@ self.addEventListener('push', (event) => {
       dir: 'rtl',
       lang: 'ar',
       // Store notificationId so we can mark it as read when the user taps the banner
-      data: { notificationId: payload.notificationId ?? null },
+      data: {
+        notificationId: payload.notificationId ?? null,
+        url: payload.url ?? '/',
+      },
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const notificationId: string | null =
-    (event.notification.data as { notificationId?: string | null })?.notificationId ?? null;
+  const notificationData = (event.notification.data as {
+    notificationId?: string | null;
+    url?: string | null;
+  } | null) ?? null;
+  const notificationId: string | null = notificationData?.notificationId ?? null;
+  const targetUrl = notificationData?.url ?? '/';
 
   event.waitUntil(
     self.clients
@@ -175,14 +182,14 @@ self.addEventListener('notificationclick', (event) => {
         };
 
         if (clientList.length > 0) {
-          // App is already open — just bring it to the front, don't navigate away
+          // App is already open — navigate to the notification URL first.
           const client = clientList[0] as WindowClient;
           markRead(client);
-          return client.focus();
+          return client.navigate(targetUrl).then(() => client.focus());
         }
 
-        // App is closed — open it at home, then mark the notification as read
-        return self.clients.openWindow('/').then((newClient) => {
+        // App is closed — open it at target URL, then mark the notification as read.
+        return self.clients.openWindow(targetUrl).then((newClient) => {
           if (newClient && notificationId) {
             // Wait briefly for the app to initialise before posting the message
             setTimeout(() => {

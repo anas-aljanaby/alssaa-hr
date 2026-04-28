@@ -43,6 +43,10 @@ function isLocalhostHost(hostname: string) {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
+function isSwEnabledOnLocalhostBuild(): boolean {
+  return import.meta.env.VITE_ENABLE_SW_ON_LOCALHOST === 'true';
+}
+
 function emit() {
   for (const listener of listeners) listener();
 }
@@ -150,11 +154,12 @@ export function initializePwa() {
   standaloneMedia.addEventListener?.('change', syncInstallState);
   fullscreenMedia.addEventListener?.('change', syncInstallState);
 
-  if (
+  const shouldRegisterSw =
     'serviceWorker' in navigator &&
     import.meta.env.PROD &&
-    !isLocalhostHost(window.location.hostname)
-  ) {
+    (!isLocalhostHost(window.location.hostname) || isSwEnabledOnLocalhostBuild());
+
+  if (shouldRegisterSw) {
     updateServiceWorker = registerSW({
       immediate: true,
       onNeedRefresh() {

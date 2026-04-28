@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+const SERVICE_WORKER_READY_TIMEOUT_MS = 4000;
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -40,6 +41,40 @@ export function getPushPermission(): NotificationPermission {
   return Notification.permission;
 }
 
+async function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
+  if (!('serviceWorker' in navigator)) return null;
+
+  try {
+    const existing = await navigator.serviceWorker.getRegistration();
+    if (existing) return existing;
+  } catch {
+    // fall through to ready timeout path
+  }
+
+  try {
+    const timed = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), SERVICE_WORKER_READY_TIMEOUT_MS)
+      ),
+    ]);
+    return timed;
+  } catch {
+    return null;
+  }
+}
+
+export async function hasActivePushSubscription(): Promise<boolean> {
+  const registration = await getServiceWorkerRegistration();
+  if (!registration) return false;
+  try {
+    const sub = await registration.pushManager.getSubscription();
+    return !!sub;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Subscribe the current browser to push notifications and persist the
  * subscription in Supabase. Safe to call multiple times — upserts by endpoint.
@@ -56,7 +91,11 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
   }
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await getServiceWorkerRegistration();
+    if (!registration) {
+      console.warn('[push] subscribeToPush: no active service worker registration');
+      return false;
+    }
     console.log('[push] service worker ready, scope:', registration.scope);
 
     let subscription = await registration.pushManager.getSubscription();
@@ -119,7 +158,8 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
 export async function unsubscribeFromPush(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await getServiceWorkerRegistration();
+    if (!registration) return;
     const subscription = await registration.pushManager.getSubscription();
     if (!subscription) return;
     const endpoint = (subscription.toJSON() as { endpoint: string }).endpoint;

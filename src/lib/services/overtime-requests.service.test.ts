@@ -70,7 +70,7 @@ describe('overtime-requests.service', () => {
 
   it('updateOvertimeRequestStatus updates pending row', async () => {
     sb.queueResult({
-      data: { ...baseOt, status: 'approved' as const, reviewed_by: 'mgr1', note: 'ok' },
+      data: [{ ...baseOt, status: 'approved' as const, reviewed_by: 'mgr1', note: 'ok' }],
       error: null,
     });
     const { updateOvertimeRequestStatus } = await import('./overtime-requests.service');

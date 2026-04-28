@@ -68,6 +68,7 @@ import {
 import { resolveTodayRecordDisplayStatus } from '@/shared/attendance/todayRecord';
 import { toWorkSchedule, type WorkSchedule } from '@/shared/attendance/workSchedule';
 import { WorkScheduleEditor } from '@/shared/attendance/WorkScheduleEditor';
+import { emitScheduleChanged } from '@/lib/notifications/emit';
 
 const DAY_LABELS_AR: Record<string, string> = {
   '0': 'الأحد',
@@ -488,6 +489,12 @@ export function UserDetailsPage() {
         department_id: profile.department_id,
         work_schedule: (data.work_schedule ?? {}) as never,
       });
+      if (currentUser) {
+        void emitScheduleChanged({
+          employee_id: profile.id,
+          actor_id: currentUser.uid,
+        });
+      }
       toast.success('تم تحديث جدول العمل');
       setShowScheduleEditModal(false);
       scheduleEditForm.reset();

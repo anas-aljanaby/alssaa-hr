@@ -86,7 +86,7 @@ describe('requests.service', () => {
       approver_id: 'mgr1',
       decision_note: 'ok',
     };
-    sb.queueResult({ data: updated, error: null });
+    sb.queueResult({ data: [updated], error: null });
     sb.queueResult({ data: null, error: null });
     sb.queueResult({ data: [], error: null });
     const { updateRequestStatus } = await import('./requests.service');

@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import type { Tables } from '../database.types';
+import { emitOvertimeRequestDecided } from '@/lib/notifications/emit';
 
 export type OvertimeRequest = Tables<'overtime_requests'>;
 export type OvertimeRequestStatus = OvertimeRequest['status'];
@@ -90,7 +91,7 @@ export async function updateOvertimeRequestStatus(
   reviewerId: string,
   decisionNote: string
 ): Promise<OvertimeRequest> {
-  const { data, error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from('overtime_requests')
     .update({
       status,
@@ -100,9 +101,24 @@ export async function updateOvertimeRequestStatus(
     })
     .eq('id', requestId)
     .eq('status', 'pending')
-    .select()
-    .single();
+    .select();
   if (error) throw error;
+
+  const data = updatedRows?.[0];
+  if (!data) {
+    throw new Error('لا يمكن تحديث الطلب لأنه لم يعد قيد الانتظار.');
+  }
+
+  if (status === 'approved' || status === 'rejected') {
+    void emitOvertimeRequestDecided({
+      request_id: data.id,
+      requester_id: data.user_id,
+      status,
+      decision_note: data.note,
+      actor_id: reviewerId,
+    });
+  }
+
   return data;
 }
 

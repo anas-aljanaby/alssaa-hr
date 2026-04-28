@@ -43,6 +43,25 @@ We don't need sick days in this system at all, we just have regular off days and
 also add auto punch out rules component 
 
 
+## Task 6
+- [ ] Done
+- Commit Head:
+- Title: Revisit notifications system architecture (test vs real, function splits)
+- Explanation:
+Concerns to think through when revisiting the notifications system (see `docs/Implementation Plan - Notifications System.md`):
+
+1. **Test path may not exercise the real delivery path.** `send-test-notification` and `notify` likely have their own copies of "build payload + insert notifications row + send web push." A green test button then only proves the test copy works, not production. Fix: extract a single `deliverNotification(userId, payload, linkUrl)` helper into `supabase/functions/_shared/notifications.ts` and have both edge functions call it. After the refactor, the test button genuinely diagnoses the operationally fragile delivery layer (VAPID, push subscription validity, browser permission, payload encoding, SW handling). It still won't catch recipient resolution / pref filtering / actor exclusion / JWT validation bugs — those are real-only logic and need separate coverage (the Phase 5 manual test matrix is partly there for this).
+
+2. **Don't merge entrypoints.** Tempting to fold `send-test-notification` into `notify`, or `notify` into `send-scheduled-notifications`, but the auth and lifecycle models differ:
+   - `notify`: JWT-validated, must verify caller actually performed the claimed action, sub-second latency, fire-and-forget.
+   - `send-test-notification`: admin-only, sends to self, no action validation.
+   - `send-scheduled-notifications`: cron-driven, runs as service role, batch latency, dedup via `sent_scheduled_notifications`.
+   Merging means flag-driven auth branches, which is the exact shape of bug that bypasses validation. Keep separate entrypoints, share leaf utilities.
+
+3. **Audit the implemented `notify` for inline insert+push code.** If the implementing agent built insert/push inline rather than going through a shared helper, refactor before this is considered done.
+
+4. **Future shared helper home:** if more duplication appears (payload rendering, recipient row shape), pull into `supabase/functions/_shared/notifications.ts` rather than duplicating across functions.
+
 ## Later (Needs Review From Radhwan)
 
 ## Task 5

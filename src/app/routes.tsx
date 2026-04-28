@@ -5,6 +5,7 @@ import { MobileLayout } from './components/layout/MobileLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FullPageSpinner } from './components/skeletons';
 import { RequireAdmin } from './components/RequireAdmin';
+import { RequireManagerOrAdmin } from './components/RequireManagerOrAdmin';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const AuthCallbackPage = React.lazy(() => import('./pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })));
@@ -74,7 +75,7 @@ export const router = createBrowserRouter([
           { path: 'departments/:deptId', element: <Lazy><DepartmentDetailsPage /></Lazy> },
           { path: 'reports', element: <Lazy><ReportsPage /></Lazy> },
           { path: 'transfer-general-manager', element: <Lazy><RequireAdmin><TransferGeneralManagerPage /></RequireAdmin></Lazy> },
-          { path: 'notification-settings', element: <Lazy><RequireAdmin><NotificationSettingsPage /></RequireAdmin></Lazy> },
+          { path: 'notification-settings', element: <Lazy><RequireManagerOrAdmin><NotificationSettingsPage /></RequireManagerOrAdmin></Lazy> },
           { path: 'user-details/:userId', element: <Lazy><UserDetailsPage /></Lazy> },
         ],
       },

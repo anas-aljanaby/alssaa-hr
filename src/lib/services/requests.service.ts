@@ -1,5 +1,9 @@
 import { supabase } from '../supabase';
 import type { Tables, InsertTables } from '../database.types';
+import {
+  emitLeaveRequestDecided,
+  emitLeaveRequestSubmitted,
+} from '@/lib/notifications/emit';
 
 export type LeaveRequest = Tables<'leave_requests'>;
 export type LeaveRequestInsert = InsertTables<'leave_requests'>;
@@ -50,6 +54,11 @@ export async function submitRequest(
     .single();
 
   if (error) throw error;
+  void emitLeaveRequestSubmitted({
+    request_id: data.id,
+    requester_id: data.user_id,
+    org_id: data.org_id,
+  });
   return data;
 }
 
@@ -134,7 +143,7 @@ export async function updateRequestStatus(
 ): Promise<LeaveRequest> {
   const decidedAt = new Date().toISOString();
 
-  const { data, error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from('leave_requests')
     .update({
       status,
@@ -144,10 +153,13 @@ export async function updateRequestStatus(
     })
     .eq('id', requestId)
     .eq('status', 'pending')
-    .select()
-    .single();
+    .select();
 
   if (error) throw error;
+  const data = updatedRows?.[0];
+  if (!data) {
+    throw new Error('لا يمكن تحديث الطلب لأنه لم يعد قيد الانتظار.');
+  }
 
   const { error: approvalLogError } = await supabase.from('approval_logs').insert({
     org_id: data.org_id,
@@ -168,6 +180,16 @@ export async function updateRequestStatus(
       }
     );
     if (correctionError) throw correctionError;
+  }
+
+  if (status === 'approved' || status === 'rejected') {
+    void emitLeaveRequestDecided({
+      request_id: data.id,
+      requester_id: data.user_id,
+      status,
+      decision_note: data.decision_note,
+      actor_id: approverId,
+    });
   }
 
   const enriched = await attachApproverProfiles([data]);

@@ -26,6 +26,7 @@ import {
 import {
   isPushSupported,
   getPushPermission,
+  hasActivePushSubscription,
   requestAndSubscribe,
 } from '@/lib/push/push-manager';
 
@@ -53,12 +54,13 @@ export function MorePage() {
     if (!pushSupported) return;
     const permission = getPushPermission();
     setPushPermission(permission);
-    if (permission === 'granted') {
-      navigator.serviceWorker.ready
-        .then((reg) => reg.pushManager.getSubscription())
-        .then((sub) => setIsSubscribed(!!sub))
-        .catch(() => {});
+    if (permission !== 'granted') {
+      setIsSubscribed(false);
+      return;
     }
+    hasActivePushSubscription()
+      .then(setIsSubscribed)
+      .catch(() => setIsSubscribed(false));
   }, [pushSupported]);
 
   useAppTopBar(currentUser ? { title: 'المزيد' } : null);
@@ -81,10 +83,18 @@ export function MorePage() {
       const result = await requestAndSubscribe(currentUser.uid);
       setPushPermission(result);
       if (result === 'granted') {
-        setIsSubscribed(true);
-        toast.success('تم تفعيل إشعارات الجهاز');
+        const subscribed = await hasActivePushSubscription();
+        setIsSubscribed(subscribed);
+        if (subscribed) {
+          toast.success('تم تفعيل إشعارات الجهاز');
+        } else {
+          toast.error('تم منح الإذن لكن تعذر تفعيل الاشتراك على هذا الجهاز حالياً.');
+        }
       } else if (result === 'denied') {
+        setIsSubscribed(false);
         setShowDeniedHint(true);
+      } else {
+        setIsSubscribed(false);
       }
     } catch {
       toast.error('تعذر تفعيل الإشعارات');
@@ -197,6 +207,13 @@ export function MorePage() {
           {
             title: 'الإدارة',
             items: [
+              {
+                icon: Bell,
+                label: 'إعدادات الإشعارات',
+                color: 'text-indigo-500',
+                bgColor: 'bg-indigo-50',
+                onClick: () => navigate('/notification-settings'),
+              },
               {
                 icon: Building2,
                 label: 'إدارة الأقسام',

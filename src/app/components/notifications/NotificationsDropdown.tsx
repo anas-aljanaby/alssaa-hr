@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Bell, CheckCircle2, Clock, FileText, Info, Settings } from 'lucide-react';
 import { useApp } from '@/app/contexts/AppContext';
 import { usePwa } from '@/app/contexts/PwaContext';
 import { EmptyState } from '@/app/components/shared/EmptyState';
 import * as notificationsService from '@/lib/services/notifications.service';
-import type { Notification } from '@/lib/services/notifications.service';
+import type { NotificationWithLink as Notification } from '@/lib/services/notifications.service';
 import { getTimeAgoLabel } from '@/lib/ui-helpers';
 import { isOfflineError } from '@/lib/network';
 
@@ -17,6 +18,7 @@ type NotificationsDropdownProps = {
 export function NotificationsDropdown({ userId, onClose }: NotificationsDropdownProps) {
   const { markNotificationRead, markAllNotificationsRead } = useApp();
   const { isOffline, refreshApp } = usePwa();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -69,11 +71,15 @@ export function NotificationsDropdown({ userId, onClose }: NotificationsDropdown
     [notifications]
   );
 
-  const handleMarkRead = async (notifId: string) => {
+  const handleMarkRead = async (notifId: string, linkUrl?: string | null) => {
     await markNotificationRead(notifId);
     setNotifications((prev) =>
       prev.map((n) => (n.id === notifId ? { ...n, read_status: true } : n))
     );
+    onClose();
+    if (linkUrl) {
+      navigate(linkUrl);
+    }
   };
 
   const handleMarkAllRead = async () => {
@@ -149,7 +155,7 @@ export function NotificationsDropdown({ userId, onClose }: NotificationsDropdown
                 <button
                   key={notif.id}
                   type="button"
-                  onClick={() => handleMarkRead(notif.id)}
+                  onClick={() => handleMarkRead(notif.id, notif.link_url)}
                   className={`w-full text-right rounded-xl p-3 border transition-all ${
                     notif.read_status
                       ? 'bg-white border-gray-100'

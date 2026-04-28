@@ -2,8 +2,9 @@ import { supabase } from '../supabase';
 import type { Tables } from '../database.types';
 
 export type Notification = Tables<'notifications'>;
+export type NotificationWithLink = Notification & { link_url: string | null };
 
-export async function getUserNotifications(userId: string): Promise<Notification[]> {
+export async function getUserNotifications(userId: string): Promise<NotificationWithLink[]> {
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
@@ -11,10 +12,10 @@ export async function getUserNotifications(userId: string): Promise<Notification
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as NotificationWithLink[];
 }
 
-export async function getUnreadNotifications(userId: string): Promise<Notification[]> {
+export async function getUnreadNotifications(userId: string): Promise<NotificationWithLink[]> {
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
@@ -23,7 +24,7 @@ export async function getUnreadNotifications(userId: string): Promise<Notificati
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as NotificationWithLink[];
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {

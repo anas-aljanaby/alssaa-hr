@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Bell, Clock, Timer, AlertTriangle, X, Pencil, BellRing } from 'lucide-react';
+import { Bell, Clock, Timer, AlertTriangle, X, Pencil, BellRing, Info } from 'lucide-react';
 import { PageLayout } from '../../components/layout/PageLayout';
 import { Switch } from '@/app/components/ui/switch';
 import { useBodyScrollLock } from '@/app/hooks/useBodyScrollLock';
+import { useAuth } from '@/app/contexts/AuthContext';
 import * as notifSettingsService from '@/lib/services/notification-settings.service';
 import type { NotificationSetting, NotificationSettingType } from '@/lib/services/notification-settings.service';
+import * as notificationPreferencesService from '@/lib/services/notification-preferences.service';
+import { getPushPermission, isPushSupported, requestAndSubscribe } from '@/lib/push/push-manager';
 
 // ─── metadata ───────────────────────────────────────────────────────────────
 
@@ -64,24 +67,50 @@ const TYPE_ORDER: NotificationSettingType[] = [
 // ─── component ──────────────────────────────────────────────────────────────
 
 export function NotificationSettingsPage() {
+  const { currentUser } = useAuth();
+  const role = currentUser?.role;
+  const canManageTemplates = role === 'admin';
+  const canManageTeamActivity = role === 'admin' || role === 'manager';
+
   const [settings, setSettings] = useState<NotificationSetting[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingSettings, setLoadingSettings] = useState(canManageTemplates);
+  const [loadingPreferences, setLoadingPreferences] = useState(canManageTeamActivity);
   const [editing, setEditing] = useState<NotificationSetting | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [countingDownId, setCountingDownId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(3);
+  const [prefs, setPrefs] = useState<notificationPreferencesService.NotificationPreferences | null>(null);
+  const [prefsSavingKey, setPrefsSavingKey] = useState<'leave_requests_team' | 'overtime_requests_team' | null>(null);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>(() => getPushPermission());
+  const [enablingPush, setEnablingPush] = useState(false);
 
   useBodyScrollLock(!!editing);
 
   useEffect(() => {
+    if (!canManageTemplates) {
+      setLoadingSettings(false);
+      return;
+    }
     notifSettingsService
       .getNotificationSettings()
       .then(setSettings)
       .catch(() => toast.error('فشل تحميل إعدادات الإشعارات'))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => setLoadingSettings(false));
+  }, [canManageTemplates]);
+
+  useEffect(() => {
+    if (!canManageTeamActivity) {
+      setLoadingPreferences(false);
+      return;
+    }
+    notificationPreferencesService
+      .getMyPreferences()
+      .then(setPrefs)
+      .catch(() => toast.error('فشل تحميل إعدادات نشاط الفريق'))
+      .finally(() => setLoadingPreferences(false));
+  }, [canManageTeamActivity]);
 
   useEffect(() => {
     if (!countingDownId) return;
@@ -114,6 +143,11 @@ export function NotificationSettingsPage() {
   const settingsByType = Object.fromEntries(
     settings.map((s) => [s.type, s])
   ) as Partial<Record<NotificationSettingType, NotificationSetting>>;
+
+  const wantsTeamActivity = useMemo(
+    () => Boolean(prefs?.leave_requests_team || prefs?.overtime_requests_team),
+    [prefs]
+  );
 
   async function handleToggle(setting: NotificationSetting) {
     setTogglingId(setting.id);
@@ -155,7 +189,37 @@ export function NotificationSettingsPage() {
     setCountingDownId(setting.id);
   }
 
-  if (loading) {
+  async function handleTeamToggle(key: 'leave_requests_team' | 'overtime_requests_team') {
+    if (!prefs) return;
+    setPrefsSavingKey(key);
+    const nextValue = !prefs[key];
+    try {
+      const updated = await notificationPreferencesService.updateMyPreferences({ [key]: nextValue });
+      setPrefs(updated);
+    } catch {
+      toast.error('فشل تحديث إعدادات نشاط الفريق');
+    } finally {
+      setPrefsSavingKey(null);
+    }
+  }
+
+  async function handleEnablePush() {
+    if (!currentUser) return;
+    setEnablingPush(true);
+    try {
+      const permission = await requestAndSubscribe(currentUser.uid);
+      setPushPermission(permission);
+      if (permission === 'granted') {
+        toast.success('تم تفعيل إشعارات المتصفح');
+      } else {
+        toast.error('لم يتم منح إذن الإشعارات');
+      }
+    } finally {
+      setEnablingPush(false);
+    }
+  }
+
+  if (loadingSettings || loadingPreferences) {
     return (
       <PageLayout title="إعدادات الإشعارات" backPath="/more">
         <div className="p-4 flex justify-center">
@@ -168,95 +232,159 @@ export function NotificationSettingsPage() {
   return (
     <PageLayout title="إعدادات الإشعارات" backPath="/more">
       <div className="p-4 max-w-lg mx-auto space-y-3">
-        <p className="text-sm text-gray-500 px-1">
-          يمكنك تفعيل أو تعطيل كل نوع من الإشعارات، وتعديل نصها لجميع الموظفين.
-        </p>
+        <p className="text-sm text-gray-500 px-1">حدّد ما تريد استلامه من إشعارات بحسب دورك.</p>
 
-        {TYPE_ORDER.map((type) => {
-          const setting = settingsByType[type];
-          if (!setting) return null;
-          const meta = TYPE_META[type];
-          const Icon = meta.icon;
-          const isToggling = togglingId === setting.id;
-          const isTesting = testingId === setting.id;
-          const isCountingDown = countingDownId === setting.id;
+        {canManageTemplates && (
+          <section className="space-y-2">
+            <h3 className="text-sm text-gray-700 px-1">قوالب الحضور</h3>
+            {TYPE_ORDER.map((type) => {
+              const setting = settingsByType[type];
+              if (!setting) return null;
+              const meta = TYPE_META[type];
+              const Icon = meta.icon;
+              const isToggling = togglingId === setting.id;
+              const isTesting = testingId === setting.id;
+              const isCountingDown = countingDownId === setting.id;
 
-          return (
-            <div
-              key={type}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
-            >
-              {/* Header row */}
-              <div className="flex items-center gap-3 px-4 py-3.5">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.iconBg}`}>
-                  <Icon className={`w-4.5 h-4.5 ${meta.iconColor}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800">{meta.label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{meta.description}</p>
-                  {meta.hasMinutes && setting.minutes_before != null && (
-                    <p className="text-xs text-blue-600 mt-0.5">
-                      قبل {setting.minutes_before} دقيقة
+              return (
+                <div
+                  key={type}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+                >
+                  <div className="flex items-center gap-3 px-4 py-3.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${meta.iconBg}`}>
+                      <Icon className={`w-4.5 h-4.5 ${meta.iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800">{meta.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{meta.description}</p>
+                      {meta.hasMinutes && setting.minutes_before != null && (
+                        <p className="text-xs text-blue-600 mt-0.5">قبل {setting.minutes_before} دقيقة</p>
+                      )}
+                    </div>
+                    <Switch
+                      checked={setting.enabled}
+                      onCheckedChange={() => handleToggle(setting)}
+                      disabled={isToggling}
+                      aria-label={setting.enabled ? 'تعطيل' : 'تفعيل'}
+                      className="data-[state=checked]:bg-blue-500 data-[state=unchecked]:bg-gray-200"
+                    />
+                  </div>
+
+                  <div className="border-t border-gray-50 px-4 py-3 flex items-start justify-between gap-3">
+                    <p className="text-xs text-gray-500 flex-1 leading-relaxed line-clamp-2">
+                      {setting.message_ar}
                     </p>
-                  )}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="flex flex-col items-end gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleTestClick(setting)}
+                          disabled={!!testingId || !!countingDownId}
+                          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                        >
+                          <BellRing className="w-3.5 h-3.5" />
+                          {isTesting
+                            ? 'جاري الإرسال...'
+                            : isCountingDown
+                              ? `سيصل خلال ${countdown}...`
+                              : 'إرسال اختبار'}
+                        </button>
+                        <span className="text-[10px] text-gray-400 px-2">يُرسَل إليك أنت فقط</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditing({ ...setting })}
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 flex-shrink-0 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        تعديل
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                {/* Toggle */}
+              );
+            })}
+          </section>
+        )}
+
+        {canManageTeamActivity && prefs && (
+          <section className="space-y-2">
+            <h3 className="text-sm text-gray-700 px-1">نشاط الفريق</h3>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-50">
+                <p className="text-xs text-gray-500">
+                  هذه إعدادات شخصية لك فقط ولن تؤثر على بقية المدراء أو الإدارة.
+                </p>
+              </div>
+
+              <div className="px-4 py-3.5 flex items-center justify-between gap-3 border-b border-gray-50">
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-800">طلبات الإجازة من فريقك</p>
+                  <p className="text-xs text-gray-400 mt-0.5">استلم إشعاراً عند إرسال أي طلب إجازة جديد</p>
+                </div>
                 <Switch
-                  checked={setting.enabled}
-                  onCheckedChange={() => handleToggle(setting)}
-                  disabled={isToggling}
-                  aria-label={setting.enabled ? 'تعطيل' : 'تفعيل'}
+                  checked={prefs.leave_requests_team}
+                  onCheckedChange={() => handleTeamToggle('leave_requests_team')}
+                  disabled={prefsSavingKey === 'leave_requests_team'}
                   className="data-[state=checked]:bg-blue-500 data-[state=unchecked]:bg-gray-200"
                 />
               </div>
 
-              {/* Message preview + edit button */}
-              <div className="border-t border-gray-50 px-4 py-3 flex items-start justify-between gap-3">
-                <p className="text-xs text-gray-500 flex-1 leading-relaxed line-clamp-2">
-                  {setting.message_ar}
-                </p>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <div className="flex flex-col items-end gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => handleTestClick(setting)}
-                      disabled={!!testingId || !!countingDownId}
-                      className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50"
-                    >
-                      <BellRing className="w-3.5 h-3.5" />
-                      {isTesting
-                        ? 'جاري الإرسال...'
-                        : isCountingDown
-                        ? `سيصل خلال ${countdown}...`
-                        : 'إرسال اختبار'}
-                    </button>
-                    <span className="text-[10px] text-gray-400 px-2">يُرسَل إليك أنت فقط</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEditing({ ...setting })}
-                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 flex-shrink-0 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                    تعديل
-                  </button>
+              <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-800">طلبات العمل الإضافي من فريقك</p>
+                  <p className="text-xs text-gray-400 mt-0.5">استلم إشعاراً عند إرسال أي طلب عمل إضافي جديد</p>
                 </div>
+                <Switch
+                  checked={prefs.overtime_requests_team}
+                  onCheckedChange={() => handleTeamToggle('overtime_requests_team')}
+                  disabled={prefsSavingKey === 'overtime_requests_team'}
+                  className="data-[state=checked]:bg-blue-500 data-[state=unchecked]:bg-gray-200"
+                />
               </div>
             </div>
-          );
-        })}
 
-        {/* Info box */}
-        <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
-          <p className="text-xs text-blue-700 leading-relaxed">
-            <strong>ملاحظة:</strong> الإشعارات تُرسَل تلقائياً بناءً على جدول عمل الموظف أو سياسة الحضور.
-            يمكن تفعيل إشعارات الجهاز (push) بضبط مفاتيح VAPID في إعدادات البيئة.
-          </p>
-        </div>
+            {wantsTeamActivity && pushPermission !== 'granted' && (
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5 flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-amber-800">
+                    إشعارات الجرس داخل التطبيق مفعلة، لكن إشعارات المتصفح غير مفعلة حالياً.
+                  </p>
+                  {isPushSupported() ? (
+                    <button
+                      type="button"
+                      onClick={handleEnablePush}
+                      disabled={enablingPush}
+                      className="mt-2 text-xs px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50"
+                    >
+                      {enablingPush ? 'جارِ التفعيل...' : 'تفعيل إشعارات المتصفح'}
+                    </button>
+                  ) : (
+                    <p className="text-[11px] text-amber-700 mt-1">هذا المتصفح لا يدعم push notifications.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        <section className="space-y-2">
+          <h3 className="text-sm text-gray-700 px-1">نشاطي</h3>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-2.5">
+            <p className="text-sm text-gray-800">ستصلك هذه الإشعارات دائماً:</p>
+            <ul className="space-y-2 text-xs text-gray-500">
+              <li>• تم قبول أو رفض طلب الإجازة أو العمل الإضافي الخاص بك</li>
+              <li>• تم تحديث جدول عملك</li>
+            </ul>
+            <p className="text-[11px] text-gray-400">لا يمكن إيقاف هذا القسم لضمان متابعة القرارات المؤثرة عليك.</p>
+          </div>
+        </section>
       </div>
 
       {/* Edit modal */}
-      {editing && (
+      {canManageTemplates && editing && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => { if (!saving) setEditing(null); }}
