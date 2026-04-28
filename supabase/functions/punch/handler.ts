@@ -98,6 +98,8 @@ type SessionRow = {
   date?: string;
   check_in_time: string;
   check_out_time?: string | null;
+  check_in_at?: string | null;
+  check_out_at?: string | null;
   status: 'present' | 'late';
   is_overtime: boolean;
   duration_minutes?: number;
@@ -175,6 +177,30 @@ function fromSeconds(sec: number): number {
 function diffMinutes(checkInTime: string, checkOutTime: string): number {
   const minutes = toMinutes(checkOutTime) - toMinutes(checkInTime);
   return minutes >= 0 ? minutes : minutes + 1440;
+}
+
+/**
+ * Combine a Baghdad-local YYYY-MM-DD date and HH:MM time into a UTC ISO timestamp.
+ * Used by the dual-write path to produce check_in_at / check_out_at values; once
+ * Phase 3 readers migrate, callers should prefer real Date math instead.
+ */
+export function localDateTimeToUtcIso(dateStr: string, timeHHMM: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const [hh, mm] = timeHHMM.split(':').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, hh, mm) - 3 * 3600 * 1000).toISOString();
+}
+
+export function addMinutesIso(iso: string, minutes: number): string {
+  return new Date(new Date(iso).getTime() + minutes * 60 * 1000).toISOString();
+}
+
+/**
+ * Resolve a session's check_in_at, falling back to (date, check_in_time) for
+ * legacy rows whose backfill might have missed.
+ */
+export function sessionCheckInAt(s: { check_in_at?: string | null; date?: string | null; check_in_time: string }): string {
+  if (s.check_in_at) return s.check_in_at;
+  return localDateTimeToUtcIso(s.date ?? '', s.check_in_time);
 }
 
 /** Late-stay: regular session extends past shift end → split into regular [check_in, shiftEnd] + OT [shiftEnd, checkout]. */
@@ -668,6 +694,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           user_id: caller.id,
           date: today,
           check_in_time: time,
+          check_in_at: effectiveNow.toISOString(),
           status: classification.status,
           is_overtime: classification.isOvertime,
           duration_minutes: 0,
@@ -802,6 +829,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
             ? toMinutes(sessionSchedule.workStartTime)
             : 0;
           const insertedSegments: SessionRow[] = [];
+          let segmentCursorAt = sessionCheckInAt(openSession);
 
           for (const seg of segments) {
             const isOt = seg.type === 'overtime';
@@ -812,6 +840,10 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
                 ? 'late'
                 : 'present';
 
+            const segCheckInAt = segmentCursorAt;
+            const segCheckOutAt = addMinutesIso(segCheckInAt, seg.durationMinutes);
+            segmentCursorAt = segCheckOutAt;
+
             const { data: inserted, error: insErr } = await admin
               .from('attendance_sessions')
               .insert({
@@ -820,6 +852,8 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
                 date: openSessionDate,
                 check_in_time: seg.checkIn,
                 check_out_time: seg.checkOut,
+                check_in_at: segCheckInAt,
+                check_out_at: segCheckOutAt,
                 status: segStatus,
                 is_overtime: isOt,
                 duration_minutes: seg.durationMinutes,
@@ -871,11 +905,14 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
     if (checkoutHandling.shouldSplitOvertime && checkoutHandling.shiftEndTime) {
       const regularDuration = checkoutHandling.regularDurationMinutes;
       const otDuration = checkoutHandling.overtimeDurationMinutes;
+      const openSessionCheckInAt = sessionCheckInAt(openSession);
+      const shiftBoundaryAt = addMinutesIso(openSessionCheckInAt, regularDuration);
 
       const { data: updatedRegular, error: errRegular } = await admin
         .from('attendance_sessions')
         .update({
           check_out_time: checkoutHandling.shiftEndTime,
+          check_out_at: shiftBoundaryAt,
           duration_minutes: regularDuration,
           is_early_departure: false,
           is_auto_punch_out: false,
@@ -901,6 +938,8 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           date: openSessionDate,
           check_in_time: checkoutHandling.shiftEndTime,
           check_out_time: time,
+          check_in_at: shiftBoundaryAt,
+          check_out_at: effectiveNow.toISOString(),
           status: 'present',
           is_overtime: true,
           duration_minutes: otDuration,
@@ -960,6 +999,7 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       .from('attendance_sessions')
       .update({
         check_out_time: time,
+        check_out_at: effectiveNow.toISOString(),
         duration_minutes: durationMinutes,
         is_early_departure: isEarlyDeparture,
         is_auto_punch_out: false,

@@ -60,22 +60,22 @@ These are intentionally not part of this plan. Track separately.
 
 Goal: new columns exist and are populated, old columns untouched. Site behavior unchanged.
 
-- [ ] **1.1** Create migration `34_attendance_sessions_timestamps.sql`:
+- [x] **1.1** Create migration `37_attendance_sessions_timestamps.sql`:
   - `ALTER TABLE attendance_sessions ADD COLUMN check_in_at timestamptz`
   - `ALTER TABLE attendance_sessions ADD COLUMN check_out_at timestamptz`
   - Both nullable for now.
-- [ ] **1.2** ⚠️ Critical — Backfill `check_in_at` from existing rows:
+- [x] **1.2** ⚠️ Critical — Backfill `check_in_at` from existing rows:
   - `check_in_at = ((date::text || ' ' || check_in_time)::timestamp AT TIME ZONE 'Asia/Baghdad')`
   - ✓ Verify: `SELECT count(*) FROM attendance_sessions WHERE check_in_at IS NULL` → 0.
-- [ ] **1.3** ⚠️ Critical — Backfill `check_out_at` for closed sessions:
+- [x] **1.3** ⚠️ Critical — Backfill `check_out_at` for closed sessions:
   - If `check_out_time IS NULL` → leave `check_out_at` NULL.
   - If `check_out_time >= check_in_time` (same day) → `((date::text || ' ' || check_out_time)::timestamp AT TIME ZONE 'Asia/Baghdad')`.
   - If `check_out_time < check_in_time` (one midnight crossing) → same expression but `date + 1`.
   - Sessions where the resulting span exceeds a sanity threshold (e.g., 18h) → set `check_out_at = NULL` and `needs_review = true`. These are the multi-day-bug rows; admins fix them manually.
   - ✓ Verify: `SELECT count(*) FROM attendance_sessions WHERE check_out_time IS NOT NULL AND check_out_at IS NULL AND needs_review = false` → 0.
-- [ ] **1.4** Add index `CREATE INDEX idx_attendance_sessions_user_check_in_at ON attendance_sessions(user_id, check_in_at)`.
-- [ ] **1.5** Verify backfill: ad-hoc query `SELECT count(*) FROM attendance_sessions WHERE check_in_at IS NULL` returns 0; `WHERE needs_review = true AND check_out_at IS NULL` returns the expected count of broken rows.
-- [ ] **1.6** Regenerate `database.types.ts`.
+- [x] **1.4** Add index `CREATE INDEX idx_attendance_sessions_user_check_in_at ON attendance_sessions(user_id, check_in_at)`.
+- [ ] **1.5** Verify backfill: ad-hoc query `SELECT count(*) FROM attendance_sessions WHERE check_in_at IS NULL` returns 0; `WHERE needs_review = true AND check_out_at IS NULL` returns the expected count of broken rows. *(Pending real DB/staging verification.)*
+- [x] **1.6** Regenerate `database.types.ts`.
 
 **Phase 1 complete:** ☐
 
@@ -87,13 +87,13 @@ Goal: every new insert/update writes both old and new columns. Old columns remai
 
 > ⚠️ Critical — tasks 2.1–2.6 modify live writers. A bug here means new rows go to production with wrong/missing timestamp values. The agent should announce the critical step at the start of 2.1 and again before 2.5 (auto-punch-out is cron-driven, hits more rows). Verify with 2.7 + 2.8 before considering the phase done.
 
-- [ ] **2.1** `punch/handler.ts`: every `INSERT` into `attendance_sessions` also sets `check_in_at` (computed from current time as `timestamptz`).
-- [ ] **2.2** `punch/handler.ts`: every `UPDATE` that sets `check_out_time` also sets `check_out_at` (computed from the chosen checkout moment as `timestamptz`).
-- [ ] **2.3** `punch/handler.ts`: the late-stay split path (`shouldSplitOvertime`) sets `check_in_at`/`check_out_at` on both the regular update and the new OT insert.
-- [ ] **2.4** `punch/handler.ts`: the OT-spanning-shift split path (added in Phase 0 of the parent fix) sets timestamps on each segment insert.
-- [ ] **2.5** `auto-punch-out/handler.ts`: every `UPDATE` setting `check_out_time` also sets `check_out_at`.
-- [ ] **2.6** `auto-punch-out/handler.ts`: every OT segment INSERT (split path + late-stay split) sets `check_in_at`/`check_out_at`.
-- [ ] **2.7** Add a consistency test: insert a row, assert `check_in_at::time AT TIME ZONE 'Asia/Baghdad' == check_in_time` and `check_in_at::date AT TIME ZONE 'Asia/Baghdad' == date`.
+- [x] **2.1** `punch/handler.ts`: every `INSERT` into `attendance_sessions` also sets `check_in_at` (computed from current time as `timestamptz`).
+- [x] **2.2** `punch/handler.ts`: every `UPDATE` that sets `check_out_time` also sets `check_out_at` (computed from the chosen checkout moment as `timestamptz`).
+- [x] **2.3** `punch/handler.ts`: the late-stay split path (`shouldSplitOvertime`) sets `check_in_at`/`check_out_at` on both the regular update and the new OT insert.
+- [x] **2.4** `punch/handler.ts`: the OT-spanning-shift split path (added in Phase 0 of the parent fix) sets timestamps on each segment insert.
+- [x] **2.5** `auto-punch-out/handler.ts`: every `UPDATE` setting `check_out_time` also sets `check_out_at`.
+- [x] **2.6** `auto-punch-out/handler.ts`: every OT segment INSERT (split path + late-stay split) sets `check_in_at`/`check_out_at`.
+- [x] **2.7** Add a consistency test: insert a row, assert `check_in_at::time AT TIME ZONE 'Asia/Baghdad' == check_in_time` and `check_in_at::date AT TIME ZONE 'Asia/Baghdad' == date`.
 - [ ] **2.8** Smoke deploy to staging; let cron run for ≥ 24h; query for any rows where the new and old columns disagree.
   - ✓ Verify: `SELECT count(*) FROM attendance_sessions WHERE created_at > now() - interval '24 hours' AND (check_in_at IS NULL OR (check_out_time IS NOT NULL AND check_out_at IS NULL))` → 0.
 

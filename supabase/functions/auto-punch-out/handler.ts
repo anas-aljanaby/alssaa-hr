@@ -5,7 +5,12 @@ import { corsHeaders } from '../_shared/cors.ts';
 /** Keep in sync with `src/shared/attendance/constants.ts`. */
 const DEFAULT_AUTO_PUNCH_OUT_BUFFER_MINUTES = 5;
 import type { PunchServiceClient } from '../punch/handler.ts';
-import { resolveCheckoutOvertimeHandling, resolveOvertimeSessionSplit } from '../punch/handler.ts';
+import {
+  addMinutesIso,
+  resolveCheckoutOvertimeHandling,
+  resolveOvertimeSessionSplit,
+  sessionCheckInAt,
+} from '../punch/handler.ts';
 
 type DayScheduleJson = { start: string; end: string };
 type WorkScheduleJson = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DayScheduleJson>>;
@@ -216,7 +221,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
 
     const { data: openSessionsRaw, error: sessionsError } = await admin
       .from('attendance_sessions')
-      .select('id, user_id, org_id, date, check_in_time, is_overtime')
+      .select('id, user_id, org_id, date, check_in_time, check_in_at, is_overtime')
       .in('date', [today, yesterday])
       .is('check_out_time', null);
 
@@ -226,6 +231,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       org_id: string;
       date: string;
       check_in_time: string;
+      check_in_at: string | null;
       is_overtime: boolean;
     }[] | null;
 
@@ -311,6 +317,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
       // or any enabled rule whose sessionType matches and whose deadline has passed.
       let trigger: 'buffer' | 'rule' | null = null;
       let actualCheckoutTime: string | null = null;
+      let actualCheckoutAt: string | null = null;
 
       if (!isOvertimeSession && effective && workEndTime && workStartTime) {
         const overnight = timeToMinutes(workEndTime) < timeToMinutes(workStartTime);
@@ -327,6 +334,7 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         if (normalizedNow > cutoffMinutes) {
           trigger = 'buffer';
           actualCheckoutTime = nowToTimeHHMM(effectiveNow);
+          actualCheckoutAt = effectiveNow.toISOString();
         }
       }
 
@@ -341,12 +349,13 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
           if (effectiveNow.getTime() >= deadline.getTime()) {
             trigger = 'rule';
             actualCheckoutTime = formatTimeHHMM(rule.time);
+            actualCheckoutAt = deadline.toISOString();
             break;
           }
         }
       }
 
-      if (!trigger || !actualCheckoutTime) continue;
+      if (!trigger || !actualCheckoutTime || !actualCheckoutAt) continue;
 
       // Overtime session that overlapped a regular shift: rebuild the day as
       // pre-shift OT + regular + post-shift OT segments.
@@ -368,8 +377,12 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
           if (delErr) continue;
 
           let inserted = 0;
+          let segmentCursorAt = sessionCheckInAt(session);
           for (const seg of segments) {
             const isOt = seg.type === 'overtime';
+            const segCheckInAt = segmentCursorAt;
+            const segCheckOutAt = addMinutesIso(segCheckInAt, seg.durationMinutes);
+            segmentCursorAt = segCheckOutAt;
             const { data: insertedRow } = await admin
               .from('attendance_sessions')
               .insert({
@@ -378,6 +391,8 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
                 date: session.date,
                 check_in_time: seg.checkIn,
                 check_out_time: seg.checkOut,
+                check_in_at: segCheckInAt,
+                check_out_at: segCheckOutAt,
                 status: 'present',
                 is_overtime: isOt,
                 duration_minutes: seg.durationMinutes,
@@ -433,10 +448,16 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
         minimumOvertimeMinutes: policy?.minimum_overtime_minutes,
       });
 
+      const sessionStartAt = sessionCheckInAt(session);
+      const regularCheckOutAt = checkoutHandling.shouldSplitOvertime
+        ? addMinutesIso(sessionStartAt, checkoutHandling.regularDurationMinutes)
+        : actualCheckoutAt;
+
       const { error: updateError } = await admin
         .from('attendance_sessions')
         .update({
           check_out_time: checkoutHandling.regularCheckOutTime,
+          check_out_at: regularCheckOutAt,
           duration_minutes: checkoutHandling.regularDurationMinutes,
           is_auto_punch_out: true,
           needs_review: true,
@@ -457,6 +478,8 @@ export async function handleAutoPunchOut(req: Request, deps: AutoPunchDeps): Pro
             date: session.date,
             check_in_time: checkoutHandling.shiftEndTime,
             check_out_time: actualCheckoutTime,
+            check_in_at: regularCheckOutAt,
+            check_out_at: actualCheckoutAt,
             status: 'present',
             is_overtime: true,
             duration_minutes: checkoutHandling.overtimeDurationMinutes,

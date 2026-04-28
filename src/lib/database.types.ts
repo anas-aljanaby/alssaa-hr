@@ -359,7 +359,7 @@ export type Database = {
           minimum_overtime_minutes: number
           minimum_required_minutes: number | null
           org_id: string
-          work_schedule: Json
+          work_schedule: Json | null
         }
         Insert: {
           absent_cutoff_time?: string
@@ -375,7 +375,7 @@ export type Database = {
           minimum_overtime_minutes?: number
           minimum_required_minutes?: number | null
           org_id: string
-          work_schedule?: Json
+          work_schedule?: Json | null
         }
         Update: {
           absent_cutoff_time?: string
@@ -391,7 +391,7 @@ export type Database = {
           minimum_overtime_minutes?: number
           minimum_required_minutes?: number | null
           org_id?: string
-          work_schedule?: Json
+          work_schedule?: Json | null
         }
         Relationships: [
           {
@@ -405,7 +405,9 @@ export type Database = {
       }
       attendance_sessions: {
         Row: {
+          check_in_at: string | null
           check_in_time: string
+          check_out_at: string | null
           check_out_time: string | null
           created_at: string
           date: string
@@ -423,7 +425,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          check_in_at?: string | null
           check_in_time: string
+          check_out_at?: string | null
           check_out_time?: string | null
           created_at?: string
           date: string
@@ -441,7 +445,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          check_in_at?: string | null
           check_in_time?: string
+          check_out_at?: string | null
           check_out_time?: string | null
           created_at?: string
           date?: string
@@ -683,6 +689,35 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          leave_requests_team: boolean
+          overtime_requests_team: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          leave_requests_team?: boolean
+          overtime_requests_team?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          leave_requests_team?: boolean
+          overtime_requests_team?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_settings: {
         Row: {
           created_at: string
@@ -737,6 +772,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          link_url: string | null
           message: string
           message_ar: string
           org_id: string
@@ -749,6 +785,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          link_url?: string | null
           message: string
           message_ar: string
           org_id: string
@@ -761,6 +798,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          link_url?: string | null
           message?: string
           message_ar?: string
           org_id?: string
@@ -813,58 +851,6 @@ export type Database = {
           {
             foreignKeyName: "organizations_general_manager_id_fkey"
             columns: ["general_manager_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      publishing_tag_holders: {
-        Row: {
-          claimed_at: string | null
-          force_released_at: string | null
-          force_released_by: string | null
-          id: string
-          org_id: string
-          released_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          claimed_at?: string | null
-          force_released_at?: string | null
-          force_released_by?: string | null
-          id?: string
-          org_id: string
-          released_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          claimed_at?: string | null
-          force_released_at?: string | null
-          force_released_by?: string | null
-          id?: string
-          org_id?: string
-          released_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "publishing_tag_holders_force_released_by_fkey"
-            columns: ["force_released_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "publishing_tag_holders_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "publishing_tag_holders_user_id_fkey"
-            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -951,7 +937,7 @@ export type Database = {
           phone: string
           role: string
           updated_at: string
-          work_schedule: Json
+          work_schedule: Json | null
         }
         Insert: {
           avatar_url?: string | null
@@ -967,7 +953,7 @@ export type Database = {
           phone?: string
           role?: string
           updated_at?: string
-          work_schedule?: Json
+          work_schedule?: Json | null
         }
         Update: {
           avatar_url?: string | null
@@ -983,7 +969,7 @@ export type Database = {
           phone?: string
           role?: string
           updated_at?: string
-          work_schedule?: Json
+          work_schedule?: Json | null
         }
         Relationships: [
           {
@@ -998,6 +984,58 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_tag_holders: {
+        Row: {
+          claimed_at: string | null
+          force_released_at: string | null
+          force_released_by: string | null
+          id: string
+          org_id: string
+          released_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          claimed_at?: string | null
+          force_released_at?: string | null
+          force_released_by?: string | null
+          id?: string
+          org_id: string
+          released_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          claimed_at?: string | null
+          force_released_at?: string | null
+          force_released_by?: string | null
+          id?: string
+          org_id?: string
+          released_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_tag_holders_force_released_by_fkey"
+            columns: ["force_released_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_tag_holders_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_tag_holders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1083,7 +1121,9 @@ export type Database = {
       approve_attendance_correction_from_leave_request: {
         Args: { p_approver_id?: string; p_leave_request_id: string }
         Returns: {
+          check_in_at: string | null
           check_in_time: string
+          check_out_at: string | null
           check_out_time: string | null
           created_at: string
           date: string
@@ -1107,15 +1147,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      count_leave_request_working_days: {
+        Args: {
+          p_from_date: string
+          p_org_id: string
+          p_to_date: string
+          p_user_id: string
+        }
+        Returns: number
+      }
       current_user_department: { Args: never; Returns: string }
       current_user_org_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
       get_effective_shift: {
         Args: { p_date: string; p_user_id: string }
         Returns: {
-          start_time: string | null
-          end_time: string | null
+          end_time: string
           is_working_day: boolean
+          start_time: string
         }[]
       }
       get_redacted_department_availability: {
@@ -1188,7 +1237,9 @@ export type Database = {
           p_session_id: string
         }
         Returns: {
+          check_in_at: string | null
           check_in_time: string
+          check_out_at: string | null
           check_out_time: string | null
           created_at: string
           date: string

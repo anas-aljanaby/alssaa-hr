@@ -9,6 +9,8 @@ type Session = {
   date: string;
   check_in_time: string;
   check_out_time: string | null;
+  check_in_at: string | null;
+  check_out_at: string | null;
   last_action_at: string;
   status: 'present' | 'late';
   is_overtime: boolean;
@@ -247,6 +249,8 @@ function makeDeps(opts?: {
               date: String(payload?.date),
               check_in_time: String(payload?.check_in_time),
               check_out_time: (payload?.check_out_time ?? null) as string | null,
+              check_in_at: (payload?.check_in_at ?? null) as string | null,
+              check_out_at: (payload?.check_out_at ?? null) as string | null,
               last_action_at: String(payload?.last_action_at ?? new Date().toISOString()),
               status: (payload?.status ?? 'present') as 'present' | 'late',
               is_overtime: Boolean(payload?.is_overtime),
@@ -1738,4 +1742,46 @@ Deno.test('part 10.5 no policy configured still allows punch with defaults', asy
   const body = (await json(res)) as { status?: string; is_overtime?: boolean };
   assertEquals(body.status, 'present');
   assertEquals(body.is_overtime, false);
+});
+
+// ============================================================
+// Phase 2 dual-write consistency: every insert/update of a session
+// populates check_in_at / check_out_at and they round-trip back to
+// the legacy (date, check_in_time / check_out_time) wall-clock pair
+// under Asia/Baghdad (UTC+3).
+// ============================================================
+
+Deno.test('dual-write 1: check-in writes check_in_at matching (date, check_in_time) in Asia/Baghdad', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:30:00'));
+  assertEquals(mem.sessions.length, 1);
+  const s = mem.sessions[0];
+  assertEquals(s.check_in_at, orgInstant(s.date, s.check_in_time + ':00'));
+  assertEquals(s.check_out_at, null);
+});
+
+Deno.test('dual-write 2: manual checkout writes check_out_at matching (date, check_out_time)', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '17:00:00'));
+  const s = mem.sessions[0];
+  assertEquals(s.check_in_at, orgInstant(s.date, s.check_in_time + ':00'));
+  assertEquals(s.check_out_at, orgInstant(s.date, (s.check_out_time as string) + ':00'));
+});
+
+Deno.test('dual-write 3: late-stay split keeps both segments\' timestamps consistent with HH:MM', async () => {
+  const mem = makeDeps();
+  await punch(mem.deps, 'check_in', orgInstant('2025-06-10', '09:00:00'));
+  await punch(mem.deps, 'check_out', orgInstant('2025-06-10', '20:00:00'));
+  // Expect two sessions: the regular [09:00, 18:00] + an OT [18:00, 20:00].
+  const sorted = [...mem.sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  assertEquals(sorted.length, 2);
+  for (const s of sorted) {
+    assertEquals(s.check_in_at, orgInstant(s.date, s.check_in_time + ':00'));
+    if (s.check_out_time) {
+      assertEquals(s.check_out_at, orgInstant(s.date, s.check_out_time + ':00'));
+    }
+  }
+  // The two segments are stitched: regular's check_out_at == OT's check_in_at.
+  assertEquals(sorted[0].check_out_at, sorted[1].check_in_at);
 });

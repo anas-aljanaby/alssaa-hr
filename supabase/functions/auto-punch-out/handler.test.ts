@@ -1,5 +1,5 @@
 import { assertEquals } from 'jsr:@std/assert';
-import { createQueuedFromClient, json, type QResult } from '../_test/queued_supabase.ts';
+import { createQueuedFromClient, json, type QCall, type QResult } from '../_test/queued_supabase.ts';
 import type { PunchServiceClient } from '../punch/handler.ts';
 import {
   formatTimeHHMM,
@@ -31,8 +31,8 @@ const baseEnv: AutoPunchEnv = {
   serviceRoleKey: 'service',
 };
 
-function makeDeps(queue: QResult[], nowIso?: string): AutoPunchDeps {
-  const admin = createQueuedFromClient(queue);
+function makeDeps(queue: QResult[], nowIso?: string, calls?: QCall[]): AutoPunchDeps {
+  const admin = createQueuedFromClient(queue, calls);
   return {
     getEnv: () => baseEnv,
     createUserClient: () =>
@@ -55,6 +55,12 @@ function post() {
     },
     body: '{}',
   });
+}
+
+function mutationPayloads(calls: QCall[], table: string, op: string): Array<Record<string, unknown>> {
+  return calls
+    .filter((call) => call.table === table && call.op === op)
+    .map((call) => (call.payload ?? {}) as Record<string, unknown>);
 }
 
 Deno.test('OPTIONS returns 200', async () => {
@@ -625,4 +631,102 @@ Deno.test('no configured shift does not auto punch out when org policy is missin
   const b = (await json(res)) as { processed: number; total: number };
   assertEquals(b.processed, 0);
   assertEquals(b.total, 1);
+});
+
+Deno.test('dual-write auto punch-out: standard update writes check_out_at', async () => {
+  const calls: QCall[] = [];
+  const log = {
+    id: 'l-dual-auto',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '09:00',
+    check_in_at: '2025-06-04T06:00:00.000Z',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_schedule: null }, error: null },
+    {
+      data: {
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
+        auto_punch_out_buffer_minutes: 5,
+      },
+      error: null,
+    },
+    { data: null, error: null },
+    { data: null, error: null },
+    { data: null, error: null },
+  ];
+
+  const res = await handleAutoPunchOut(
+    post(),
+    makeDeps(q, '2025-06-04T15:20:00.000Z', calls)
+  );
+
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number };
+  assertEquals(b.processed, 1);
+  const [update] = mutationPayloads(calls, 'attendance_sessions', 'update');
+  assertEquals(update.check_out_time, '18:20');
+  assertEquals(update.check_out_at, '2025-06-04T15:20:00.000Z');
+});
+
+Deno.test('dual-write auto punch-out: late-stay split stitches timestamp columns', async () => {
+  const calls: QCall[] = [];
+  const log = {
+    id: 'l-dual-split',
+    user_id: 'u1',
+    org_id: 'o1',
+    date: '2025-06-04',
+    check_in_time: '09:00',
+    check_in_at: '2025-06-04T06:00:00.000Z',
+  };
+  const q: QResult[] = [
+    { data: [log], error: null },
+    { data: { work_schedule: null }, error: null },
+    {
+      data: {
+        work_schedule: {
+          '0': { start: '09:00', end: '18:00' },
+          '1': { start: '09:00', end: '18:00' },
+          '2': { start: '09:00', end: '18:00' },
+          '3': { start: '09:00', end: '18:00' },
+          '4': { start: '09:00', end: '18:00' },
+        },
+        auto_punch_out_buffer_minutes: 5,
+        minimum_overtime_minutes: 30,
+      },
+      error: null,
+    },
+    { data: null, error: null },
+    { data: { id: 'ot-dual-split' }, error: null },
+    { data: null, error: null },
+    { data: null, error: null },
+    { data: null, error: null },
+  ];
+
+  const res = await handleAutoPunchOut(
+    post(),
+    makeDeps(q, '2025-06-04T15:35:00.000Z', calls)
+  );
+
+  assertEquals(res.status, 200);
+  const b = (await json(res)) as { processed: number };
+  assertEquals(b.processed, 1);
+
+  const [update] = mutationPayloads(calls, 'attendance_sessions', 'update');
+  assertEquals(update.check_out_time, '18:00');
+  assertEquals(update.check_out_at, '2025-06-04T15:00:00.000Z');
+
+  const [insert] = mutationPayloads(calls, 'attendance_sessions', 'insert');
+  assertEquals(insert.check_in_time, '18:00');
+  assertEquals(insert.check_out_time, '18:35');
+  assertEquals(insert.check_in_at, '2025-06-04T15:00:00.000Z');
+  assertEquals(insert.check_out_at, '2025-06-04T15:35:00.000Z');
 });
