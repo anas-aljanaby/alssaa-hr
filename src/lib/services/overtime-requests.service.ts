@@ -15,6 +15,9 @@ export type ReviewerProfileSummary = Pick<Tables<'profiles'>, 'id' | 'name_ar' |
 export type OvertimeRequestWithSessionAndReviewer = OvertimeRequestWithSession & {
   reviewer_profile?: ReviewerProfileSummary | null;
 };
+export type ApproverOvertimeRequestOptions = {
+  excludeUserId?: string;
+};
 
 async function attachReviewerProfiles(
   rows: OvertimeRequestWithSession[]
@@ -46,6 +49,26 @@ const overtimeSelectWithSession = `
   attendance_sessions (*)
 `;
 
+function excludeUserIds(userIds: string[], options?: ApproverOvertimeRequestOptions): string[] {
+  if (!options?.excludeUserId) return userIds;
+  return userIds.filter((id) => id !== options.excludeUserId);
+}
+
+function isReviewableOvertimeRequest(row: OvertimeRequestWithSession): boolean {
+  return Boolean(row.attendance_sessions?.check_out_time);
+}
+
+function filterApproverOvertimeRequests(
+  rows: OvertimeRequestWithSession[],
+  options?: ApproverOvertimeRequestOptions
+): OvertimeRequestWithSession[] {
+  return rows.filter((row) => {
+    if (!isReviewableOvertimeRequest(row)) return false;
+    if (options?.excludeUserId && row.user_id === options.excludeUserId) return false;
+    return true;
+  });
+}
+
 export async function getOvertimeRequestsForUser(userId: string): Promise<OvertimeRequestWithSessionAndReviewer[]> {
   const { data, error } = await supabase
     .from('overtime_requests')
@@ -57,14 +80,18 @@ export async function getOvertimeRequestsForUser(userId: string): Promise<Overti
   return attachReviewerProfiles(rows);
 }
 
-export async function getDepartmentOvertimeRequests(departmentId: string): Promise<OvertimeRequestWithSessionAndReviewer[]> {
+export async function getDepartmentOvertimeRequests(
+  departmentId: string,
+  options?: ApproverOvertimeRequestOptions
+): Promise<OvertimeRequestWithSessionAndReviewer[]> {
   const { data: employees, error: empErr } = await supabase
     .from('profiles')
     .select('id')
     .eq('department_id', departmentId);
   if (empErr) throw empErr;
   if (!employees?.length) return [];
-  const userIds = employees.map((e) => e.id);
+  const userIds = excludeUserIds(employees.map((e) => e.id), options);
+  if (!userIds.length) return [];
   const { data, error } = await supabase
     .from('overtime_requests')
     .select(overtimeSelectWithSession)
@@ -72,17 +99,19 @@ export async function getDepartmentOvertimeRequests(departmentId: string): Promi
     .order('created_at', { ascending: false });
   if (error) throw error;
   const rows = (data ?? []) as unknown as OvertimeRequestWithSession[];
-  return attachReviewerProfiles(rows);
+  return attachReviewerProfiles(filterApproverOvertimeRequests(rows, options));
 }
 
-export async function getAllOvertimeRequests(): Promise<OvertimeRequestWithSessionAndReviewer[]> {
+export async function getAllOvertimeRequests(
+  options?: ApproverOvertimeRequestOptions
+): Promise<OvertimeRequestWithSessionAndReviewer[]> {
   const { data, error } = await supabase
     .from('overtime_requests')
     .select(overtimeSelectWithSession)
     .order('created_at', { ascending: false });
   if (error) throw error;
   const rows = (data ?? []) as unknown as OvertimeRequestWithSession[];
-  return attachReviewerProfiles(rows);
+  return attachReviewerProfiles(filterApproverOvertimeRequests(rows, options));
 }
 
 export async function updateOvertimeRequestStatus(
@@ -122,7 +151,10 @@ export async function updateOvertimeRequestStatus(
   return data;
 }
 
-export async function countPendingOvertimeRequests(departmentId?: string): Promise<number> {
+export async function countPendingOvertimeRequests(
+  departmentId?: string,
+  options?: ApproverOvertimeRequestOptions
+): Promise<number> {
   if (departmentId) {
     const { data: employees, error: empErr } = await supabase
       .from('profiles')
@@ -130,21 +162,24 @@ export async function countPendingOvertimeRequests(departmentId?: string): Promi
       .eq('department_id', departmentId);
     if (empErr) throw empErr;
     if (!employees?.length) return 0;
-    const userIds = employees.map((e) => e.id);
-    const { count, error } = await supabase
+    const userIds = excludeUserIds(employees.map((e) => e.id), options);
+    if (!userIds.length) return 0;
+    const { data, error } = await supabase
       .from('overtime_requests')
-      .select('*', { count: 'exact', head: true })
+      .select(overtimeSelectWithSession)
       .in('user_id', userIds)
       .eq('status', 'pending');
     if (error) throw error;
-    return count ?? 0;
+    const rows = (data ?? []) as unknown as OvertimeRequestWithSession[];
+    return filterApproverOvertimeRequests(rows, options).length;
   }
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('overtime_requests')
-    .select('*', { count: 'exact', head: true })
+    .select(overtimeSelectWithSession)
     .eq('status', 'pending');
   if (error) throw error;
-  return count ?? 0;
+  const rows = (data ?? []) as unknown as OvertimeRequestWithSession[];
+  return filterApproverOvertimeRequests(rows, options).length;
 }
 
 export type OvertimeRequestChangeEvent = {

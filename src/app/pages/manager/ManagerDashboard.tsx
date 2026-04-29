@@ -124,6 +124,7 @@ export function ManagerDashboard() {
     () => {
       if (!currentUser || employees.length === 0) return undefined;
       return requestsService.subscribeToAllRequests((event) => {
+        if (event.new.user_id === currentUser.uid) return;
         if (!employeeIds.has(event.new.user_id)) return;
         if (event.eventType === 'INSERT' && event.new.status === 'pending') {
           setPendingRequests((prev) => [event.new, ...prev]);
@@ -159,7 +160,9 @@ export function ManagerDashboard() {
         departmentsService.getDepartmentById(departmentId),
         profilesService.getDepartmentEmployees(departmentId),
         attendanceService.getDepartmentLogsForDate(departmentId, today),
-        requestsService.getPendingDepartmentRequests(departmentId),
+        requestsService.getPendingDepartmentRequests(departmentId, {
+          excludeUserId: currentUser?.uid,
+        }),
       ]);
       setLoadError(null);
       setDepartment(dept);

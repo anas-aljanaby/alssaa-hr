@@ -123,7 +123,9 @@ function MobileLayoutContent() {
           const reqs = await requestsService.getAllPendingRequests();
           setPendingApprovals(reqs.length);
         } else if (currentUser.role === 'manager' && currentUser.departmentId) {
-          const reqs = await requestsService.getPendingDepartmentRequests(currentUser.departmentId);
+          const reqs = await requestsService.getPendingDepartmentRequests(currentUser.departmentId, {
+            excludeUserId: currentUser.uid,
+          });
           setPendingApprovals(reqs.length);
         } else {
           setPendingApprovals(0);

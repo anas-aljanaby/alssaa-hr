@@ -79,6 +79,34 @@ describe('requests.service', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it('getDepartmentRequests excludes the current manager from approver queues', async () => {
+    sb.queueResult({ data: [{ id: 'e1' }, { id: 'mgr1' }], error: null });
+    sb.queueResult({
+      data: [
+        { ...baseReq, id: 'r-employee', user_id: 'e1' },
+        { ...baseReq, id: 'r-manager', user_id: 'mgr1' },
+      ],
+      error: null,
+    });
+    const { getDepartmentRequests } = await import('./requests.service');
+    const rows = await getDepartmentRequests('d1', { excludeUserId: 'mgr1' });
+    expect(rows.map((row) => row.id)).toEqual(['r-employee']);
+  });
+
+  it('getPendingDepartmentRequests excludes the current manager from approver queues', async () => {
+    sb.queueResult({ data: [{ id: 'e1' }, { id: 'mgr1' }], error: null });
+    sb.queueResult({
+      data: [
+        { ...baseReq, id: 'r-employee', user_id: 'e1' },
+        { ...baseReq, id: 'r-manager', user_id: 'mgr1' },
+      ],
+      error: null,
+    });
+    const { getPendingDepartmentRequests } = await import('./requests.service');
+    const rows = await getPendingDepartmentRequests('d1', { excludeUserId: 'mgr1' });
+    expect(rows.map((row) => row.id)).toEqual(['r-employee']);
+  });
+
   it('updateRequestStatus updates and inserts approval log', async () => {
     const updated = {
       ...baseReq,

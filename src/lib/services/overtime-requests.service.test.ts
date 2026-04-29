@@ -34,6 +34,13 @@ const sessionRow = {
   updated_at: '2025-06-11T19:00:00Z',
 };
 
+const openSessionRow = {
+  ...sessionRow,
+  id: 's-open',
+  check_out_time: null,
+  duration_minutes: 0,
+};
+
 describe('overtime-requests.service', () => {
   beforeEach(() => {
     sb.clearQueue();
@@ -68,6 +75,34 @@ describe('overtime-requests.service', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it('getDepartmentOvertimeRequests hides open overtime and excludes the current manager', async () => {
+    sb.queueResult({ data: [{ id: 'e1' }, { id: 'mgr1' }], error: null });
+    sb.queueResult({
+      data: [
+        { ...baseOt, id: 'ot-closed', user_id: 'e1', attendance_sessions: sessionRow },
+        { ...baseOt, id: 'ot-open', user_id: 'e1', attendance_sessions: openSessionRow },
+        { ...baseOt, id: 'ot-manager', user_id: 'mgr1', attendance_sessions: sessionRow },
+      ],
+      error: null,
+    });
+    const { getDepartmentOvertimeRequests } = await import('./overtime-requests.service');
+    const rows = await getDepartmentOvertimeRequests('d1', { excludeUserId: 'mgr1' });
+    expect(rows.map((row) => row.id)).toEqual(['ot-closed']);
+  });
+
+  it('getAllOvertimeRequests hides open overtime from approver queues', async () => {
+    sb.queueResult({
+      data: [
+        { ...baseOt, id: 'ot-closed', attendance_sessions: sessionRow },
+        { ...baseOt, id: 'ot-open', attendance_sessions: openSessionRow },
+      ],
+      error: null,
+    });
+    const { getAllOvertimeRequests } = await import('./overtime-requests.service');
+    const rows = await getAllOvertimeRequests();
+    expect(rows.map((row) => row.id)).toEqual(['ot-closed']);
+  });
+
   it('updateOvertimeRequestStatus updates pending row', async () => {
     sb.queueResult({
       data: [{ ...baseOt, status: 'approved' as const, reviewed_by: 'mgr1', note: 'ok' }],
@@ -80,8 +115,14 @@ describe('overtime-requests.service', () => {
 
   it('countPendingOvertimeRequests with department', async () => {
     sb.queueResult({ data: [{ id: 'e1' }], error: null });
-    sb.queueResult({ data: null, error: null, count: 2 });
+    sb.queueResult({
+      data: [
+        { ...baseOt, id: 'ot-closed', attendance_sessions: sessionRow },
+        { ...baseOt, id: 'ot-open', attendance_sessions: openSessionRow },
+      ],
+      error: null,
+    });
     const { countPendingOvertimeRequests } = await import('./overtime-requests.service');
-    expect(await countPendingOvertimeRequests('d1')).toBe(2);
+    expect(await countPendingOvertimeRequests('d1')).toBe(1);
   });
 });

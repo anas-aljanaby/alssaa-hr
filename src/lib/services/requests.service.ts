@@ -13,6 +13,9 @@ export type ApproverProfileSummary = Pick<Tables<'profiles'>, 'id' | 'name_ar' |
 export type LeaveRequestWithApprover = LeaveRequest & {
   approver_profile?: ApproverProfileSummary | null;
 };
+export type DepartmentRequestOptions = {
+  excludeUserId?: string;
+};
 
 async function attachApproverProfiles(
   requests: LeaveRequest[]
@@ -42,6 +45,19 @@ async function attachApproverProfiles(
     ...request,
     approver_profile: request.approver_id ? approverMap.get(request.approver_id) ?? null : null,
   }));
+}
+
+function excludeUserIds(userIds: string[], options?: DepartmentRequestOptions): string[] {
+  if (!options?.excludeUserId) return userIds;
+  return userIds.filter((id) => id !== options.excludeUserId);
+}
+
+function excludeRequests(
+  requests: LeaveRequest[],
+  options?: DepartmentRequestOptions
+): LeaveRequest[] {
+  if (!options?.excludeUserId) return requests;
+  return requests.filter((request) => request.user_id !== options.excludeUserId);
 }
 
 export async function submitRequest(
@@ -89,7 +105,8 @@ export async function getUserRequestsByStatus(
 }
 
 export async function getDepartmentRequests(
-  departmentId: string
+  departmentId: string,
+  options?: DepartmentRequestOptions
 ): Promise<LeaveRequest[]> {
   const { data: employees, error: empErr } = await supabase
     .from('profiles')
@@ -99,7 +116,8 @@ export async function getDepartmentRequests(
   if (empErr) throw empErr;
   if (!employees?.length) return [];
 
-  const userIds = employees.map((e) => e.id);
+  const userIds = excludeUserIds(employees.map((e) => e.id), options);
+  if (!userIds.length) return [];
 
   const { data, error } = await supabase
     .from('leave_requests')
@@ -108,11 +126,12 @@ export async function getDepartmentRequests(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return attachApproverProfiles(data ?? []);
+  return attachApproverProfiles(excludeRequests(data ?? [], options));
 }
 
 export async function getPendingDepartmentRequests(
-  departmentId: string
+  departmentId: string,
+  options?: DepartmentRequestOptions
 ): Promise<LeaveRequest[]> {
   const { data: employees, error: empErr } = await supabase
     .from('profiles')
@@ -122,7 +141,8 @@ export async function getPendingDepartmentRequests(
   if (empErr) throw empErr;
   if (!employees?.length) return [];
 
-  const userIds = employees.map((e) => e.id);
+  const userIds = excludeUserIds(employees.map((e) => e.id), options);
+  if (!userIds.length) return [];
 
   const { data, error } = await supabase
     .from('leave_requests')
@@ -132,7 +152,7 @@ export async function getPendingDepartmentRequests(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return attachApproverProfiles(data ?? []);
+  return attachApproverProfiles(excludeRequests(data ?? [], options));
 }
 
 export async function updateRequestStatus(
@@ -301,7 +321,10 @@ export function subscribeToAllRequests(
   };
 }
 
-export async function countPendingRequests(departmentId?: string): Promise<number> {
+export async function countPendingRequests(
+  departmentId?: string,
+  options?: DepartmentRequestOptions
+): Promise<number> {
   if (departmentId) {
     const { data: employees, error: empErr } = await supabase
       .from('profiles')
@@ -311,7 +334,8 @@ export async function countPendingRequests(departmentId?: string): Promise<numbe
     if (empErr) throw empErr;
     if (!employees?.length) return 0;
 
-    const userIds = employees.map((e) => e.id);
+    const userIds = excludeUserIds(employees.map((e) => e.id), options);
+    if (!userIds.length) return 0;
 
     const { count, error } = await supabase
       .from('leave_requests')

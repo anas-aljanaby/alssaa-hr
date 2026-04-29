@@ -84,8 +84,12 @@ export function ApprovalsPage() {
       } else {
         const [emps, reqs, ot] = await Promise.all([
           profilesService.getDepartmentEmployees(currentUser.departmentId!),
-          requestsService.getDepartmentRequests(currentUser.departmentId!),
-          overtimeRequestsService.getDepartmentOvertimeRequests(currentUser.departmentId!),
+          requestsService.getDepartmentRequests(currentUser.departmentId!, {
+            excludeUserId: currentUser.uid,
+          }),
+          overtimeRequestsService.getDepartmentOvertimeRequests(currentUser.departmentId!, {
+            excludeUserId: currentUser.uid,
+          }),
         ]);
         setEmployees(emps);
         setRequests(reqs);
@@ -108,6 +112,7 @@ export function ApprovalsPage() {
       if (!currentUser) return undefined;
       if (!isAdmin && employees.length === 0) return undefined;
       return requestsService.subscribeToAllRequests((event) => {
+        if (!isAdmin && event.new.user_id === currentUser.uid) return;
         if (!isAdmin && !employeeIds.has(event.new.user_id)) return;
         if (event.eventType === 'INSERT') {
           setRequests((prev) => [event.new, ...prev]);
@@ -126,6 +131,7 @@ export function ApprovalsPage() {
       if (!currentUser) return undefined;
       if (!isAdmin && employees.length === 0) return undefined;
       return overtimeRequestsService.subscribeToAllOvertimeRequests((event) => {
+        if (!isAdmin && event.new.user_id === currentUser.uid) return;
         if (!isAdmin && !employeeIds.has(event.new.user_id)) return;
         void loadData();
       });
