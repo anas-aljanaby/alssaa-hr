@@ -162,32 +162,29 @@ function currentSecondsOfDay(d: Date): number {
   return local.getUTCHours() * 3600 + local.getUTCMinutes() * 60 + local.getUTCSeconds();
 }
 
-function fromMinutes(min: number): number {
-  if (min < 0) return min + 1440;
-  if (min >= 1440) return min - 1440;
-  return min;
-}
-
 function fromSeconds(sec: number): number {
   if (sec < 0) return sec + 86400;
   if (sec >= 86400) return sec - 86400;
   return sec;
 }
 
-function diffMinutes(checkInTime: string, checkOutTime: string): number {
-  const minutes = toMinutes(checkOutTime) - toMinutes(checkInTime);
-  return minutes >= 0 ? minutes : minutes + 1440;
+/** Whole-minute span between two timestamps. */
+export function diffMinutesFromTimestamps(checkInAt: Date, checkOutAt: Date): number {
+  return Math.round((checkOutAt.getTime() - checkInAt.getTime()) / 60000);
 }
 
 /**
  * Combine a Baghdad-local YYYY-MM-DD date and HH:MM time into a UTC ISO timestamp.
- * Used by the dual-write path to produce check_in_at / check_out_at values; once
- * Phase 3 readers migrate, callers should prefer real Date math instead.
+ * Used to anchor a shift HH:MM schedule to the calendar date the session belongs to.
  */
 export function localDateTimeToUtcIso(dateStr: string, timeHHMM: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const [hh, mm] = timeHHMM.split(':').map(Number);
   return new Date(Date.UTC(y, m - 1, d, hh, mm) - 3 * 3600 * 1000).toISOString();
+}
+
+export function localDateTimeToDate(dateStr: string, timeHHMM: string): Date {
+  return new Date(localDateTimeToUtcIso(dateStr, timeHHMM));
 }
 
 export function addMinutesIso(iso: string, minutes: number): string {
@@ -201,6 +198,27 @@ export function addMinutesIso(iso: string, minutes: number): string {
 export function sessionCheckInAt(s: { check_in_at?: string | null; date?: string | null; check_in_time: string }): string {
   if (s.check_in_at) return s.check_in_at;
   return localDateTimeToUtcIso(s.date ?? '', s.check_in_time);
+}
+
+/**
+ * Resolve shiftStartAt / shiftEndAt timestamps for a given session date and
+ * HH:MM schedule. For overnight shifts (end <= start) the end is bumped to the
+ * next calendar day so the returned interval is always non-empty.
+ */
+export function resolveShiftBounds(
+  sessionDate: string,
+  workStartTime: string | null,
+  workEndTime: string | null
+): { shiftStartAt: Date | null; shiftEndAt: Date | null } {
+  if (!workStartTime || !workEndTime) {
+    return { shiftStartAt: null, shiftEndAt: null };
+  }
+  const startAt = localDateTimeToDate(sessionDate, workStartTime);
+  let endAt = localDateTimeToDate(sessionDate, workEndTime);
+  if (endAt.getTime() <= startAt.getTime()) {
+    endAt = new Date(endAt.getTime() + 24 * 3600 * 1000);
+  }
+  return { shiftStartAt: startAt, shiftEndAt: endAt };
 }
 
 /** Late-stay: regular session extends past shift end → split into regular [check_in, shiftEnd] + OT [shiftEnd, checkout]. */
@@ -218,88 +236,78 @@ export function shouldKeepOvertimeSession(
   return durationMinutes >= normalizeMinimumOvertimeMinutes(minimumOvertimeMinutes);
 }
 
-function fromMinutesHHMM(min: number): string {
-  const wrapped = ((min % 1440) + 1440) % 1440;
-  const h = Math.floor(wrapped / 60);
-  const m = wrapped % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
 export type OvertimeSegment = {
   type: 'overtime' | 'regular';
-  checkIn: string;
-  checkOut: string;
+  checkInAt: Date;
+  checkOutAt: Date;
   durationMinutes: number;
 };
 
 /**
- * Splits a closed overtime session that overlaps a regular shift on its date
- * into the pre-shift OT, regular shift, and post-shift OT segments.
+ * Splits a closed overtime session that overlaps a regular shift into pre-shift
+ * OT, in-shift regular, and post-shift OT segments. Operates purely on
+ * timestamps so overnight shifts and multi-day spans work naturally.
  *
  * Returns a single-element array (the original OT) when no split applies:
- * - shift unset, or shift is overnight (end <= start in minutes)
- * - session crosses midnight (checkOut <= checkIn in minutes)
- * - session does not overlap the shift window
+ * - shift bounds unset, or
+ * - session does not overlap the shift window.
  */
 export function resolveOvertimeSessionSplit(input: {
-  checkIn: string;
-  checkOut: string;
-  workStartTime: string | null;
-  workEndTime: string | null;
+  checkInAt: Date;
+  checkOutAt: Date;
+  shiftStartAt: Date | null;
+  shiftEndAt: Date | null;
   minimumOvertimeMinutes?: number | null;
 }): OvertimeSegment[] {
   const original: OvertimeSegment[] = [
     {
       type: 'overtime',
-      checkIn: input.checkIn,
-      checkOut: input.checkOut,
-      durationMinutes: diffMinutes(input.checkIn, input.checkOut),
+      checkInAt: input.checkInAt,
+      checkOutAt: input.checkOutAt,
+      durationMinutes: diffMinutesFromTimestamps(input.checkInAt, input.checkOutAt),
     },
   ];
 
-  if (!input.workStartTime || !input.workEndTime) return original;
+  if (!input.shiftStartAt || !input.shiftEndAt) return original;
 
-  const shiftStartM = toMinutes(input.workStartTime);
-  const shiftEndM = toMinutes(input.workEndTime);
-  if (shiftEndM <= shiftStartM) return original; // overnight shift — out of scope
+  const checkInMs = input.checkInAt.getTime();
+  const checkOutMs = input.checkOutAt.getTime();
+  const shiftStartMs = input.shiftStartAt.getTime();
+  const shiftEndMs = input.shiftEndAt.getTime();
 
-  const checkInM = toMinutes(input.checkIn);
-  const checkOutM = toMinutes(input.checkOut);
-  if (checkOutM <= checkInM) return original; // session crosses midnight — out of scope
-
-  if (checkOutM <= shiftStartM || checkInM >= shiftEndM) return original; // no overlap
+  if (checkOutMs <= shiftStartMs || checkInMs >= shiftEndMs) return original;
 
   const minOt = normalizeMinimumOvertimeMinutes(input.minimumOvertimeMinutes);
   const segments: OvertimeSegment[] = [];
 
-  if (checkInM < shiftStartM) {
-    const dur = shiftStartM - checkInM;
+  if (checkInMs < shiftStartMs) {
+    const dur = Math.round((shiftStartMs - checkInMs) / 60000);
     if (dur >= minOt) {
       segments.push({
         type: 'overtime',
-        checkIn: input.checkIn,
-        checkOut: input.workStartTime,
+        checkInAt: input.checkInAt,
+        checkOutAt: input.shiftStartAt,
         durationMinutes: dur,
       });
     }
   }
 
-  const regStart = Math.max(checkInM, shiftStartM);
-  const regEnd = Math.min(checkOutM, shiftEndM);
+  const regStartMs = Math.max(checkInMs, shiftStartMs);
+  const regEndMs = Math.min(checkOutMs, shiftEndMs);
   segments.push({
     type: 'regular',
-    checkIn: fromMinutesHHMM(regStart),
-    checkOut: fromMinutesHHMM(regEnd),
-    durationMinutes: regEnd - regStart,
+    checkInAt: new Date(regStartMs),
+    checkOutAt: new Date(regEndMs),
+    durationMinutes: Math.round((regEndMs - regStartMs) / 60000),
   });
 
-  if (checkOutM > shiftEndM) {
-    const dur = checkOutM - shiftEndM;
+  if (checkOutMs > shiftEndMs) {
+    const dur = Math.round((checkOutMs - shiftEndMs) / 60000);
     if (dur >= minOt) {
       segments.push({
         type: 'overtime',
-        checkIn: input.workEndTime,
-        checkOut: input.checkOut,
+        checkInAt: input.shiftEndAt,
+        checkOutAt: input.checkOutAt,
         durationMinutes: dur,
       });
     }
@@ -311,68 +319,62 @@ export function resolveOvertimeSessionSplit(input: {
 export function resolveCheckoutOvertimeHandling(input: {
   hasShift: boolean;
   isWorkingDay: boolean;
-  workStartTime?: string | null;
-  workEndTime: string | null;
+  shiftStartAt: Date | null;
+  shiftEndAt: Date | null;
   openSessionIsOvertime: boolean;
-  openSessionCheckInTime: string;
-  checkoutTime: string;
+  checkInAt: Date;
+  checkoutAt: Date;
   minimumOvertimeMinutes?: number | null;
 }): {
   shouldSplitOvertime: boolean;
-  regularCheckOutTime: string;
+  regularCheckOutAt: Date;
   regularDurationMinutes: number;
   overtimeDurationMinutes: number;
-  shiftEndTime: string | null;
+  shiftEndAt: Date | null;
 } {
-  const actualDurationMinutes = diffMinutes(input.openSessionCheckInTime, input.checkoutTime);
+  const actualDurationMinutes = diffMinutesFromTimestamps(input.checkInAt, input.checkoutAt);
 
-  if (!input.hasShift || !input.isWorkingDay || !input.workEndTime || input.openSessionIsOvertime) {
+  if (!input.hasShift || !input.isWorkingDay || !input.shiftEndAt || input.openSessionIsOvertime) {
     return {
       shouldSplitOvertime: false,
-      regularCheckOutTime: input.checkoutTime,
+      regularCheckOutAt: input.checkoutAt,
       regularDurationMinutes: actualDurationMinutes,
       overtimeDurationMinutes: 0,
-      shiftEndTime: input.workEndTime,
+      shiftEndAt: input.shiftEndAt,
     };
   }
 
-  const overnight = !!input.workStartTime && toMinutes(input.workEndTime) < toMinutes(input.workStartTime);
-  const norm = (t: string) => {
-    if (!overnight || !input.workStartTime) return toMinutes(t);
-    const m = toMinutes(t);
-    return m < toMinutes(input.workStartTime) ? m + 1440 : m;
-  };
-  const normShiftEnd = norm(input.workEndTime);
-  const normCheckout = norm(input.checkoutTime);
-  const normCheckIn = norm(input.openSessionCheckInTime);
+  const checkInMs = input.checkInAt.getTime();
+  const checkoutMs = input.checkoutAt.getTime();
+  const shiftEndMs = input.shiftEndAt.getTime();
 
-  if (normCheckout <= normShiftEnd || normCheckIn >= normShiftEnd) {
+  if (checkoutMs <= shiftEndMs || checkInMs >= shiftEndMs) {
     return {
       shouldSplitOvertime: false,
-      regularCheckOutTime: input.checkoutTime,
+      regularCheckOutAt: input.checkoutAt,
       regularDurationMinutes: actualDurationMinutes,
       overtimeDurationMinutes: 0,
-      shiftEndTime: input.workEndTime,
+      shiftEndAt: input.shiftEndAt,
     };
   }
 
-  const overtimeDurationMinutes = diffMinutes(input.workEndTime, input.checkoutTime);
+  const overtimeDurationMinutes = Math.round((checkoutMs - shiftEndMs) / 60000);
   if (!shouldKeepOvertimeSession(overtimeDurationMinutes, input.minimumOvertimeMinutes)) {
     return {
       shouldSplitOvertime: false,
-      regularCheckOutTime: input.checkoutTime,
+      regularCheckOutAt: input.checkoutAt,
       regularDurationMinutes: actualDurationMinutes,
       overtimeDurationMinutes: 0,
-      shiftEndTime: input.workEndTime,
+      shiftEndAt: input.shiftEndAt,
     };
   }
 
   return {
     shouldSplitOvertime: true,
-    regularCheckOutTime: input.workEndTime,
-    regularDurationMinutes: diffMinutes(input.openSessionCheckInTime, input.workEndTime),
+    regularCheckOutAt: input.shiftEndAt,
+    regularDurationMinutes: Math.round((shiftEndMs - checkInMs) / 60000),
     overtimeDurationMinutes,
-    shiftEndTime: input.workEndTime,
+    shiftEndAt: input.shiftEndAt,
   };
 }
 
@@ -498,6 +500,13 @@ function resolveEffectiveStatus(
   return null;
 }
 
+/**
+ * Day-of-belonging rule: a session contributes to exactly one daily summary,
+ * the one for `check_in_at::date` in Asia/Baghdad. Cross-midnight sessions are
+ * NOT split across two summaries (see "Out of Scope" in the timestamp
+ * migration plan). Ordering uses `check_in_at` so multiple sessions on the
+ * same belonging-date sort by their actual instant, not just their HH:MM.
+ */
 export async function recalculateDailySummary(
   admin: PunchServiceClient,
   input: {
@@ -513,7 +522,7 @@ export async function recalculateDailySummary(
     .select('*')
     .eq('user_id', userId)
     .eq('date', dateStr)
-    .order('check_in_time', { ascending: true });
+    .order('check_in_at', { ascending: true });
 
   const sessions = (sessionsRaw ?? []) as SessionRow[];
   const totalWorkMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
@@ -525,9 +534,18 @@ export async function recalculateDailySummary(
   const lastCheckOut = sessions
     .filter((s) => !!s.check_out_time)
     .map((s) => {
-      const outMin = toMinutes(s.check_out_time as string);
-      const inMin = toMinutes(s.check_in_time);
-      return { time: s.check_out_time as string, sortKey: outMin < inMin ? outMin + 1440 : outMin };
+      const time = s.check_out_time as string;
+      let sortKey: number;
+      if (s.check_out_at) {
+        sortKey = new Date(s.check_out_at).getTime();
+      } else {
+        const baseDate = s.date ?? dateStr;
+        const wrapsMidnight = toMinutes(time) < toMinutes(s.check_in_time);
+        sortKey =
+          new Date(localDateTimeToUtcIso(baseDate, time)).getTime() +
+          (wrapsMidnight ? 24 * 3600 * 1000 : 0);
+      }
+      return { time, sortKey };
     })
     .sort((a, b) => a.sortKey - b.sortKey)
     .at(-1)?.time ?? null;
@@ -744,20 +762,27 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       );
     }
     const openSessionDate = openSession.date ?? today;
+    const openSessionCheckInDate = new Date(sessionCheckInAt(openSession));
+    const checkoutAt = effectiveNow;
+    const { shiftStartAt: sessionShiftStartAt, shiftEndAt: sessionShiftEndAt } = resolveShiftBounds(
+      openSessionDate,
+      sessionSchedule.workStartTime,
+      sessionSchedule.workEndTime
+    );
 
     const checkoutHandling = resolveCheckoutOvertimeHandling({
       hasShift: sessionSchedule.hasShift,
       isWorkingDay: sessionSchedule.isWorkingDay,
-      workStartTime: sessionSchedule.workStartTime,
-      workEndTime: sessionSchedule.workEndTime,
+      shiftStartAt: sessionShiftStartAt,
+      shiftEndAt: sessionShiftEndAt,
       openSessionIsOvertime: openSession.is_overtime,
-      openSessionCheckInTime: openSession.check_in_time,
-      checkoutTime: time,
+      checkInAt: openSessionCheckInDate,
+      checkoutAt,
       minimumOvertimeMinutes: policy?.minimum_overtime_minutes,
     });
 
     if (openSession.is_overtime) {
-      const overtimeDurationMinutes = diffMinutes(openSession.check_in_time, time);
+      const overtimeDurationMinutes = diffMinutesFromTimestamps(openSessionCheckInDate, checkoutAt);
       if (!shouldKeepOvertimeSession(overtimeDurationMinutes, policy?.minimum_overtime_minutes)) {
         await admin
           .from('overtime_requests')
@@ -799,10 +824,10 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       // worker doesn't end up with a single 16h-OT block and an "absent" day.
       if (sessionSchedule.hasShift && sessionSchedule.isWorkingDay) {
         const segments = resolveOvertimeSessionSplit({
-          checkIn: openSession.check_in_time,
-          checkOut: time,
-          workStartTime: sessionSchedule.workStartTime,
-          workEndTime: sessionSchedule.workEndTime,
+          checkInAt: openSessionCheckInDate,
+          checkOutAt: checkoutAt,
+          shiftStartAt: sessionShiftStartAt,
+          shiftEndAt: sessionShiftEndAt,
           minimumOvertimeMinutes: policy?.minimum_overtime_minutes,
         });
 
@@ -825,24 +850,17 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           }
 
           const grace = policy?.grace_period_minutes ?? 15;
-          const shiftStartM = sessionSchedule.workStartTime
-            ? toMinutes(sessionSchedule.workStartTime)
-            : 0;
+          const shiftStartMs = sessionShiftStartAt?.getTime() ?? null;
           const insertedSegments: SessionRow[] = [];
-          let segmentCursorAt = sessionCheckInAt(openSession);
 
           for (const seg of segments) {
             const isOt = seg.type === 'overtime';
-            const segStartM = toMinutes(seg.checkIn);
+            const segStartMs = seg.checkInAt.getTime();
             const segStatus: 'present' | 'late' = isOt
               ? 'present'
-              : segStartM > shiftStartM + grace
+              : shiftStartMs !== null && segStartMs > shiftStartMs + grace * 60000
                 ? 'late'
                 : 'present';
-
-            const segCheckInAt = segmentCursorAt;
-            const segCheckOutAt = addMinutesIso(segCheckInAt, seg.durationMinutes);
-            segmentCursorAt = segCheckOutAt;
 
             const { data: inserted, error: insErr } = await admin
               .from('attendance_sessions')
@@ -850,10 +868,10 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
                 org_id: orgId,
                 user_id: caller.id,
                 date: openSessionDate,
-                check_in_time: seg.checkIn,
-                check_out_time: seg.checkOut,
-                check_in_at: segCheckInAt,
-                check_out_at: segCheckOutAt,
+                check_in_time: toTimeStr(seg.checkInAt),
+                check_out_time: toTimeStr(seg.checkOutAt),
+                check_in_at: seg.checkInAt.toISOString(),
+                check_out_at: seg.checkOutAt.toISOString(),
                 status: segStatus,
                 is_overtime: isOt,
                 duration_minutes: seg.durationMinutes,
@@ -902,17 +920,17 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       }
     }
 
-    if (checkoutHandling.shouldSplitOvertime && checkoutHandling.shiftEndTime) {
+    if (checkoutHandling.shouldSplitOvertime && checkoutHandling.shiftEndAt) {
       const regularDuration = checkoutHandling.regularDurationMinutes;
       const otDuration = checkoutHandling.overtimeDurationMinutes;
-      const openSessionCheckInAt = sessionCheckInAt(openSession);
-      const shiftBoundaryAt = addMinutesIso(openSessionCheckInAt, regularDuration);
+      const shiftBoundaryAt = checkoutHandling.regularCheckOutAt;
+      const shiftBoundaryTime = toTimeStr(shiftBoundaryAt);
 
       const { data: updatedRegular, error: errRegular } = await admin
         .from('attendance_sessions')
         .update({
-          check_out_time: checkoutHandling.shiftEndTime,
-          check_out_at: shiftBoundaryAt,
+          check_out_time: shiftBoundaryTime,
+          check_out_at: shiftBoundaryAt.toISOString(),
           duration_minutes: regularDuration,
           is_early_departure: false,
           is_auto_punch_out: false,
@@ -936,9 +954,9 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
           org_id: orgId,
           user_id: caller.id,
           date: openSessionDate,
-          check_in_time: checkoutHandling.shiftEndTime,
+          check_in_time: shiftBoundaryTime,
           check_out_time: time,
-          check_in_at: shiftBoundaryAt,
+          check_in_at: shiftBoundaryAt.toISOString(),
           check_out_at: effectiveNow.toISOString(),
           status: 'present',
           is_overtime: true,
@@ -982,17 +1000,10 @@ export async function handlePunch(req: Request, deps: PunchDeps): Promise<Respon
       );
     }
 
-    const durationMinutes = diffMinutes(openSession.check_in_time, time);
+    const durationMinutes = diffMinutesFromTimestamps(openSessionCheckInDate, checkoutAt);
     const isEarlyDeparture = (() => {
-      if (!sessionSchedule.hasShift || !sessionSchedule.isWorkingDay || openSession.is_overtime || !sessionSchedule.workEndTime) return false;
-      const tMin = toMinutes(time);
-      const endMin = toMinutes(sessionSchedule.workEndTime);
-      if (!sessionSchedule.workStartTime) return tMin < endMin;
-      const startMin = toMinutes(sessionSchedule.workStartTime);
-      const isOvernightShift = endMin < startMin;
-      if (!isOvernightShift) return tMin < endMin;
-      // Overnight: not early only when past shift end on day-2 side (tMin >= endMin && tMin < startMin)
-      return !(tMin >= endMin && tMin < startMin);
+      if (!sessionSchedule.hasShift || !sessionSchedule.isWorkingDay || openSession.is_overtime || !sessionShiftEndAt) return false;
+      return checkoutAt.getTime() < sessionShiftEndAt.getTime();
     })();
 
     const { data: updated, error } = await admin

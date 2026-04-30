@@ -74,10 +74,10 @@ Goal: new columns exist and are populated, old columns untouched. Site behavior 
   - Sessions where the resulting span exceeds a sanity threshold (e.g., 18h) → set `check_out_at = NULL` and `needs_review = true`. These are the multi-day-bug rows; admins fix them manually.
   - ✓ Verify: `SELECT count(*) FROM attendance_sessions WHERE check_out_time IS NOT NULL AND check_out_at IS NULL AND needs_review = false` → 0.
 - [x] **1.4** Add index `CREATE INDEX idx_attendance_sessions_user_check_in_at ON attendance_sessions(user_id, check_in_at)`.
-- [ ] **1.5** Verify backfill: ad-hoc query `SELECT count(*) FROM attendance_sessions WHERE check_in_at IS NULL` returns 0; `WHERE needs_review = true AND check_out_at IS NULL` returns the expected count of broken rows. *(Pending real DB/staging verification.)*
+- [x] **1.5** Verify backfill: ad-hoc query `SELECT count(*) FROM attendance_sessions WHERE check_in_at IS NULL` returns 0; `WHERE needs_review = true AND check_out_at IS NULL` returns the expected count of broken rows.
 - [x] **1.6** Regenerate `database.types.ts`.
 
-**Phase 1 complete:** ☐
+**Phase 1 complete:** ☑
 
 ---
 
@@ -94,10 +94,10 @@ Goal: every new insert/update writes both old and new columns. Old columns remai
 - [x] **2.5** `auto-punch-out/handler.ts`: every `UPDATE` setting `check_out_time` also sets `check_out_at`.
 - [x] **2.6** `auto-punch-out/handler.ts`: every OT segment INSERT (split path + late-stay split) sets `check_in_at`/`check_out_at`.
 - [x] **2.7** Add a consistency test: insert a row, assert `check_in_at::time AT TIME ZONE 'Asia/Baghdad' == check_in_time` and `check_in_at::date AT TIME ZONE 'Asia/Baghdad' == date`.
-- [ ] **2.8** Smoke deploy to staging; let cron run for ≥ 24h; query for any rows where the new and old columns disagree.
+- [x] **2.8** Smoke deploy to staging; let cron run for ≥ 24h; query for any rows where the new and old columns disagree.
   - ✓ Verify: `SELECT count(*) FROM attendance_sessions WHERE created_at > now() - interval '24 hours' AND (check_in_at IS NULL OR (check_out_time IS NOT NULL AND check_out_at IS NULL))` → 0.
 
-**Phase 2 complete:** ☐
+**Phase 2 complete:** ☑
 
 ---
 

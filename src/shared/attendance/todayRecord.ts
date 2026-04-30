@@ -27,8 +27,16 @@ interface TodaySummaryLike {
 
 interface TodaySessionLike {
   date?: string;
+  check_out_at?: string | null;
+  /** Legacy column — kept as a fallback for fixtures that haven't migrated yet. */
   check_out_time?: string | null;
   is_overtime?: boolean | null;
+}
+
+function sessionIsClosed(session: TodaySessionLike): boolean {
+  if (session.check_out_at !== undefined && session.check_out_at !== null) return true;
+  if (session.check_out_time !== undefined && session.check_out_time !== null) return true;
+  return false;
 }
 
 export interface TodayRecordStatusLike {
@@ -38,7 +46,7 @@ export interface TodayRecordStatusLike {
 }
 
 export function getTodayRecordLivePresence(record: TodayRecordStatusLike): LivePresence {
-  if (record.sessions?.some((session) => !session.check_out_time)) return 'checked_in';
+  if (record.sessions?.some((session) => !sessionIsClosed(session))) return 'checked_in';
   if ((record.sessions?.length ?? 0) > 0) return 'checked_out';
   return 'no_session';
 }

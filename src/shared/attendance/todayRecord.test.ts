@@ -30,7 +30,7 @@ describe('todayRecord shift window helpers', () => {
       sessions: [
         {
           date: '2025-06-10',
-          check_out_time: null,
+          check_out_at: null,
         },
       ],
     };
