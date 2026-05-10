@@ -248,6 +248,54 @@ function toMinutes(t: string): number {
   return h * 60 + m;
 }
 
+/**
+ * Convert a Baghdad-local YYYY-MM-DD + HH:MM into a UTC ms epoch. Used as a
+ * fallback when a session row is missing `check_in_at` / `check_out_at`
+ * (test fixtures, edge-case legacy rows that escaped the Phase 1 backfill).
+ */
+function localDateTimeToMs(dateStr: string | null | undefined, timeStr: string | null | undefined): number {
+  if (!dateStr || !timeStr) return Number.NaN;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const hm = timeStr.includes('T') ? timeStr.slice(11, 16) : timeStr.slice(0, 5);
+  const [hh, mm] = hm.split(':').map(Number);
+  return Date.UTC(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0) - 3 * 3600 * 1000;
+}
+
+function sessionCheckInMs(s: { check_in_at?: string | null; date?: string | null; check_in_time?: string | null }): number {
+  if (s.check_in_at) {
+    const t = Date.parse(s.check_in_at);
+    if (!Number.isNaN(t)) return t;
+  }
+  return localDateTimeToMs(s.date, s.check_in_time);
+}
+
+function sessionCheckOutMs(s: {
+  check_out_at?: string | null;
+  date?: string | null;
+  check_in_time?: string | null;
+  check_out_time?: string | null;
+}): number {
+  if (s.check_out_at) {
+    const t = Date.parse(s.check_out_at);
+    if (!Number.isNaN(t)) return t;
+  }
+  if (!s.check_out_time) return Number.NaN;
+  // Legacy fallback: if check_out_time < check_in_time wall-clock, treat as next day.
+  const checkInM = wallTimeToMinutes(s.check_in_time);
+  const checkOutM = wallTimeToMinutes(s.check_out_time);
+  const baseMs = localDateTimeToMs(s.date, s.check_out_time);
+  if (Number.isFinite(checkInM) && Number.isFinite(checkOutM) && checkOutM < checkInM) {
+    return baseMs + 24 * 3600 * 1000;
+  }
+  return baseMs;
+}
+
+function sessionIsOpen(s: { check_out_at?: string | null; check_out_time?: string | null }): boolean {
+  if (s.check_out_at !== undefined && s.check_out_at !== null) return false;
+  if (s.check_out_time !== undefined && s.check_out_time !== null) return false;
+  return true;
+}
+
 /** Wall clock minutes from DB time strings (HH:MM or ISO datetime). */
 export function wallTimeToMinutes(time: string | null | undefined): number {
   if (!time) return NaN;
@@ -273,18 +321,18 @@ export function doesCheckOutCrossDay(
 }
 
 export function getLatestCheckOutTime(
-  sessions: Array<Pick<AttendanceSession, 'check_in_time' | 'check_out_time'>>
+  sessions: Array<Pick<AttendanceSession, 'check_in_time' | 'check_out_time' | 'check_out_at' | 'date'>>
 ): string | null {
   return sessions
     .filter(
-      (session): session is Pick<AttendanceSession, 'check_in_time'> & { check_out_time: string } =>
-        !!session.check_out_time
+      (session): session is Pick<AttendanceSession, 'check_in_time' | 'date'> & {
+        check_out_time: string;
+        check_out_at?: string | null;
+      } => !!session.check_out_time
     )
     .map((session) => ({
       time: session.check_out_time,
-      sortKey: doesCheckOutCrossDay(session.check_in_time, session.check_out_time)
-        ? wallTimeToMinutes(session.check_out_time) + 1440
-        : wallTimeToMinutes(session.check_out_time),
+      sortKey: sessionCheckOutMs(session),
     }))
     .sort((a, b) => a.sortKey - b.sortKey)
     .at(-1)?.time ?? null;
@@ -309,9 +357,9 @@ export function totalWorkedMinutesToday(today: TodayRecord): number {
 export function getOpenSessionCheckInTime(today: TodayRecord): string | null {
   const sessions = today.sessions;
   if (!sessions?.length) return null;
-  const open = sessions.filter((s) => s.check_out_time == null);
+  const open = sessions.filter(sessionIsOpen);
   if (!open.length) return null;
-  const sorted = [...open].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const sorted = [...open].sort((a, b) => sessionCheckInMs(a) - sessionCheckInMs(b));
   return sorted[sorted.length - 1]!.check_in_time;
 }
 
@@ -337,7 +385,7 @@ export interface TodayPunchUiState {
 export function getTodayPunchUiState(today: TodayRecord, at: Date = new Date()): TodayPunchUiState {
   const { shift } = today;
   const currentMinutes = at.getHours() * 60 + at.getMinutes();
-  const activeSession = today.sessions?.find((session) => !session.check_out_time) ?? null;
+  const activeSession = today.sessions?.find(sessionIsOpen) ?? null;
   // `shift === null` means today is an off day (or no policy found): any
   // punch is overtime.
   const normalizedShift = shift
@@ -384,7 +432,7 @@ export function shouldShowShiftCongrats(today: TodayRecord, _at: Date = new Date
   const worked = totalWorkedMinutesToday(today);
   if (worked <= 0) return false;
   const hasClosedSession =
-    !!today.summary?.last_check_out || (today.sessions?.some((s) => !!s.check_out_time) ?? false);
+    !!today.summary?.last_check_out || (today.sessions?.some((s) => !sessionIsOpen(s)) ?? false);
   if (!hasClosedSession) return false;
   return isShiftRequirementMet(shift, worked);
 }
@@ -409,7 +457,7 @@ export function isOvertimeTime(timeMinutes: number, shift: ShiftInfo): boolean {
 
 function buildPunchesFromSessions(sessions: AttendanceSession[]): PunchEntry[] {
   const punches: PunchEntry[] = [];
-  const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const sorted = [...sessions].sort((a, b) => sessionCheckInMs(a) - sessionCheckInMs(b));
 
   for (const session of sorted) {
     punches.push({
@@ -456,7 +504,7 @@ function buildSummaryFallback(
   if (summary) return summary;
   if (sessions.length === 0) return undefined;
 
-  const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const sorted = [...sessions].sort((a, b) => sessionCheckInMs(a) - sessionCheckInMs(b));
   const firstCheckIn = sorted[0]?.check_in_time ?? null;
   const regularSessions = sorted.filter((session) => !session.is_overtime);
   const hasRegularPresent = regularSessions.some((session) => session.status === 'present');
@@ -545,7 +593,7 @@ function buildHistoryDay(params: {
     return null;
   }
 
-  const sortedSessions = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const sortedSessions = [...sessions].sort((a, b) => sessionCheckInMs(a) - sessionCheckInMs(b));
   const totalWorkedMinutes = summary?.total_work_minutes ?? computeTotalMinutesFromSessions(sortedSessions);
   const totalOvertimeMinutes =
     summary?.total_overtime_minutes ?? computeOvertimeMinutesFromSessions(sortedSessions);
@@ -594,7 +642,7 @@ function buildPseudoLog(
   summary: AttendanceDailySummary | null
 ): AttendanceLog | null {
   if (!sessions.length && !summary) return null;
-  const sorted = [...sessions].sort((a, b) => a.check_in_time.localeCompare(b.check_in_time));
+  const sorted = [...sessions].sort((a, b) => sessionCheckInMs(a) - sessionCheckInMs(b));
   const first = sorted[0];
   const rawStatus = summary?.effective_status ?? first?.status ?? null;
   const status: AttendanceLog['status'] =
@@ -719,7 +767,7 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
-      .order('check_in_time', { ascending: true }),
+      .order('check_in_at', { ascending: true }),
     getEffectiveShiftForUser(userId, today),
     supabase
       .from('attendance_daily_summary')
@@ -746,8 +794,8 @@ export async function getAttendanceToday(userId: string): Promise<TodayRecord> {
         .select('*')
         .eq('user_id', userId)
         .eq('date', yesterday)
-        .is('check_out_time', null)
-        .order('check_in_time', { ascending: true }),
+        .is('check_out_at', null)
+        .order('check_in_at', { ascending: true }),
       getEffectiveShiftForUser(userId, yesterday),
       supabase
         .from('attendance_daily_summary')
@@ -781,7 +829,7 @@ export async function getAttendanceDay(userId: string, date: string): Promise<Da
       .select('*')
       .eq('user_id', userId)
       .eq('date', date)
-      .order('check_in_time', { ascending: true }),
+      .order('check_in_at', { ascending: true }),
     supabase
       .from('attendance_daily_summary')
       .select('*')
@@ -840,7 +888,7 @@ export async function getAttendanceSessions(
 
   const { data, error } = await query
     .order('date', { ascending: false })
-    .order('check_in_time', { ascending: false });
+    .order('check_in_at', { ascending: false });
 
   if (error) throw error;
   return data ?? [];
@@ -918,7 +966,7 @@ export async function getAttendanceHistoryMonth(
       .gte('date', from)
       .lte('date', to)
       .order('date', { ascending: true })
-      .order('check_in_time', { ascending: true }),
+      .order('check_in_at', { ascending: true }),
     getEffectiveScheduleForUser(userId),
     getUserJoinDate(userId),
   ]);
@@ -974,7 +1022,7 @@ export async function getTodayLog(userId: string): Promise<AttendanceLog | null>
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
-      .order('check_in_time', { ascending: true }),
+      .order('check_in_at', { ascending: true }),
     supabase
       .from('attendance_daily_summary')
       .select('*')
@@ -1122,13 +1170,13 @@ async function checkInLegacy(userId: string): Promise<CheckInResult> {
     .select('*')
     .eq('user_id', userId)
     .eq('date', today)
-    .is('check_out_time', null)
-    .order('check_in_time', { ascending: false })
+    .is('check_out_at', null)
+    .order('check_in_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (existingError) throw existingError;
-  if (existing?.check_in_time && !existing?.check_out_time) {
+  if (existing?.check_in_time && sessionIsOpen(existing)) {
     throw new Error('Already checked in today');
   }
 
@@ -1263,14 +1311,14 @@ async function checkOutLegacy(userId: string, checkoutTime?: string): Promise<At
     .select('*')
     .eq('user_id', userId)
     .eq('date', today)
-    .is('check_out_time', null)
-    .order('check_in_time', { ascending: false })
+    .is('check_out_at', null)
+    .order('check_in_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (existingError) throw existingError;
   if (!existing?.check_in_time) throw new Error('Must check in before checking out');
-  if (existing.check_out_time) throw new Error('Already checked out today');
+  if (!sessionIsOpen(existing)) throw new Error('Already checked out today');
 
   const durationMinutes = Math.max(
     0,

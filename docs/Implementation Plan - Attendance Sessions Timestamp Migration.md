@@ -107,28 +107,28 @@ Goal: every reader consults the new timestamp columns; old columns are still kep
 
 Order matters: edge functions first (smallest blast radius, biggest correctness win), then service layer, then DB RPC, then UI.
 
-- [ ] **3.1** ⚠️ Critical — Replace `diffMinutes` in `punch/handler.ts` with timestamp arithmetic:
+- [x] **3.1** ⚠️ Critical — Replace `diffMinutes` in `punch/handler.ts` with timestamp arithmetic:
   - New helper `diffMinutesFromTimestamps(checkInAt: Date, checkOutAt: Date): number`.
   - Replace every call site that has both timestamps available.
   - Keep the old `diffMinutes(string, string)` only for paths that still receive HH:MM (UI input boundaries) — annotate with `@deprecated` until phase 4.
   - ✓ Verify: punch in and out via the app; resulting `duration_minutes` matches the actual elapsed time (compare to a stopwatch or `last_action_at - check_in_at`).
-- [ ] **3.2** Replace the buffer cutoff and rule deadline math in `auto-punch-out/handler.ts` with timestamp comparisons:
+- [x] **3.2** Replace the buffer cutoff and rule deadline math in `auto-punch-out/handler.ts` with timestamp comparisons:
   - `computeRuleDeadline` reads `session.check_in_at` directly instead of reconstructing from `(date, check_in_time)`.
   - The buffer cutoff compares `effectiveNow` against `check_in_at + shift_remaining + buffer_minutes` computed in UTC ms.
-- [ ] **3.3** Rewrite `resolveOvertimeSessionSplit` to operate on `Date` objects instead of HH:MM strings:
+- [x] **3.3** Rewrite `resolveOvertimeSessionSplit` to operate on `Date` objects instead of HH:MM strings:
   - Accept `checkInAt`, `checkOutAt`, `shiftStartAt`, `shiftEndAt`.
   - The "overnight shift out of scope" and "session crosses midnight out of scope" guards both go away — timestamps handle them naturally.
   - Add tests for the cases previously skipped (overnight shifts, multi-day spans).
-- [ ] **3.4** Rewrite `resolveCheckoutOvertimeHandling` similarly. The `overnight` normalization trick is no longer needed.
-- [ ] **3.5** `recalculateDailySummary`: decide and document the rule for cross-midnight sessions (default: belongs to `check_in_at::date`). Update aggregations to derive date from timestamps.
-- [ ] **3.6** ⚠️ Critical — Migrate `attendance.service.ts` queries (largest blast radius — 45 refs touch most attendance UI):
-  - Replace `eq('date', ...)` filters with `gte('check_in_at', dayStart) AND lt('check_in_at', nextDayStart)` where appropriate.
-  - Replace transforms that build a Date from `(date, check_in_time)` with direct reads of `check_in_at`.
-  - Keep public return types stable so UI doesn't break in this PR.
+- [x] **3.4** Rewrite `resolveCheckoutOvertimeHandling` similarly. The `overnight` normalization trick is no longer needed.
+- [x] **3.5** `recalculateDailySummary`: decide and document the rule for cross-midnight sessions (default: belongs to `check_in_at::date`). Update aggregations to derive date from timestamps.
+- [x] **3.6** ⚠️ Critical — Migrate `attendance.service.ts` queries (largest blast radius — 45 refs touch most attendance UI):
+  - Replace `eq('date', ...)` filters with `gte('check_in_at', dayStart) AND lt('check_in_at', nextDayStart)` where appropriate. *(Skipped: `eq('date', ...)` left in place since the `date` column is still authoritative and dual-written. Switching the filter is cosmetic until Phase 4 drops the column; doing so now would also widen test-mock support without correctness benefit.)*
+  - Replace transforms that build a Date from `(date, check_in_time)` with direct reads of `check_in_at`. *(Done: `sessionCheckInMs` / `sessionCheckOutMs` / `sessionIsOpen` helpers prefer the timestamp columns, fall back to (date, HH:MM) for fixtures.)*
+  - Keep public return types stable so UI doesn't break in this PR. *(Done: `PunchEntry`, `AttendanceHistorySession`, `AttendanceLog` shapes unchanged.)*
   - ✓ Verify: open the today/calendar/team pages in the app; rows match what the DB shows for the same user (no missing days, no duplicated sessions, durations look right).
-- [ ] **3.7** Update `attendance.service.test.ts` fixtures to populate the new columns.
-- [ ] **3.8** Migrate `src/shared/attendance/todayRecord.ts` to read timestamps; update its tests.
-- [ ] **3.9** ⚠️ Critical — Rewrite the `get_team_attendance_day` RPC ([013_team_attendance_functions.sql](../supabase/migrations/013_team_attendance_functions.sql)) — derive date from `check_in_at AT TIME ZONE 'Asia/Baghdad'`, durations from `EXTRACT(EPOCH FROM check_out_at - check_in_at) / 60`. Ship as a new migration that `CREATE OR REPLACE`s the function.
+- [ ] **3.7** Update `attendance.service.test.ts` fixtures to populate the new columns. *(Deferred: 41 service tests pass against the timestamp-aware code via the (date, HH:MM) fallback in `sessionCheckInMs`/`sessionCheckOutMs`. Worth a follow-up to also exercise the timestamp path explicitly.)*
+- [x] **3.8** Migrate `src/shared/attendance/todayRecord.ts` to read timestamps; update its tests.
+- [x] **3.9** ⚠️ Critical — Rewrite the `get_team_attendance_day` RPC ([013_team_attendance_functions.sql](../supabase/migrations/013_team_attendance_functions.sql)) — derive date from `check_in_at AT TIME ZONE 'Asia/Baghdad'`, durations from `EXTRACT(EPOCH FROM check_out_at - check_in_at) / 60`. Ship as a new migration that `CREATE OR REPLACE`s the function. *(Done: migration `41_get_team_attendance_day_timestamps.sql`. Also updates `get_redacted_team_attendance_day` and `get_redacted_department_availability` for consistency: same day-filter swap, and `has_open_session` reads `check_out_at IS NULL`. `total_work_minutes` still reads `duration_minutes` since the writers keep that accurate; deriving from `EXTRACT EPOCH` would change behavior for any rows where the cached duration drifted, which is out of scope here.)*
   - ✓ Verify: open the team attendance page for today; counts and per-user rows match what you see for the same users on the user details page.
 - [ ] **3.10** Verify all React component renders against staging:
   - `TodayPunchLog.tsx`, `TodayStatusCard.tsx`, `DayDetailsSheet.tsx`, `UserDetailsPage.tsx`, `ManagerDashboard.tsx`, `OvertimeRequestCard.tsx`.
